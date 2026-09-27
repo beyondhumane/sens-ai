@@ -89,3 +89,15 @@ jobs:
           else
             echo "no hay release para $tag; el instalador queda como artefacto del workflow"
           fi
+      - name: Write its SHA-256 into the notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release view "$tag" > /dev/null 2>&1 || exit 0
+          sha=$(sha256sum rust/sens-setup/target/installer/*.exe | cut -d' ' -f1)
+          gh release view "$tag" --json body --jq .body > notes.md
+          grep -q 'SHA-256: `pending`' notes.md || exit 0
+          sed -i "s/SHA-256: \`pending\`/SHA-256: \`$sha\`/" notes.md
+          gh release edit "$tag" --notes-file notes.md

@@ -74,6 +74,7 @@ Under the window is the unmodified `claude` CLI. Sens drives it over Claude Code
 - **Prompts arrive in the thread.** Permission requests, questions and plans wait for you where you are reading.
 - **Attach anything.** Pictures in any format the window can draw, converted and resized to what Claude accepts; files; folders Claude can explore; a PDF copied in Explorer; a long paste, as an attachment of its own.
 - **Type less.** `@` mentions a file, `/` offers Claude Code's commands and your skills, `↑` and `↓` bring back what you sent.
+- **Or say it.** The microphone writes what you say into the message as you speak, through Windows speech recognition. With *Settings › General › Voice* on, saying “Hey Sens” brings Sens forward and starts dictating; the wake phrase is recognized on your computer, and dictation stops by itself when you do.
 - **Choose per session.** Model, effort, thinking, and a permission mode: *Ask*, *Accept edits*, *Auto*, *Plan* or *No checks*. The model list is the one Claude Code itself offers.
 - **Sessions name themselves** after the first reply, in your language, and Sens tells you when one finishes or needs you while you are elsewhere.
 
@@ -191,6 +192,7 @@ Your prompts and your code go where Claude Code sends them, and nowhere else. Se
 | `skills.sh` | When you search or install from it | The open skills index |
 | `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | When you browse or install a plugin or skill | Marketplaces and their files, at a pinned commit |
 | `icons.duckduckgo.com` | In *Capabilities › Explore* | The site icon on each card |
+| Windows online speech recognition | While you dictate | Windows turns what you say into text; Sens receives only the text |
 
 ### Where things live
 

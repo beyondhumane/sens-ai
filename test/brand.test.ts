@@ -334,7 +334,8 @@ describe("the desktop shell", () => {
   });
 
   it("tells the user when dictation is not available here", () => {
-    expect(shell).toContain("speech.SpeechRecognition || speech.webkitSpeechRecognition");
+    expect(shell).toContain("commands.dictationStart(localeNow(), handsFree)");
+    expect(shell).toContain('blocked !== "unsupported"');
     expect(shell).toContain("disabled={!dictation.able}");
   });
 

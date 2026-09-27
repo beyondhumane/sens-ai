@@ -1,6 +1,6 @@
 [package]
 name = "sens-app"
-version = "0.22.0"
+version = "0.23.0"
 edition = "2024"
 
 [build-dependencies]
@@ -27,7 +27,8 @@ portable-pty = "0.9"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+windows-collections = "0.2"
+windows = { version = "0.61", features = ["Foundation", "Foundation_Collections", "Globalization", "Media_SpeechRecognition", "Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 opt-level = "z"

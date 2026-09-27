@@ -1,10 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent } from "react";
 import { useStore } from "zustand";
 import { openPicture } from "../../app/Dialog";
 import { chooseFolder } from "../../app/session";
 import { stem } from "../../shared/format.js";
-import { localeNow } from "../../shared/i18n";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
 import { useSheet, type Sheet } from "../../shared/useSheet";
@@ -14,6 +13,7 @@ import { useIds, usePane } from "../panes/context";
 import { panes } from "../panes/store";
 import { ClipCard, PictureTile, pictureTitle, shownOfFile } from "./Clip";
 import { t } from "./copy";
+import { useDictation } from "./dictation";
 import { onEdge, recall } from "./history";
 import { ContextMeter } from "../models/ContextMeter";
 import { Effort, ModelPicker, ModePicker, Think } from "./Knobs";
@@ -210,7 +210,7 @@ function Box() {
   const grown = useRef(0);
   const toEnd = useRef(false);
   const lap = useLap(busy);
-  const dictation = useDictation(text, setText, field);
+  const dictation = useDictation(pane, text, setText, field);
   const suggest = useSuggestions(pane, text, field, id("suggest"));
 
   useLayoutEffect(() => {
@@ -243,6 +243,7 @@ function Box() {
   async function go() {
     if (busy || !canSend(text, pane)) return;
     const said = text;
+    dictation.hush();
     setText("");
     await send(said, pane);
   }
@@ -291,8 +292,8 @@ function Box() {
       <button
         className="round"
         id={id("dictate")}
-        title={dictation.able ? t.dictate : t.noDictation}
-        aria-label={dictation.able ? t.dictate : t.noDictation}
+        title={dictation.label}
+        aria-label={dictation.label}
         aria-pressed={dictation.listening}
         disabled={!dictation.able}
         onClick={dictation.toggle}
@@ -396,37 +397,4 @@ function useLap(busy: boolean) {
     style: { "--lap-name": turn.name, "--lap-time": turn.time } as CSSProperties,
     next: (event: AnimationEvent) => (event.nativeEvent as globalThis.AnimationEvent).pseudoElement === "::after" && reseed(),
   };
-}
-
-type Recognition = { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; addEventListener(kind: string, heard: (event: never) => void): void };
-const speech = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
-const Dictation = speech.SpeechRecognition || speech.webkitSpeechRecognition;
-
-function useDictation(text: string, setText: (text: string) => void, field: RefObject<HTMLTextAreaElement | null>) {
-  const [listening, setListening] = useState<Recognition | null>(null);
-
-  function toggle() {
-    if (!Dictation) return;
-    if (listening) return listening.stop();
-    const heard = new Dictation();
-    heard.lang = localeNow();
-    heard.continuous = true;
-    heard.interimResults = true;
-    const before = text.trim();
-    heard.addEventListener("result", (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => {
-      let said = "";
-      for (const result of Array.from(event.results)) said += result[0].transcript;
-      setText([before, said.trim()].filter(Boolean).join(" "));
-    });
-    const done = () => {
-      setListening(null);
-      field.current?.focus();
-    };
-    heard.addEventListener("end", done);
-    heard.addEventListener("error", done);
-    heard.start();
-    setListening(heard);
-  }
-
-  return { able: Boolean(Dictation), listening: Boolean(listening), toggle };
 }

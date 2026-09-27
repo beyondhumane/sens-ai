@@ -4,6 +4,7 @@ mod artifacts;
 mod browser;
 mod capabilities;
 mod claude_code;
+mod dictation;
 mod files;
 mod icon;
 mod git;
@@ -352,6 +353,53 @@ fn terminal_resize(consoles: State<terminal::Consoles>, id: u32, cols: u16, rows
 #[tauri::command]
 fn terminal_close(consoles: State<terminal::Consoles>, id: u32) -> Result<(), String> {
     consoles.close(id)
+}
+
+#[tauri::command(async)]
+fn dictation_start(dictation: State<dictation::Dictation>, language: String, hands_free: bool) -> Result<u32, dictation::Refusal> {
+    dictation.start(&language, hands_free)
+}
+
+#[tauri::command(async)]
+fn set_wake(app: AppHandle, dictation: State<dictation::Dictation>, on: bool) -> Result<(), String> {
+    let language = on.then(|| sens_agent::language::now().id());
+    dictation.wake(language).map_err(|refusal| refusal.message)?;
+    profile::set_wake(&data_dir(&app)?, on)
+}
+
+fn hearing(app: AppHandle) -> impl Fn(dictation::Heard) + Send + Sync + 'static {
+    move |heard| {
+        if heard == dictation::Heard::Woke
+            && let Some(window) = app.get_webview_window("main")
+        {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        let _ = app.emit("dictation", heard);
+    }
+}
+
+#[tauri::command(async)]
+fn dictation_stop(dictation: State<dictation::Dictation>) {
+    dictation.stop();
+}
+
+#[tauri::command]
+fn dictation_settings(app: AppHandle, cause: dictation::Cause) -> Result<(), String> {
+    let Some(page) = dictation::settings(cause) else {
+        return Ok(());
+    };
+    app.opener().open_url(page, None::<&str>).map_err(|error| {
+        said!(
+            en: "couldn’t open Windows settings: {error}",
+            es: "no pude abrir la configuración de Windows: {error}",
+            fr: "impossible d’ouvrir les paramètres de Windows : {error}",
+            de: "die Windows-Einstellungen konnten nicht geöffnet werden: {error}",
+            ja: "Windows の設定を開けませんでした: {error}",
+            zh: "无法打开 Windows 设置：{error}",
+        )
+    })
 }
 
 #[tauri::command]
@@ -722,6 +770,7 @@ fn main() {
         .manage(terminal::Consoles::default())
         .manage(mcp::Bridge::default())
         .setup(|app| {
+            app.manage(dictation::Dictation::new(hearing(app.handle().clone())));
             let base = data_dir(app.handle());
             language::speak(base.as_deref().ok());
             open_window(app)?;
@@ -805,6 +854,10 @@ fn main() {
             terminal_resize,
             terminal_close,
             terminal_screen,
+            dictation_start,
+            dictation_stop,
+            dictation_settings,
+            set_wake,
             capabilities,
             skill_text,
             create_skill,
@@ -829,6 +882,7 @@ fn main() {
             if let RunEvent::Exit = event {
                 app.state::<Arc<Engine>>().shutdown();
                 app.state::<terminal::Consoles>().shutdown();
+                app.state::<dictation::Dictation>().shutdown();
             }
         });
 }

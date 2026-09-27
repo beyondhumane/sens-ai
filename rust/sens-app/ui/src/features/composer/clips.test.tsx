@@ -26,7 +26,7 @@ const ipc = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}) } }));
+vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}), dictation: () => Promise.resolve(() => {}) } }));
 vi.mock("../../app/session", () => ({ resume: vi.fn(), draft: vi.fn(async () => {}), fresh: vi.fn(), chooseFolder: vi.fn(), showView: vi.fn() }));
 vi.mock("../files/view", async (actual) => ({ ...(await actual<typeof import("../files/view")>()), showFile: vi.fn(), present: vi.fn() }));
 vi.mock("./pictures", async (actual) => ({ ...(await actual<typeof import("./pictures")>()), fitPicture: vi.fn() }));
