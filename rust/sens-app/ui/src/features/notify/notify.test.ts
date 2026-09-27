@@ -16,7 +16,7 @@ const asking = (tool: string, input = {}): ChatEvent => ({ kind: "asking", reque
 beforeEach(() => {
   ipc.commands.notify.mockReset().mockResolvedValue(undefined);
   notePresence(false);
-  profile.setState({ person: { name: "", checkUpdates: true, welcomed: true, seen: "", notify: true } });
+  profile.setState({ person: { name: "", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false } });
   rail.setState({ spaces: [{ root: "C:/demo", name: "demo", sessions: [{ id: "s1", title: "Arreglar el login", startedAt: 0, tasks: 1, archived: false }] }] } as never);
 });
 
