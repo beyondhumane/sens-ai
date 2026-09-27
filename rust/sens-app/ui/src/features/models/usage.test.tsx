@@ -64,7 +64,7 @@ beforeEach(() => {
   focused().chat.setState(focused().chat.getInitialState(), true);
   focused().desk.setState({ root: "C:/demo", session: "" });
   blank("");
-  profile.setState({ person: { name: "Ada Lovelace", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false }, fault: "" });
+  profile.setState({ person: { name: "Ada Lovelace", checkUpdates: true, welcomed: true, seen: "", notify: true }, fault: "" });
 });
 
 afterEach(() => {

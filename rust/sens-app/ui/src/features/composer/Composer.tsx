@@ -3,17 +3,17 @@ import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type
 import { useStore } from "zustand";
 import { openPicture } from "../../app/Dialog";
 import { chooseFolder } from "../../app/session";
+import { commands } from "../../ipc/commands";
 import { stem } from "../../shared/format.js";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
 import { useSheet, type Sheet } from "../../shared/useSheet";
-import { halt } from "../chat/store";
+import { halt, warn } from "../chat/store";
 import { showFile } from "../files/view";
 import { useIds, usePane } from "../panes/context";
 import { panes } from "../panes/store";
 import { ClipCard, PictureTile, pictureTitle, shownOfFile } from "./Clip";
 import { t } from "./copy";
-import { useDictation } from "./dictation";
 import { onEdge, recall } from "./history";
 import { ContextMeter } from "../models/ContextMeter";
 import { Effort, ModelPicker, ModePicker, Think } from "./Knobs";
@@ -210,7 +210,6 @@ function Box() {
   const grown = useRef(0);
   const toEnd = useRef(false);
   const lap = useLap(busy);
-  const dictation = useDictation(pane, text, setText, field);
   const suggest = useSuggestions(pane, text, field, id("suggest"));
 
   useLayoutEffect(() => {
@@ -243,9 +242,13 @@ function Box() {
   async function go() {
     if (busy || !canSend(text, pane)) return;
     const said = text;
-    dictation.hush();
     setText("");
     await send(said, pane);
+  }
+
+  function dictate() {
+    field.current?.focus();
+    commands.voiceTyping().catch((reason) => warn(String(reason), pane));
   }
 
   function toTheEnd() {
@@ -292,11 +295,10 @@ function Box() {
       <button
         className="round"
         id={id("dictate")}
-        title={dictation.label}
-        aria-label={dictation.label}
-        aria-pressed={dictation.listening}
-        disabled={!dictation.able}
-        onClick={dictation.toggle}
+        title={t.dictateHint}
+        aria-label={t.dictate}
+        disabled={!root}
+        onClick={dictate}
       >
         <Icon svg={ICONS.mic} />
       </button>

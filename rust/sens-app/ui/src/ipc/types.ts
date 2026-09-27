@@ -8,7 +8,6 @@ export interface Profile {
   welcomed: boolean;
   seen: string;
   notify: boolean;
-  wake: boolean;
 }
 
 /** update::Release, rust/sens-app/src/update.rs */
@@ -290,20 +289,6 @@ export interface TerminalReading {
 }
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };
-
-export type DictationCause = "speech" | "microphone" | "unsupported" | "other";
-
-export interface DictationRefusal {
-  cause: DictationCause;
-  message: string;
-}
-
-export type DictationHeard =
-  | { kind: "guess"; id: number; text: string }
-  | { kind: "phrase"; id: number; text: string }
-  | { kind: "ended"; id: number; refusal: DictationRefusal | null }
-  | { kind: "woke" }
-  | { kind: "slept"; refusal: DictationRefusal };
 
 export interface Todo {
   content: string;

@@ -8,7 +8,6 @@ import { LanguagePicker } from "../../shared/LanguagePicker";
 import { accentName, look, modeName, type Look } from "../../shared/look";
 import { AccentPicker, ModePicker } from "../../shared/LookPicker";
 import { Mark } from "../../shared/Mark";
-import { setWake } from "../composer/dictation";
 import { chooseLook } from "../look/store";
 import { useLanguageChoice } from "../look/useLanguageChoice";
 import { setNotices } from "../notify/store";
@@ -216,7 +215,6 @@ function GeneralSection() {
       </div>
       <UpdatesBlock />
       <NoticesBlock />
-      <VoiceBlock />
       <WelcomeBlock />
     </>
   );
@@ -298,34 +296,6 @@ function NoticesBlock() {
         <button className="switch" id="settings-notify" role="switch" aria-checked={on} onClick={flip} />
         <label htmlFor="settings-notify">{t.noticesSwitch}</label>
       </div>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </div>
-  );
-}
-
-function VoiceBlock() {
-  const on = useStore(profile, (s) => s.person.wake === true);
-  const [fault, setFault] = useState("");
-
-  async function flip() {
-    setFault("");
-    try {
-      await setWake(!on);
-    } catch (reason) {
-      setFault(String(reason));
-    }
-  }
-
-  return (
-    <div className="pair">
-      <span className="label">{t.voice}</span>
-      <div className="settings-switch">
-        <button className="switch" id="settings-wake" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-wake">{t.wakeSwitch}</label>
-      </div>
-      <p className="note">{t.wakeNote}</p>
       <p className="note fault" role="alert" hidden={!fault}>
         {fault}
       </p>

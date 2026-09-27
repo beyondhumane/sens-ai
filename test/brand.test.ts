@@ -333,10 +333,9 @@ describe("the desktop shell", () => {
     expect(shell).not.toContain("claude-haiku");
   });
 
-  it("tells the user when dictation is not available here", () => {
-    expect(shell).toContain("commands.dictationStart(localeNow(), handsFree)");
-    expect(shell).toContain('blocked !== "unsupported"');
-    expect(shell).toContain("disabled={!dictation.able}");
+  it("dictates through Windows voice typing, into the message", () => {
+    expect(shell).toContain("commands.voiceTyping()");
+    expect(shell).not.toContain("webkitSpeechRecognition");
   });
 
   it("gives the loader a new rhythm each lap instead of one loop", () => {

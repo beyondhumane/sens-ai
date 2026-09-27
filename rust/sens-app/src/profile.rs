@@ -14,7 +14,6 @@ pub struct Profile {
     pub welcomed: bool,
     pub seen: String,
     pub notify: bool,
-    pub wake: bool,
 }
 
 impl Default for Profile {
@@ -25,7 +24,6 @@ impl Default for Profile {
             welcomed: false,
             seen: String::new(),
             notify: true,
-            wake: false,
         }
     }
 }
@@ -54,10 +52,6 @@ pub fn set_update_check(base: &Path, on: bool) -> Result<(), String> {
 
 pub fn set_notify(base: &Path, on: bool) -> Result<(), String> {
     change(base, |profile| profile.notify = on)
-}
-
-pub fn set_wake(base: &Path, on: bool) -> Result<(), String> {
-    change(base, |profile| profile.wake = on)
 }
 
 pub fn set_welcomed(base: &Path, on: bool) -> Result<(), String> {
@@ -133,20 +127,6 @@ mod tests {
         let saved = load(&base);
         assert!(!saved.notify);
         assert!(!saved.check_updates);
-        assert_eq!(saved.name, "Sofía");
-    }
-
-    #[test]
-    fn listening_for_hey_sens_stays_off_until_asked_for() {
-        let base = temp_root("wake");
-        std::fs::write(base.join(FILE), r#"{ "name": "Sofía", "notify": false }"#).unwrap();
-        assert!(!load(&base).wake);
-
-        set_wake(&base, true).unwrap();
-
-        let saved = load(&base);
-        assert!(saved.wake);
-        assert!(!saved.notify);
         assert_eq!(saved.name, "Sofía");
     }
 

@@ -8,7 +8,7 @@ import { composer } from "./store";
 
 vi.mock("../../ipc/commands", () => ({
   commands: new Proxy({}, { get: () => vi.fn(async () => undefined) }),
-  events: { claudeCode: () => Promise.resolve(() => {}), dictation: () => Promise.resolve(() => {}) },
+  events: { claudeCode: () => Promise.resolve(() => {}) },
 }));
 vi.mock("../../app/session", () => ({ resume: vi.fn(), draft: vi.fn(async () => {}), fresh: vi.fn(), chooseFolder: vi.fn(), showView: vi.fn() }));
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Card, DictationHeard } from "../../ipc/types";
+import type { Card } from "../../ipc/types";
 import { dialog } from "../../app/modal";
 import { chooseFolder } from "../../app/session";
 import { blank, warm as warmChat } from "../chat/store";
@@ -31,23 +31,11 @@ const ipc = vi.hoisted(() => ({
     trustProject: vi.fn(),
     projectTrusted: vi.fn(),
     findFiles: vi.fn(),
-    dictationStart: vi.fn(),
-    dictationStop: vi.fn(),
-    dictationSettings: vi.fn(),
+    voiceTyping: vi.fn(),
   },
-  listeners: new Set<(what: DictationHeard) => void>(),
 }));
 
-vi.mock("../../ipc/commands", () => ({
-  commands: ipc.commands,
-  events: {
-    claudeCode: () => Promise.resolve(() => {}),
-    dictation: (hear: (what: DictationHeard) => void) => {
-      ipc.listeners.add(hear);
-      return Promise.resolve(() => void ipc.listeners.delete(hear));
-    },
-  },
-}));
+vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}) } }));
 vi.mock("../../app/session", () => ({ resume: vi.fn(), draft: vi.fn(async () => {}), fresh: vi.fn(), chooseFolder: vi.fn(), showView: vi.fn() }));
 
 const card = (id: string, over: Partial<Card> = {}): Card => ({
@@ -68,7 +56,6 @@ beforeAll(() => {
 beforeEach(async () => {
   localStorage.clear();
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
-  ipc.listeners.clear();
   ipc.commands.providers.mockResolvedValue([{ id: "claude", vendor: "Anthropic", label: "Claude Code" }]);
   ipc.commands.models.mockResolvedValue([card("claude-sonnet"), card("claude-opus", { thinking: "always" }), card("claude-haiku", { latest: false, efforts: [] })]);
   ipc.commands.claudeAccount.mockResolvedValue({ billing: "subscription", plan: "max", source: "claude.ai", email: "ada@example.com" });
@@ -143,6 +130,19 @@ describe("the composer", () => {
     expect(focused().desk.getState().attached).toEqual([]);
     fireEvent.click(button(/demo/));
     expect(chooseFolder).toHaveBeenCalled();
+  });
+
+  it("dictates through Windows voice typing into the message, and says why when Windows will not", async () => {
+    render(<Composer />);
+    const microphone = button("Dictar");
+    expect(microphone.title).toBe("Dictar con la escritura por voz de Windows · Win+H");
+    await act(async () => fireEvent.click(microphone));
+    expect(ipc.commands.voiceTyping).toHaveBeenCalled();
+    expect(document.activeElement).toBe(field());
+
+    ipc.commands.voiceTyping.mockRejectedValue("Sens no es la ventana de delante, así que la escritura por voz sigue cerrada");
+    await act(async () => fireEvent.click(microphone));
+    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: ["Sens no es la ventana de delante, así que la escritura por voz sigue cerrada"] });
   });
 
   it("chooses a model, and hides models while editing the list", () => {
@@ -406,98 +406,5 @@ describe("a worktree for a new session", () => {
     const label = document.getElementById("worktree")!;
     expect(label.textContent).toBe("worktree");
     expect(label.title).toBe("Trabaja en un worktree aparte, en la rama sens/ab12cd34 (creada desde main): C:/demo/.sens/worktrees/ab12cd34");
-  });
-});
-
-describe("dictation", () => {
-  const hear = (what: DictationHeard) => act(() => [...ipc.listeners].forEach((listener) => listener(what)));
-  const written = () => (field() as HTMLTextAreaElement).value;
-
-  it("writes what Windows hears after what was written, in the language shown, until the second press", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(7);
-    render(<Composer />);
-    fireEvent.change(field(), { target: { value: "Revisa " } });
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledWith("es-ES", false);
-    expect(button("Dejar de dictar").getAttribute("aria-pressed")).toBe("true");
-
-    hear({ kind: "guess", id: 7, text: "el formu" });
-    expect(written()).toBe("Revisa el formu");
-    hear({ kind: "phrase", id: 7, text: "el formulario de contacto" });
-    hear({ kind: "guess", id: 7, text: "y los tests" });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests");
-    hear({ kind: "guess", id: 3, text: "de otra vez" });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests");
-
-    await act(async () => fireEvent.click(button("Dejar de dictar")));
-    expect(ipc.commands.dictationStop).toHaveBeenCalled();
-    hear({ kind: "phrase", id: 7, text: "y los tests." });
-    hear({ kind: "ended", id: 7, refusal: null });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests.");
-    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("says when Windows online speech recognition is off, and the next press opens its setting", async () => {
-    ipc.commands.dictationStart.mockRejectedValue({ cause: "speech", message: "el reconocimiento de voz en línea de Windows está desactivado" });
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("reconocimiento de voz en línea")] });
-
-    await act(async () => fireEvent.click(button("Abrir la configuración de voz de Windows")));
-    expect(ipc.commands.dictationSettings).toHaveBeenCalledWith("speech");
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(1);
-
-    ipc.commands.dictationStart.mockResolvedValue(8);
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(2);
-  });
-
-  it("says why dictation ended when Windows ends it, and turns the microphone off where there is no dictation", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(4);
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    hear({ kind: "ended", id: 4, refusal: { cause: "other", message: "no pude conectar con el reconocimiento de voz de Windows" } });
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: ["no pude conectar con el reconocimiento de voz de Windows"] });
-
-    ipc.commands.dictationStart.mockRejectedValue({ cause: "unsupported", message: "" });
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(button("Windows no tiene dictado en este equipo")).toHaveProperty("disabled", true);
-  });
-
-  it("stops dictating when the message is sent, and writes nothing more into the next one", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(9);
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    hear({ kind: "phrase", id: 9, text: "Añade un test" });
-    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
-    expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "Añade un test", files: [], images: [] }, currentSettings());
-    expect(ipc.commands.dictationStop).toHaveBeenCalled();
-
-    hear({ kind: "phrase", id: 9, text: "y otro" });
-    hear({ kind: "ended", id: 9, refusal: null });
-    expect(written()).toBe("");
-    act(() => focused().chat.setState({ busy: false, stopping: false }));
-  });
-
-  it("starts dictating hands-free when Windows hears Hey Sens, and not again while it already listens", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(11);
-    render(<Composer />);
-    await act(async () => hear({ kind: "woke" }));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledWith("es-ES", true);
-    expect(button("Dejar de dictar").getAttribute("aria-pressed")).toBe("true");
-
-    await act(async () => hear({ kind: "woke" }));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(1);
-    hear({ kind: "phrase", id: 11, text: "Explica el middleware" });
-    hear({ kind: "ended", id: 11, refusal: null });
-    expect(written()).toBe("Explica el middleware");
-    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("says so when listening for Hey Sens stops on its own", () => {
-    render(<Composer />);
-    hear({ kind: "slept", refusal: { cause: "microphone", message: "Windows no deja que Sens use el micrófono" } });
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("micrófono")] });
-    expect(button("Abrir la configuración del micrófono de Windows")).toBeTruthy();
   });
 });

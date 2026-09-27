@@ -10,7 +10,7 @@ const now = Date.now();
 const HOUR = 3_600_000;
 const ROOT = "C:/Proyectos/demo";
 const asking = new URLSearchParams(location.search);
-const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, wake: false };
+const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true };
 const LOOK = "sens.dev.look";
 const asked = new URLSearchParams(location.search).get("look")?.split(".");
 const kept = asked ? { mode: asked[0], accent: asked[1] } : stored(LOOK, null);
@@ -109,38 +109,6 @@ function typeInShell(id: number, data: string) {
       said(id, key);
     }
   }
-}
-
-const HEARD = ["Añade", "Añade un saludo", "Añade un saludo configurable", "con un test", "con un test para cada caso"];
-let dictations = 0;
-let dictating: { id: number; timers: ReturnType<typeof setTimeout>[] } | null = null;
-
-function startDictation(handsFree: boolean) {
-  const refused = asking.get("dictation");
-  if (refused) throw { cause: refused, message: `dictado simulado: ${refused}` };
-  stopDictation();
-  const id = ++dictations;
-  const heard = (at: number, event: object) => setTimeout(() => emit("dictation", { id, ...event }), at);
-  dictating = {
-    id,
-    timers: [
-      heard(400, { kind: "guess", text: HEARD[0] }),
-      heard(800, { kind: "guess", text: HEARD[1] }),
-      heard(1300, { kind: "phrase", text: HEARD[2] }),
-      heard(1800, { kind: "guess", text: HEARD[3] }),
-      heard(2400, { kind: "phrase", text: HEARD[4] }),
-      ...(handsFree ? [heard(3400, { kind: "ended", refusal: null })] : []),
-    ],
-  };
-  return id;
-}
-
-function stopDictation() {
-  if (!dictating) return;
-  const { id, timers } = dictating;
-  timers.forEach(clearTimeout);
-  dictating = null;
-  setTimeout(() => emit("dictation", { kind: "ended", id, refusal: null }), 60);
 }
 
 async function adopt(roots: string[]) {
@@ -557,13 +525,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   terminal_open: ({ root }) => openShell(String(root ?? "")),
   terminal_write: ({ id, data }) => typeInShell(Number(id), String(data)),
   terminal_close: ({ id }) => endShell(Number(id), 1),
-  dictation_start: ({ handsFree }) => startDictation(Boolean(handsFree)),
-  dictation_stop: () => stopDictation(),
-  set_wake: ({ on }) => {
-    person.wake = Boolean(on);
-    if (on) setTimeout(() => emit("dictation", { kind: "woke" }), 3000);
-  },
-  dictation_settings: ({ cause }) => console.info(`[mock-tauri] abriría la configuración de Windows: ${cause}`),
+  voice_typing: () => console.info("[mock-tauri] abriría la escritura por voz de Windows (Win+H)"),
   preview_url: ({ path }) => `http://127.0.0.1:4321/demo/${String(path).split("/").pop()}`,
   artifact_text: ({ path }) => `# ${String(path).split("/").pop()}\n\nTexto de prueba.`,
   capabilities: () => structuredClone(caps),

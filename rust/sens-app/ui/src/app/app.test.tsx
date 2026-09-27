@@ -16,7 +16,7 @@ const ipc = vi.hoisted(() => ({
   window: { isMaximized: vi.fn(async () => false), onResized: vi.fn(async () => () => {}), minimize: vi.fn(), toggleMaximize: vi.fn(async () => {}), close: vi.fn() },
 }));
 
-vi.mock("../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}), dictation: () => Promise.resolve(() => {}) } }));
+vi.mock("../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}) } }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ipc.window }));
 
 beforeAll(() => {

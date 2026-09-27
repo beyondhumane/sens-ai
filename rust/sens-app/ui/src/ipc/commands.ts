@@ -15,8 +15,6 @@ import type {
   ClaudeCodeProgress,
   Decision,
   Detail,
-  DictationCause,
-  DictationHeard,
   Entry,
   Found,
   Frame,
@@ -53,7 +51,6 @@ export const commands = {
   saveProfile: (name: string) => invoke<void>("save_profile", { name }),
   setUpdateCheck: (on: boolean) => invoke<void>("set_update_check", { on }),
   setNotify: (on: boolean) => invoke<void>("set_notify", { on }),
-  setWake: (on: boolean) => invoke<void>("set_wake", { on }),
   notify: (title: string, body: string) => invoke<void>("notify", { title, body }),
   setWelcomed: (on: boolean) => invoke<void>("set_welcomed", { on }),
   news: () => invoke<News[]>("news"),
@@ -139,9 +136,7 @@ export const commands = {
   terminalResize: (id: number, cols: number, rows: number) => invoke<void>("terminal_resize", { id, cols, rows }),
   terminalClose: (id: number) => invoke<void>("terminal_close", { id }),
   terminalScreen: (ask: number, text: string) => invoke<void>("terminal_screen", { ask, text }),
-  dictationStart: (language: string, handsFree: boolean) => invoke<number>("dictation_start", { language, handsFree }),
-  dictationStop: () => invoke<void>("dictation_stop"),
-  dictationSettings: (cause: DictationCause) => invoke<void>("dictation_settings", { cause }),
+  voiceTyping: () => invoke<void>("voice_typing"),
 
   folder: (root: string, path: string) => invoke<Entry[]>("folder", { root, path }),
   findFiles: (root: string, needle: string) => invoke<Entry[]>("find_files", { root, needle }),
@@ -170,8 +165,6 @@ export const events = {
     listen<TerminalHeard>("terminal", ({ payload }) => heard(payload)),
   terminalRead: (heard: (reading: TerminalReading) => void): Promise<UnlistenFn> =>
     listen<TerminalReading>("terminal-read", ({ payload }) => heard(payload)),
-  dictation: (heard: (what: DictationHeard) => void): Promise<UnlistenFn> =>
-    listen<DictationHeard>("dictation", ({ payload }) => heard(payload)),
   welcome: (heard: (done: number, total: number) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("welcome", ({ payload }) => heard(payload.done, payload.total)),
   update: (heard: (stage: UpdateStage) => void): Promise<UnlistenFn> =>

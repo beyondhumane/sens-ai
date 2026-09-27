@@ -8,7 +8,6 @@ import { boot } from "./app/session";
 import { watchWidth, whenShown } from "./app/shell";
 import { loadChanges } from "./features/changes/store";
 import { hearChat } from "./features/chat/store";
-import { armWake } from "./features/composer/dictation";
 import { hearDrops } from "./features/composer/store";
 import { loadCatalog } from "./features/models/store";
 import { newsAtStart } from "./features/news/store";
@@ -53,6 +52,5 @@ loadCatalog();
 loadProfile().then(() => {
   startUpdates();
   greetIfNew();
-  armWake();
 });
 boot();

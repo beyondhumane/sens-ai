@@ -19,7 +19,6 @@ const ipc = vi.hoisted(() => ({
     saveProfile: vi.fn(),
     setUpdateCheck: vi.fn(),
     setNotify: vi.fn(),
-    setWake: vi.fn(),
     updateCheck: vi.fn(),
     providersState: vi.fn(),
     setProviderMethod: vi.fn(),
@@ -107,7 +106,7 @@ afterEach(() => {
 
 describe("general settings", () => {
   it("saves the name and reloads the profile the rail footer paints from", async () => {
-    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false } });
+    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true } });
     ipc.commands.profile.mockResolvedValue({ name: "Nuevo", checkUpdates: true });
     await open("general");
 
@@ -139,7 +138,7 @@ describe("general settings", () => {
   });
 
   it("switches the notices off, and keeps them on when that cannot be saved", async () => {
-    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false } });
+    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true } });
     await open("general");
     const toggle = screen.getByRole("switch", { name: /Avisar cuando Claude termina/ });
     await act(async () => fireEvent.click(toggle));
@@ -151,24 +150,6 @@ describe("general settings", () => {
     await act(async () => fireEvent.click(toggle));
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("alert").textContent).toBe("sin permiso");
-  });
-
-  it("listens for Hey Sens only when asked, and says why when that cannot change", async () => {
-    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false } });
-    await open("general");
-    const toggle = screen.getByRole("switch", { name: /Hey Sens/ });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText(/deja el micrófono abierto/)).toBeTruthy();
-
-    await act(async () => fireEvent.click(toggle));
-    expect(ipc.commands.setWake).toHaveBeenCalledWith(true);
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(profile.getState().person.wake).toBe(true);
-
-    ipc.commands.setWake.mockRejectedValue("Windows no deja que Sens use el micrófono");
-    await act(async () => fireEvent.click(toggle));
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByRole("alert").textContent).toBe("Windows no deja que Sens use el micrófono");
   });
 
   it("opens the update panel", async () => {
