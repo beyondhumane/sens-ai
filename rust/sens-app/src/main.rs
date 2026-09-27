@@ -355,9 +355,44 @@ fn terminal_close(consoles: State<terminal::Consoles>, id: u32) -> Result<(), St
     consoles.close(id)
 }
 
+#[tauri::command(async)]
+fn voice_start(voice: State<voice::Voice>, language: String) -> Result<u32, voice::Refusal> {
+    voice.start(&language, true)
+}
+
+#[tauri::command(async)]
+fn voice_test(voice: State<voice::Voice>) -> Result<u32, voice::Refusal> {
+    voice.start("", false)
+}
+
 #[tauri::command]
-fn voice_typing(app: AppHandle) -> Result<(), String> {
-    voice::open(&app)
+fn voice_stop(voice: State<voice::Voice>) {
+    voice.finish();
+}
+
+#[tauri::command]
+fn voice_model(voice: State<voice::Voice>) -> voice::Model {
+    voice.model()
+}
+
+#[tauri::command]
+fn voice_prepare(voice: State<voice::Voice>) {
+    voice.prepare();
+}
+
+#[tauri::command(async)]
+fn voice_microphones() -> Vec<voice::Microphone> {
+    voice::microphones()
+}
+
+#[tauri::command]
+fn voice_microphone(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(voice::chosen(&data_dir(&app)?))
+}
+
+#[tauri::command]
+fn voice_choose(app: AppHandle, microphone: Option<String>) -> Result<(), String> {
+    voice::choose(&data_dir(&app)?, microphone)
 }
 
 #[tauri::command]
@@ -728,6 +763,11 @@ fn main() {
         .manage(terminal::Consoles::default())
         .manage(mcp::Bridge::default())
         .setup(|app| {
+            let heard = app.handle().clone();
+            let voice_base = data_dir(app.handle()).unwrap_or_else(|_| std::env::temp_dir().join("sens"));
+            app.manage(voice::Voice::new(voice_base, move |said| {
+                let _ = heard.emit("voice", said);
+            }));
             let base = data_dir(app.handle());
             language::speak(base.as_deref().ok());
             open_window(app)?;
@@ -736,6 +776,7 @@ fn main() {
                 share_environment(&base);
                 update::sweep(&base);
                 claude_code::sweep(&base);
+                app.state::<voice::Voice>().prepare();
             }
             Ok(())
         })
@@ -811,7 +852,14 @@ fn main() {
             terminal_resize,
             terminal_close,
             terminal_screen,
-            voice_typing,
+            voice_start,
+            voice_test,
+            voice_stop,
+            voice_model,
+            voice_prepare,
+            voice_microphones,
+            voice_microphone,
+            voice_choose,
             capabilities,
             skill_text,
             create_skill,
@@ -836,6 +884,7 @@ fn main() {
             if let RunEvent::Exit = event {
                 app.state::<Arc<Engine>>().shutdown();
                 app.state::<terminal::Consoles>().shutdown();
+                app.state::<voice::Voice>().stop();
             }
         });
 }

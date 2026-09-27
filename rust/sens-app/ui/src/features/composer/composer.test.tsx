@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Card } from "../../ipc/types";
+import type { Card, VoiceHeard } from "../../ipc/types";
 import { dialog } from "../../app/modal";
 import { chooseFolder } from "../../app/session";
 import { blank, warm as warmChat } from "../chat/store";
@@ -10,6 +10,7 @@ import { accountLine, choose, loadCatalog, models, noteLimits } from "../models/
 import { project } from "../project/store";
 import { settingsSheet } from "../settings/sheet";
 import { settings } from "../settings/store";
+import { voice } from "../voice/store";
 import { Composer } from "./Composer";
 import { BYPASS, composer, currentSettings, readRepo, readTrust, switchTo } from "./store";
 
@@ -31,11 +32,23 @@ const ipc = vi.hoisted(() => ({
     trustProject: vi.fn(),
     projectTrusted: vi.fn(),
     findFiles: vi.fn(),
-    voiceTyping: vi.fn(),
+    voiceStart: vi.fn(),
+    voiceStop: vi.fn(),
+    voicePrepare: vi.fn(),
   },
+  listeners: new Set<(what: VoiceHeard) => void>(),
 }));
 
-vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: { claudeCode: () => Promise.resolve(() => {}) } }));
+vi.mock("../../ipc/commands", () => ({
+  commands: ipc.commands,
+  events: {
+    claudeCode: () => Promise.resolve(() => {}),
+    voice: (hear: (what: VoiceHeard) => void) => {
+      ipc.listeners.add(hear);
+      return Promise.resolve(() => void ipc.listeners.delete(hear));
+    },
+  },
+}));
 vi.mock("../../app/session", () => ({ resume: vi.fn(), draft: vi.fn(async () => {}), fresh: vi.fn(), chooseFolder: vi.fn(), showView: vi.fn() }));
 
 const card = (id: string, over: Partial<Card> = {}): Card => ({
@@ -56,6 +69,8 @@ beforeAll(() => {
 beforeEach(async () => {
   localStorage.clear();
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
+  ipc.listeners.clear();
+  voice.setState({ ready: true, fetching: false, done: 0, total: 59_707_625, fault: "" });
   ipc.commands.providers.mockResolvedValue([{ id: "claude", vendor: "Anthropic", label: "Claude Code" }]);
   ipc.commands.models.mockResolvedValue([card("claude-sonnet"), card("claude-opus", { thinking: "always" }), card("claude-haiku", { latest: false, efforts: [] })]);
   ipc.commands.claudeAccount.mockResolvedValue({ billing: "subscription", plan: "max", source: "claude.ai", email: "ada@example.com" });
@@ -130,19 +145,6 @@ describe("the composer", () => {
     expect(focused().desk.getState().attached).toEqual([]);
     fireEvent.click(button(/demo/));
     expect(chooseFolder).toHaveBeenCalled();
-  });
-
-  it("dictates through Windows voice typing into the message, and says why when Windows will not", async () => {
-    render(<Composer />);
-    const microphone = button("Dictar");
-    expect(microphone.title).toBe("Dictar con la escritura por voz de Windows · Win+H");
-    await act(async () => fireEvent.click(microphone));
-    expect(ipc.commands.voiceTyping).toHaveBeenCalled();
-    expect(document.activeElement).toBe(field());
-
-    ipc.commands.voiceTyping.mockRejectedValue("Sens no es la ventana de delante, así que la escritura por voz sigue cerrada");
-    await act(async () => fireEvent.click(microphone));
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: ["Sens no es la ventana de delante, así que la escritura por voz sigue cerrada"] });
   });
 
   it("chooses a model, and hides models while editing the list", () => {
@@ -378,6 +380,80 @@ describe("the context meter", () => {
     await act(async () => fireEvent.click(button("Compactar ahora")));
     expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "/compact", files: [], images: [] }, expect.anything());
     expect(focused().desk.getState().attached).toHaveLength(1);
+  });
+});
+
+describe("dictation", () => {
+  const hear = (what: VoiceHeard) => act(() => [...ipc.listeners].forEach((listener) => listener(what)));
+  const written = () => (field() as HTMLTextAreaElement).value;
+  const lastNotice = () => focused().chat.getState().turns.at(-1);
+
+  it("writes what the microphone of Sens hears, phrase by phrase, and waits for the last one after stopping", async () => {
+    ipc.commands.voiceStart.mockResolvedValue(5);
+    render(<Composer />);
+    fireEvent.change(field(), { target: { value: "Primero " } });
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(ipc.commands.voiceStart).toHaveBeenCalledWith("es");
+    const microphone = button("Parar el dictado");
+    expect(microphone.getAttribute("aria-pressed")).toBe("true");
+
+    hear({ kind: "level", id: 5, level: 0.6 });
+    expect(microphone.style.getPropertyValue("--level")).toBe("0.6");
+    hear({ kind: "phrase", id: 5, text: "Añade un test para el formulario de contacto." });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto.");
+    hear({ kind: "phrase", id: 4, text: "de otra vez" });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto.");
+
+    await act(async () => fireEvent.click(microphone));
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+    expect(button("Transcribiendo…").getAttribute("aria-busy")).toBe("true");
+    hear({ kind: "phrase", id: 5, text: "Revisa el componente del botón." });
+    hear({ kind: "ended", id: 5, refusal: null });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto. Revisa el componente del botón.");
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+    expect(document.activeElement).toBe(field());
+  });
+
+  it("says the voice model is on its way instead of listening before it arrives", async () => {
+    voice.setState({ ready: false, fetching: false });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(ipc.commands.voicePrepare).toHaveBeenCalled();
+    expect(ipc.commands.voiceStart).not.toHaveBeenCalled();
+    expect(lastNotice()).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("una sola vez")] });
+
+    act(() => voice.setState({ fetching: true, done: 30, total: 100 }));
+    const preparing = button("Preparando el modelo de voz · 30 %");
+    await act(async () => fireEvent.click(preparing));
+    expect(lastNotice()).toMatchObject({ parts: ["Preparando el modelo de voz · 30 %"] });
+    expect(ipc.commands.voiceStart).not.toHaveBeenCalled();
+  });
+
+  it("says why the microphone refused, and where another one is chosen", async () => {
+    ipc.commands.voiceStart.mockRejectedValue({ cause: "microphone", message: "Sens no puede escuchar el micrófono: dispositivo no disponible" });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(lastNotice()).toMatchObject({
+      kind: "notice",
+      tone: "warn",
+      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › General › Voz"],
+    });
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("stops dictating when the message is sent, and writes nothing more into the next one", async () => {
+    ipc.commands.voiceStart.mockResolvedValue(9);
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    hear({ kind: "phrase", id: 9, text: "Añade un test" });
+    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
+    expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "Añade un test", files: [], images: [] }, currentSettings());
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+
+    hear({ kind: "phrase", id: 9, text: "y otro" });
+    hear({ kind: "ended", id: 9, refusal: null });
+    expect(written()).toBe("");
+    act(() => focused().chat.setState({ busy: false, stopping: false }));
   });
 });
 

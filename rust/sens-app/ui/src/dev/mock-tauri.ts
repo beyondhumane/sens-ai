@@ -111,6 +111,34 @@ function typeInShell(id: number, data: string) {
   }
 }
 
+const SAID = ["Añade un test para el formulario de contacto.", "Revisa el componente del botón."];
+const MICROPHONES = [
+  { name: "Voicemeeter Out B2 (VB-Audio Voicemeeter VAIO)", default: true },
+  { name: "Micrófono (USB Audio Device)", default: false },
+];
+let listened = 0;
+let listening: { id: number; timers: ReturnType<typeof setTimeout>[]; transcribe: boolean } | null = null;
+let microphone: string | null = null;
+
+function listen(transcribe: boolean) {
+  if (asking.get("voice") === "microphone") throw { cause: "microphone", message: "Sens no puede escuchar el micrófono: dispositivo no disponible" };
+  stopListening(true);
+  const id = ++listened;
+  const at = (after: number, event: object) => setTimeout(() => emit("voice", { id, ...event }), after);
+  const levels = Array.from({ length: 40 }, (_, step) => at(step * 100, { kind: "level", level: Math.abs(Math.sin(step / 2)) * 0.8 }));
+  const phrases = transcribe ? [at(1600, { kind: "phrase", text: SAID[0] }), at(3200, { kind: "phrase", text: SAID[1] })] : [];
+  listening = { id, timers: [...levels, ...phrases], transcribe };
+  return id;
+}
+
+function stopListening(quiet = false) {
+  if (!listening) return;
+  const { id, timers, transcribe } = listening;
+  timers.forEach(clearTimeout);
+  listening = null;
+  if (!quiet) setTimeout(() => emit("voice", { id, kind: "ended", refusal: null }), transcribe ? 700 : 60);
+}
+
 async function adopt(roots: string[]) {
   const chosen = found.projects.filter((one) => roots.includes(one.root));
   const total = chosen.reduce((sum, one) => sum + one.sessions, 0);
@@ -525,7 +553,14 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   terminal_open: ({ root }) => openShell(String(root ?? "")),
   terminal_write: ({ id, data }) => typeInShell(Number(id), String(data)),
   terminal_close: ({ id }) => endShell(Number(id), 1),
-  voice_typing: () => console.info("[mock-tauri] abriría la escritura por voz de Windows (Win+H)"),
+  voice_start: () => listen(true),
+  voice_test: () => listen(false),
+  voice_stop: () => stopListening(),
+  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 59_707_625 }),
+  voice_prepare: () => console.info("[mock-tauri] descargaría el modelo de voz"),
+  voice_microphones: () => MICROPHONES,
+  voice_microphone: () => microphone,
+  voice_choose: ({ microphone: chosen }) => void (microphone = (chosen as string | null) ?? null),
   preview_url: ({ path }) => `http://127.0.0.1:4321/demo/${String(path).split("/").pop()}`,
   artifact_text: ({ path }) => `# ${String(path).split("/").pop()}\n\nTexto de prueba.`,
   capabilities: () => structuredClone(caps),

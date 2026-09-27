@@ -290,6 +290,32 @@ export interface TerminalReading {
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };
 
+export type VoiceCause = "microphone" | "model" | "other";
+
+export interface VoiceRefusal {
+  cause: VoiceCause;
+  message: string;
+}
+
+export type VoiceHeard =
+  | { kind: "level"; id: number; level: number }
+  | { kind: "phrase"; id: number; text: string }
+  | { kind: "ended"; id: number; refusal: VoiceRefusal | null }
+  | { kind: "fetching"; done: number; total: number }
+  | { kind: "ready" }
+  | { kind: "unfetched"; message: string };
+
+export interface VoiceModel {
+  ready: boolean;
+  fetching: boolean;
+  bytes: number;
+}
+
+export interface Microphone {
+  name: string;
+  default: boolean;
+}
+
 export interface Todo {
   content: string;
   status: "pending" | "in_progress" | "completed";

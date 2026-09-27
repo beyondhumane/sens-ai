@@ -25,6 +25,7 @@ import type {
   Market,
   Message,
   Method,
+  Microphone,
   News,
   NewServer,
   Opened,
@@ -40,6 +41,8 @@ import type {
   TerminalReading,
   UpdateCheck,
   UpdateStage,
+  VoiceHeard,
+  VoiceModel,
   Workspace,
 } from "./types";
 
@@ -136,7 +139,14 @@ export const commands = {
   terminalResize: (id: number, cols: number, rows: number) => invoke<void>("terminal_resize", { id, cols, rows }),
   terminalClose: (id: number) => invoke<void>("terminal_close", { id }),
   terminalScreen: (ask: number, text: string) => invoke<void>("terminal_screen", { ask, text }),
-  voiceTyping: () => invoke<void>("voice_typing"),
+  voiceStart: (language: string) => invoke<number>("voice_start", { language }),
+  voiceTest: () => invoke<number>("voice_test"),
+  voiceStop: () => invoke<void>("voice_stop"),
+  voiceModel: () => invoke<VoiceModel>("voice_model"),
+  voicePrepare: () => invoke<void>("voice_prepare"),
+  voiceMicrophones: () => invoke<Microphone[]>("voice_microphones"),
+  voiceMicrophone: () => invoke<string | null>("voice_microphone"),
+  voiceChoose: (microphone: string | null) => invoke<void>("voice_choose", { microphone }),
 
   folder: (root: string, path: string) => invoke<Entry[]>("folder", { root, path }),
   findFiles: (root: string, needle: string) => invoke<Entry[]>("find_files", { root, needle }),
@@ -165,6 +175,7 @@ export const events = {
     listen<TerminalHeard>("terminal", ({ payload }) => heard(payload)),
   terminalRead: (heard: (reading: TerminalReading) => void): Promise<UnlistenFn> =>
     listen<TerminalReading>("terminal-read", ({ payload }) => heard(payload)),
+  voice: (heard: (what: VoiceHeard) => void): Promise<UnlistenFn> => listen<VoiceHeard>("voice", ({ payload }) => heard(payload)),
   welcome: (heard: (done: number, total: number) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("welcome", ({ payload }) => heard(payload.done, payload.total)),
   update: (heard: (stage: UpdateStage) => void): Promise<UnlistenFn> =>

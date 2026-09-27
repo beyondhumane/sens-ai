@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClaudeCodeProgress, ProviderState } from "../../ipc/types";
+import type { ClaudeCodeProgress, ProviderState, VoiceHeard } from "../../ipc/types";
 import { dialog } from "../../app/modal";
 import { models, readAccount, refreshModels } from "../models/store";
 import { project } from "../project/store";
@@ -9,6 +9,7 @@ import { profile } from "../profile/store";
 import { languageNow, showLanguage } from "../../shared/i18n";
 import { look } from "../../shared/look";
 import { updates } from "../updates/store";
+import { voice } from "../voice/store";
 import { Settings, SettingsDialog } from "./Settings";
 import { settingsSheet } from "./sheet";
 import { enterSettings, openSettings, settings, showSection, type Section } from "./store";
@@ -19,6 +20,12 @@ const ipc = vi.hoisted(() => ({
     saveProfile: vi.fn(),
     setUpdateCheck: vi.fn(),
     setNotify: vi.fn(),
+    voiceMicrophones: vi.fn(),
+    voiceMicrophone: vi.fn(),
+    voiceChoose: vi.fn(),
+    voiceTest: vi.fn(),
+    voiceStop: vi.fn(),
+    voicePrepare: vi.fn(),
     updateCheck: vi.fn(),
     providersState: vi.fn(),
     setProviderMethod: vi.fn(),
@@ -33,7 +40,7 @@ const ipc = vi.hoisted(() => ({
     setLanguage: vi.fn(),
     news: vi.fn(),
   },
-  heard: { claudeCode: (_: ClaudeCodeProgress) => {} },
+  heard: { claudeCode: (_: ClaudeCodeProgress) => {}, voice: (_: VoiceHeard) => {} },
 }));
 
 vi.mock(import("../models/store"), async (original) => ({ ...(await original()), readAccount: vi.fn(async () => null), refreshModels: vi.fn(async () => {}) }));
@@ -43,6 +50,10 @@ vi.mock("../../ipc/commands", () => ({
   events: {
     claudeCode: (heard: (progress: ClaudeCodeProgress) => void) => {
       ipc.heard.claudeCode = heard;
+      return Promise.resolve(() => {});
+    },
+    voice: (heard: (what: VoiceHeard) => void) => {
+      ipc.heard.voice = heard;
       return Promise.resolve(() => {});
     },
   },
@@ -92,6 +103,9 @@ beforeEach(() => {
   models.setState({ behind: "" });
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.commands.providersState.mockResolvedValue([claude()]);
+  ipc.commands.voiceMicrophones.mockResolvedValue([]);
+  ipc.commands.voiceMicrophone.mockResolvedValue(null);
+  voice.setState(voice.getInitialState(), true);
   dialog.setState(dialog.getInitialState(), true);
   look.setState(look.getInitialState(), true);
   settingsSheet.setState(settingsSheet.getInitialState(), true);
@@ -150,6 +164,42 @@ describe("general settings", () => {
     await act(async () => fireEvent.click(toggle));
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("alert").textContent).toBe("sin permiso");
+  });
+
+  it("chooses the microphone, tests it with a level bar, and says where the voice model is", async () => {
+    ipc.commands.voiceMicrophones.mockResolvedValue([
+      { name: "Voicemeeter Out B2", default: true },
+      { name: "Micrófono (USB)", default: false },
+    ]);
+    voice.setState({ ready: false, fetching: true, done: 30, total: 100 });
+    await open("general");
+    const microphone = screen.getByRole("combobox", { name: "Micrófono" }) as HTMLSelectElement;
+    expect([...microphone.options].map((one) => one.textContent)).toEqual(["El predeterminado de Windows · Voicemeeter Out B2", "Voicemeeter Out B2", "Micrófono (USB)"]);
+    expect(screen.getByText("Descargando el modelo de voz, una sola vez · 30 %")).toBeTruthy();
+
+    await act(async () => fireEvent.change(microphone, { target: { value: "Micrófono (USB)" } }));
+    expect(ipc.commands.voiceChoose).toHaveBeenCalledWith("Micrófono (USB)");
+    expect(voice.getState().chosen).toBe("Micrófono (USB)");
+
+    ipc.commands.voiceTest.mockResolvedValue(3);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Probar" })));
+    act(() => ipc.heard.voice({ kind: "level", id: 3, level: 0.42 }));
+    expect(screen.getByRole("meter", { name: "Nivel del micrófono" }).getAttribute("aria-valuenow")).toBe("42");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Parar" })));
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+    act(() => ipc.heard.voice({ kind: "ended", id: 3, refusal: null }));
+    expect(screen.getByRole("button", { name: "Probar" })).toBeTruthy();
+
+    act(() => voice.setState({ ready: true, fetching: false, total: 59_707_625 }));
+    expect(screen.getByText("Modelo de voz en este equipo · 57 MB")).toBeTruthy();
+  });
+
+  it("offers to download the voice model again when it could not come", async () => {
+    voice.setState({ ready: false, fetching: false, fault: "no pude descargar el modelo" });
+    await open("general");
+    expect(screen.getByText("no pude descargar el modelo")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Descargar" })));
+    expect(ipc.commands.voicePrepare).toHaveBeenCalled();
   });
 
   it("opens the update panel", async () => {

@@ -654,6 +654,9 @@
   .settings-row .primary { display: inline-flex; align-items: center; gap: 6px; }
   .settings-row [hidden] { display: none; }
   .settings-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+  .voice-level { height: 6px; border-radius: var(--r-key); background: var(--raise); overflow: hidden; }
+  .voice-level[hidden] { display: none; }
+  .voice-level span { display: block; height: 100%; background: var(--accent-fill); transition: width 90ms linear; }
   .settings-switch label { cursor: pointer; }
   .settings-pane .note.fault, .panel .note.fault { color: var(--red); }
   .sign-steps { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; font-size: 12px; line-height: 17px; color: var(--faint); }
@@ -1126,6 +1129,8 @@
   .round:hover { background: var(--raise); color: var(--text); }
   .round:disabled { opacity: .35; pointer-events: none; }
   .round[aria-pressed="true"] { color: var(--focus); background: var(--raise); }
+  .round.dictate[aria-pressed="true"] { outline: calc(1px + var(--level, 0) * 3px) solid var(--accent-line); outline-offset: 1px; transition: outline-width 90ms linear; }
+  .round.dictate[aria-busy="true"] { color: var(--focus); animation: pulse 1.2s ease-in-out infinite; }
 
   .send { background: var(--accent-fill); color: var(--accent-ink);
     width: 32px; height: 32px; margin-bottom: -1px;
@@ -1715,6 +1720,7 @@
     .composer .box[data-busy="true"]::after { animation: none; background: var(--focus); opacity: .5; }
     .pulse, .pane-dot[data-busy="true"], .step[data-state="running"] .step-state, .win .tools-btn[data-running="true"]::after, #site-reload[data-loading="true"] svg, .models-refresh[aria-busy="true"] svg, .activity { animation: none; opacity: 1; }
     .update-ping::after { animation: none; opacity: 0; }
+    .round.dictate[aria-busy="true"] { animation: none; }
     .settings[open], .look-mark path { animation: none; }
     :is(.reply .flow, .run-steps) > *, .fresh, .run-head, .thought[data-live="true"] :is(.thought-verb, .thought-title), .step[data-state="running"] .step-verb, .effort[data-max="true"] .effort-label, .model-sheet .mode-sub, .snap-ghost, .pane { animation: none; }
     :is(details.step, details.thought, details.run)::details-content { transition: none; }

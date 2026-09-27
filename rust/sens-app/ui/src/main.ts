@@ -17,6 +17,7 @@ import { tickTasks } from "./features/tasks/store";
 import { enterConsole, hearTerminal } from "./features/terminal/store";
 import { startUpdates } from "./features/updates/store";
 import { greetAtStart, greetIfNew } from "./features/welcome/store";
+import { watchVoice } from "./features/voice/store";
 import { enterSite, hearBrowser } from "./features/web/store";
 import { language, languageOf, showLanguage } from "./shared/i18n";
 import { followLook, lookOf, showLook } from "./shared/look";
@@ -49,6 +50,7 @@ createRoot(document.getElementById("app")!).render(createElement(StrictMode, nul
 requestAnimationFrame(() => requestAnimationFrame(() => getCurrentWindow().show()));
 
 loadCatalog();
+watchVoice().catch(() => {});
 loadProfile().then(() => {
   startUpdates();
   greetIfNew();

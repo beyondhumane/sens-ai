@@ -333,8 +333,8 @@ describe("the desktop shell", () => {
     expect(shell).not.toContain("claude-haiku");
   });
 
-  it("dictates through Windows voice typing, into the message", () => {
-    expect(shell).toContain("commands.voiceTyping()");
+  it("dictates with its own microphone and a model on this computer", () => {
+    expect(shell).toContain("commands.voiceStart(languageNow())");
     expect(shell).not.toContain("webkitSpeechRecognition");
   });
 

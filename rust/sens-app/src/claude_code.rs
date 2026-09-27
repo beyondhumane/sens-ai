@@ -212,7 +212,7 @@ fn fetch(build: &Build, path: &Path, report: &impl Fn(Progress)) -> Result<(), S
     }
 }
 
-fn digest(path: &Path) -> Result<String, String> {
+pub fn digest(path: &Path) -> Result<String, String> {
     let unread = |error: std::io::Error| {
         said!(
             en: "couldn’t read the download: {error}",
