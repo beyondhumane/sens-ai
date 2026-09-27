@@ -15,7 +15,7 @@ import {
   fontSans,
   fontMono,
 } from "../src/brand/tokens.js";
-import { claimType, sensType, taglineType } from "../src/brand/wordmark.js";
+import { sensType, taglineType } from "../src/brand/wordmark.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const assets = path.join(root, "assets");
@@ -102,7 +102,7 @@ function wordmarkSvg(): string {
 
 function bannerSvg(): string {
   const w = 1200;
-  const h = 340;
+  const h = 296;
   const markScale = 88 / markSize;
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="sens — understand more, read less">`,
@@ -113,8 +113,6 @@ function bannerSvg(): string {
     `</g>`,
     sensType(212, 156, 62, hex("bone-50")),
     taglineType(212, 200, 26, hex("alloy-400")),
-    `<rect x="96" y="252" width="1008" height="1" fill="${hex("carbon-700")}"/>`,
-    claimType(96, 292, 19, hex("alloy-500")),
     `</svg>`,
   ].join("");
 }
@@ -131,18 +129,19 @@ h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacin
 section { margin-bottom: 32px; }
 .row { display: flex; align-items: flex-end; gap: 32px; flex-wrap: wrap; padding: 28px; border: 1px solid var(--sens-border); border-radius: 12px; background: var(--sens-surface); }
 .row.dark { background: var(--sens-carbon-950); border-color: var(--sens-carbon-700); }
+.row.bone { background: var(--sens-bone-50); border-color: var(--sens-bone-200); }
 figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 figcaption { font-size: 11px; color: var(--sens-text-muted); font-family: ${fontMono}; }
 .row.dark figcaption { color: var(--sens-alloy-400); }
 </style></head><body>
 <h1>the cut</h1><p class="lede">one compact carbon body, one precise S-shaped incision.</p>
-<section><h2>primary on bone</h2><div class="row">${[160, 96, 64, 48, 32, 24].map((s) => sample(`${s} px`, markSvg({ size: s, id: `p${s}` }))).join("")}</div></section>
+<section><h2>primary on bone</h2><div class="row bone">${[160, 96, 64, 48, 32, 24].map((s) => sample(`${s} px`, markSvg({ size: s, id: `p${s}` }))).join("")}</div></section>
 <section><h2>micro cut · 16–24 px</h2><div class="row">${[32, 24, 16].map((s) => sample(`${s} px`, markSvg({ size: s, micro: true, id: `m${s}` }))).join("")}</div></section>
 <section><h2>dark ui</h2><div class="row dark">${[160, 64, 32].map((s) => sample(`${s} px`, markSvg({ size: s, body: hex("carbon-800"), id: `d${s}` }))).join("")}</div></section>
 <section><h2>one color · negative space</h2><div class="row">${[160, 64, 32, 16].map((s) => sample(`${s} px`, `<span style="color:${hex("carbon-950")}">${markMonoSvg({ size: s, id: `o${s}` })}</span>`)).join("")}</div></section>
 <section><h2>one color inverted</h2><div class="row dark">${[160, 64, 32, 16].map((s) => sample(`${s} px`, `<span style="color:${hex("bone-50")}">${markMonoSvg({ size: s, id: `i${s}` })}</span>`)).join("")}</div></section>
 <section><h2>wordmark</h2><div class="row">${wordmarkSvg()}</div></section>
-<section><h2>banner</h2><div class="row" style="display:block">${bannerSvg().replace('width="1200" height="340"', 'width="100%"')}</div></section>
+<section><h2>banner</h2><div class="row" style="display:block">${bannerSvg().replace('width="1200" height="296"', 'width="100%"')}</div></section>
 </body></html>`;
 }
 
