@@ -13,7 +13,7 @@ type Phase = "idle" | "listening" | "finishing";
 const refusalOf = (error: unknown): VoiceRefusal =>
   typeof error === "object" && error !== null && "cause" in error ? (error as VoiceRefusal) : { cause: "other", message: String(error) };
 
-const joined = (before: string, phrases: string[]) => [before, ...phrases].filter(Boolean).join(" ");
+const joined = (before: string, phrases: string[], guess = "") => [before, ...phrases, guess.trim()].filter(Boolean).join(" ");
 
 export function useDictation(pane: Pane, text: string, setText: (text: string) => void, field: RefObject<HTMLTextAreaElement | null>) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -52,6 +52,7 @@ export function useDictation(pane: Pane, text: string, setText: (text: string) =
       if (heard.kind === "ended") return finish(heard.refusal);
       if (heard.kind === "level") return setLevel(heard.level);
       if (muted) return;
+      if (heard.kind === "guess") return setText(joined(before, phrases, heard.text));
       phrases.push(heard.text.trim());
       setText(joined(before, phrases));
     };

@@ -299,6 +299,7 @@ export interface VoiceRefusal {
 
 export type VoiceHeard =
   | { kind: "level"; id: number; level: number }
+  | { kind: "guess"; id: number; text: string }
   | { kind: "phrase"; id: number; text: string }
   | { kind: "ended"; id: number; refusal: VoiceRefusal | null }
   | { kind: "fetching"; done: number; total: number }

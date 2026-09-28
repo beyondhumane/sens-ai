@@ -31,6 +31,12 @@ whisper-rs = "0.16"
 windows-core = "0.61"
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
 
+[profile.dev.package.whisper-rs-sys]
+opt-level = 3
+
+[profile.release.package.whisper-rs-sys]
+opt-level = 3
+
 [profile.release]
 opt-level = "z"
 lto = true

@@ -126,7 +126,14 @@ function listen(transcribe: boolean) {
   const id = ++listened;
   const at = (after: number, event: object) => setTimeout(() => emit("voice", { id, ...event }), after);
   const levels = Array.from({ length: 40 }, (_, step) => at(step * 100, { kind: "level", level: Math.abs(Math.sin(step / 2)) * 0.8 }));
-  const phrases = transcribe ? [at(1600, { kind: "phrase", text: SAID[0] }), at(3200, { kind: "phrase", text: SAID[1] })] : [];
+  const guesses = ["Añade un", "Añade un test para", "Añade un test para el formulario", "", "Revisa el", "Revisa el componente", "Revisa el componente del"];
+  const phrases = transcribe
+    ? [
+        ...guesses.flatMap((text, step) => (text ? [at(400 + step * 400, { kind: "guess", text })] : [])),
+        at(1600, { kind: "phrase", text: SAID[0] }),
+        at(3200, { kind: "phrase", text: SAID[1] }),
+      ]
+    : [];
   listening = { id, timers: [...levels, ...phrases], transcribe };
   return id;
 }

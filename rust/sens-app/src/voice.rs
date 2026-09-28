@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, mpsc};
@@ -20,6 +21,9 @@ const RATE: usize = 16_000;
 const FRAME: usize = RATE / 10;
 const LEAD: usize = 3;
 const PAUSE: usize = 7;
+const TAIL_KEPT: usize = 2;
+const TOKENS_PER_SECOND: usize = 10;
+const TOKENS_SPARE: usize = 16;
 const SPOKEN: usize = 4;
 const LONGEST: usize = 250;
 const IDLE: usize = 600;
@@ -29,6 +33,13 @@ const LOUDEST_GAIN: f32 = 30.0;
 const PEAK: f32 = 0.9;
 const PROMPT_TAIL: usize = 200;
 const TICK: Duration = Duration::from_millis(100);
+const GUESS_EVERY: usize = 4;
+const GUESS_FROM: usize = 10 * FRAME;
+const GUESS_TOKENS: i32 = 64;
+const LEAST_CONTEXT: usize = 160;
+const SAMPLES_PER_CONTEXT: usize = 320;
+const CONTEXT_MARGIN: usize = 64;
+const FULL_CONTEXT: usize = 1500;
 
 const HALLUCINATIONS: [&str; 10] = [
     "subtitulos realizados por la comunidad de amaraorg",
@@ -61,6 +72,7 @@ pub struct Refusal {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Heard {
     Level { id: u32, level: f32 },
+    Guess { id: u32, text: String },
     Phrase { id: u32, text: String },
     Ended { id: u32, refusal: Option<Refusal> },
     Fetching { done: u64, total: u64 },
@@ -216,6 +228,27 @@ pub fn cleaned(text: &str) -> String {
     kept
 }
 
+pub fn unrepeated(text: &str) -> String {
+    let bare = |sentence: &str| sentence.trim_end_matches(|letter: char| !letter.is_alphanumeric()).to_lowercase();
+    let mut sentences = Vec::new();
+    let mut current = String::new();
+    for letter in text.chars() {
+        current.push(letter);
+        if matches!(letter, '.' | '!' | '?' | '…' | '。' | '！' | '？') {
+            sentences.push(std::mem::take(&mut current));
+        }
+    }
+    sentences.push(current);
+    let mut kept: Vec<String> = Vec::new();
+    for sentence in sentences.iter().map(|sentence| sentence.trim()).filter(|sentence| !sentence.is_empty()) {
+        if kept.last().is_some_and(|last| bare(last).starts_with(&bare(sentence))) {
+            continue;
+        }
+        kept.push(sentence.to_string());
+    }
+    kept.join(" ")
+}
+
 pub fn joined(before: &str, said: &str) -> String {
     match (before.trim(), said.trim()) {
         ("", said) => said.to_string(),
@@ -285,6 +318,10 @@ impl Segmenter {
         !self.phrase.is_empty()
     }
 
+    pub fn current(&self) -> Option<&[f32]> {
+        self.speaking().then_some(self.phrase.as_slice())
+    }
+
     pub fn push(&mut self, samples: &[f32]) -> Vec<Cut> {
         self.pending.extend_from_slice(samples);
         let mut cuts = Vec::new();
@@ -338,7 +375,9 @@ impl Segmenter {
     }
 
     fn close(&mut self) -> Option<Cut> {
-        let phrase = std::mem::take(&mut self.phrase);
+        let mut phrase = std::mem::take(&mut self.phrase);
+        let silence = self.quiet.saturating_sub(TAIL_KEPT) * FRAME;
+        phrase.truncate(phrase.len().saturating_sub(silence));
         let worth = self.voiced >= SPOKEN;
         self.voiced = 0;
         self.quiet = 0;
@@ -352,6 +391,27 @@ impl Segmenter {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Job {
+    Guess(Vec<f32>),
+    Final(Vec<f32>),
+}
+
+pub fn next(queue: &mut VecDeque<Job>) -> Option<Job> {
+    while queue.len() > 1 && matches!(queue.front(), Some(Job::Guess(_))) {
+        queue.pop_front();
+    }
+    queue.pop_front()
+}
+
+pub fn most_tokens(samples: usize) -> i32 {
+    (samples * TOKENS_PER_SECOND / RATE + TOKENS_SPARE) as i32
+}
+
+pub fn context(samples: usize) -> i32 {
+    (samples / SAMPLES_PER_CONTEXT + CONTEXT_MARGIN).clamp(LEAST_CONTEXT, FULL_CONTEXT) as i32
 }
 
 pub fn pick<'a>(chosen: Option<&str>, names: &'a [String]) -> Option<&'a str> {
@@ -490,11 +550,13 @@ mod engine {
 
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use cpal::{FromSample, SizedSample};
-    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState};
+
+    use std::collections::VecDeque;
 
     use super::{
-        Cut, Heard, Microphone, PROMPT_TAIL, Refusal, Resampler, Segmenter, TICK, Tell, cleaned, held, joined, level, louder, no_microphone, pick,
-        unloaded, untranscribed,
+        Cut, GUESS_EVERY, GUESS_FROM, GUESS_TOKENS, Heard, Job, Microphone, PROMPT_TAIL, Refusal, Resampler, Segmenter, TICK, Tell, cleaned, context, held, joined, level,
+        louder, most_tokens, next, no_microphone, pick, unloaded, unrepeated, untranscribed,
     };
 
     fn name_of(device: &cpal::Device) -> String {
@@ -566,33 +628,62 @@ mod engine {
         Ok((stream, rate))
     }
 
-    pub fn transcriber(id: u32, model: PathBuf, language: String, phrases: Receiver<Vec<f32>>, tell: Tell) -> Result<(), Refusal> {
+    fn transcribe(state: &mut WhisperState, phrase: &[f32], language: &str, threads: i32, said: &str, guess: bool) -> Result<String, Refusal> {
+        let audio = louder(phrase);
+        let tail: String = said.chars().rev().take(PROMPT_TAIL).collect::<Vec<_>>().into_iter().rev().collect();
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_language(Some(language));
+        params.set_n_threads(threads);
+        params.set_temperature_inc(0.0);
+        params.set_max_tokens(most_tokens(audio.len()));
+        if guess {
+            params.set_audio_ctx(context(audio.len()));
+            params.set_max_tokens(most_tokens(audio.len()).min(GUESS_TOKENS));
+        }
+        params.set_translate(false);
+        params.set_no_timestamps(true);
+        params.set_suppress_blank(true);
+        params.set_suppress_nst(true);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_special(false);
+        params.set_print_timestamps(false);
+        params.set_initial_prompt(&tail);
+        state.full(params, &audio).map_err(|error| untranscribed(&error.to_string()))?;
+        Ok(unrepeated(&cleaned(&state.as_iter().filter_map(|segment| segment.to_str_lossy().ok().map(|text| text.into_owned())).collect::<String>())))
+    }
+
+    pub fn transcriber(id: u32, model: PathBuf, language: String, jobs: Receiver<Job>, tell: Tell) -> Result<(), Refusal> {
         whisper_rs::install_logging_hooks();
         let path = model.to_string_lossy().into_owned();
-        let context = WhisperContext::new_with_params(&path, WhisperContextParameters::default()).map_err(|error| unloaded(&error.to_string()))?;
-        let mut state = context.create_state().map_err(|error| unloaded(&error.to_string()))?;
+        let whisper = WhisperContext::new_with_params(&path, WhisperContextParameters::default()).map_err(|error| unloaded(&error.to_string()))?;
+        let mut state = whisper.create_state().map_err(|error| unloaded(&error.to_string()))?;
         let threads = std::thread::available_parallelism().map(|count| count.get().clamp(1, 8)).unwrap_or(4) as i32;
         let mut said = String::new();
-        for phrase in phrases {
-            let audio = louder(&phrase);
-            let tail: String = said.chars().rev().take(PROMPT_TAIL).collect::<Vec<_>>().into_iter().rev().collect();
-            let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-            params.set_language(Some(&language));
-            params.set_n_threads(threads);
-            params.set_translate(false);
-            params.set_no_timestamps(true);
-            params.set_suppress_blank(true);
-            params.set_suppress_nst(true);
-            params.set_print_progress(false);
-            params.set_print_realtime(false);
-            params.set_print_special(false);
-            params.set_print_timestamps(false);
-            params.set_initial_prompt(&tail);
-            state.full(params, &audio).map_err(|error| untranscribed(&error.to_string()))?;
-            let text = cleaned(&state.as_iter().filter_map(|segment| segment.to_str_lossy().ok().map(|text| text.into_owned())).collect::<String>());
-            if !text.is_empty() {
-                said = joined(&said, &text);
-                tell(Heard::Phrase { id, text });
+        let mut queue = VecDeque::new();
+        loop {
+            if queue.is_empty() {
+                match jobs.recv() {
+                    Ok(job) => queue.push_back(job),
+                    Err(_) => break,
+                }
+            }
+            queue.extend(jobs.try_iter());
+            match next(&mut queue) {
+                Some(Job::Guess(phrase)) => {
+                    let text = transcribe(&mut state, &phrase, &language, threads, &said, true)?;
+                    if !text.is_empty() {
+                        tell(Heard::Guess { id, text });
+                    }
+                }
+                Some(Job::Final(phrase)) => {
+                    let text = transcribe(&mut state, &phrase, &language, threads, &said, false)?;
+                    if !text.is_empty() {
+                        said = joined(&said, &text);
+                        tell(Heard::Phrase { id, text });
+                    }
+                }
+                None => {}
             }
         }
         Ok(())
@@ -608,7 +699,7 @@ mod engine {
                 return;
             }
         };
-        let (phrases, heard) = mpsc::channel::<Vec<f32>>();
+        let (jobs, heard) = mpsc::channel::<Job>();
         let writer = model.map(|model| {
             let tell = tell.clone();
             std::thread::spawn(move || transcriber(id, model, language, heard, tell))
@@ -617,6 +708,7 @@ mod engine {
         let mut resampler = Resampler::new(rate);
         let mut segmenter = Segmenter::default();
         let mut refusal = None;
+        let mut since_guess = 0;
         loop {
             std::thread::sleep(TICK);
             let raw = std::mem::take(&mut *held(&sink));
@@ -626,10 +718,19 @@ mod engine {
             for cut in segmenter.push(&audio) {
                 match cut {
                     Cut::Phrase(phrase) => {
-                        let _ = phrases.send(phrase);
+                        let _ = jobs.send(Job::Final(phrase));
+                        since_guess = 0;
                     }
                     Cut::Idle => idle = true,
                 }
+            }
+            since_guess += 1;
+            if writer.is_some()
+                && since_guess >= GUESS_EVERY
+                && let Some(current) = segmenter.current().filter(|current| current.len() >= GUESS_FROM)
+            {
+                let _ = jobs.send(Job::Guess(current.to_vec()));
+                since_guess = 0;
             }
             tell(Heard::Level { id, level: level(segmenter.loudness()) });
             if let Some(error) = held(&fault).take() {
@@ -642,9 +743,9 @@ mod engine {
         }
         drop(stream);
         if let Some(rest) = segmenter.finish() {
-            let _ = phrases.send(rest);
+            let _ = jobs.send(Job::Final(rest));
         }
-        drop(phrases);
+        drop(jobs);
         if let Some(Err(failed)) = writer.map(|writer| writer.join().unwrap_or(Ok(()))) {
             refusal = refusal.or(Some(failed));
         }
@@ -687,7 +788,7 @@ mod tests {
         assert!(segmenter.push(&tone(8, 0.2)).is_empty());
         let cuts = segmenter.push(&tone(PAUSE, 0.001));
         let [Cut::Phrase(phrase)] = cuts.as_slice() else { panic!("{cuts:?}") };
-        assert_eq!(phrase.len(), (LEAD + 8 + PAUSE) * FRAME);
+        assert_eq!(phrase.len(), (LEAD + 8 + TAIL_KEPT) * FRAME);
     }
 
     #[test]
@@ -749,6 +850,15 @@ mod tests {
     }
 
     #[test]
+    fn a_sentence_whisper_repeats_is_written_once() {
+        assert_eq!(unrepeated("Añade un test. Añade un test. Añade un test."), "Añade un test.");
+        assert_eq!(unrepeated("Añade un test para el botón. Añade un test para el bo"), "Añade un test para el botón.");
+        assert_eq!(unrepeated("Hola. Revisa el botón"), "Hola. Revisa el botón");
+        assert_eq!(unrepeated("¿Qué hora es? Son las tres."), "¿Qué hora es? Son las tres.");
+        assert_eq!(unrepeated(""), "");
+    }
+
+    #[test]
     fn phrases_join_what_was_written_with_one_space() {
         assert_eq!(joined("", " Hola."), "Hola.");
         assert_eq!(joined("Revisa ", "el botón."), "Revisa el botón.");
@@ -797,29 +907,52 @@ mod tests {
         let mut resampler = Resampler::new(48_000);
         let mut segmenter = Segmenter::default();
         let (phrases, heard) = mpsc::channel();
+        let said = Arc::new(Mutex::new(Vec::new()));
+        let guessed = Arc::new(Mutex::new(Vec::new()));
+        let (sink, guesses) = (said.clone(), guessed.clone());
+        let began = std::time::Instant::now();
+        let writer = std::thread::spawn(move || {
+            engine::transcriber(1, model, "es".into(), heard, Arc::new(move |event| match event {
+                Heard::Phrase { text, .. } => {
+                    println!("{:>6}ms phrase {text}", began.elapsed().as_millis());
+                    held(&sink).push(text)
+                }
+                Heard::Guess { text, .. } => {
+                    println!("{:>6}ms guess  {text}", began.elapsed().as_millis());
+                    held(&guesses).push(text)
+                }
+                _ => {}
+            }))
+        });
+        let mut since_guess = 0;
         for chunk in quiet.chunks(4_800) {
+            std::thread::sleep(TICK);
             let mut audio = Vec::new();
             resampler.push(chunk, &mut audio);
             for cut in segmenter.push(&audio) {
                 if let Cut::Phrase(phrase) = cut {
-                    phrases.send(phrase).unwrap();
+                    phrases.send(Job::Final(phrase)).unwrap();
+                    since_guess = 0;
                 }
+            }
+            since_guess += 1;
+            if since_guess >= GUESS_EVERY
+                && let Some(current) = segmenter.current().filter(|current| current.len() >= GUESS_FROM)
+            {
+                phrases.send(Job::Guess(current.to_vec())).unwrap();
+                since_guess = 0;
             }
         }
         if let Some(rest) = segmenter.finish() {
-            phrases.send(rest).unwrap();
+            phrases.send(Job::Final(rest)).unwrap();
         }
         drop(phrases);
-        let said = Arc::new(Mutex::new(Vec::new()));
-        let sink = said.clone();
-        engine::transcriber(1, model, "es".into(), heard, Arc::new(move |event| {
-            if let Heard::Phrase { text, .. } = event {
-                held(&sink).push(text);
-            }
-        }))
-        .unwrap();
+        writer.join().unwrap().unwrap();
         let said = held(&said).clone();
-        println!("{said:?}");
+        let guessed = held(&guessed).clone();
+        println!("guesses {guessed:?}");
+        println!("phrases {said:?}");
+        assert!(!guessed.is_empty());
         assert_eq!(said.len(), 2, "{said:?}");
         assert!(said[0].contains("formulario de contacto"), "{said:?}");
         assert!(said[1].contains("componente del botón"), "{said:?}");
@@ -874,6 +1007,39 @@ mod tests {
         assert!(events.iter().any(|event| matches!(event, Heard::Level { .. })), "{events:?}");
         assert_eq!(events.last(), Some(&Heard::Ended { id, refusal: None }), "{events:?}");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_newer_guess_or_any_phrase_makes_an_older_guess_worthless() {
+        let mut queue = VecDeque::from([Job::Guess(vec![1.0]), Job::Guess(vec![2.0]), Job::Final(vec![3.0]), Job::Guess(vec![4.0]), Job::Guess(vec![5.0])]);
+        assert_eq!(next(&mut queue), Some(Job::Final(vec![3.0])));
+        assert_eq!(next(&mut queue), Some(Job::Guess(vec![5.0])));
+        assert_eq!(next(&mut queue), None);
+        let mut phrases = VecDeque::from([Job::Final(vec![1.0]), Job::Final(vec![2.0])]);
+        assert_eq!(next(&mut phrases), Some(Job::Final(vec![1.0])));
+        assert_eq!(next(&mut phrases), Some(Job::Final(vec![2.0])));
+    }
+
+    #[test]
+    fn a_phrase_may_take_about_ten_tokens_a_second_and_no_more() {
+        assert_eq!(most_tokens(RATE * 3), 30 + TOKENS_SPARE as i32);
+        assert_eq!(most_tokens(0), TOKENS_SPARE as i32);
+    }
+
+    #[test]
+    fn whisper_looks_only_at_as_much_audio_as_was_said() {
+        assert_eq!(context(RATE * 3), 150 + CONTEXT_MARGIN as i32);
+        assert_eq!(context(0), LEAST_CONTEXT as i32);
+        assert_eq!(context(RATE * 60), FULL_CONTEXT as i32);
+    }
+
+    #[test]
+    fn a_phrase_being_said_can_be_read_while_it_goes_on() {
+        let mut segmenter = Segmenter::default();
+        segmenter.push(&tone(5, 0.001));
+        assert!(segmenter.current().is_none());
+        segmenter.push(&tone(8, 0.2));
+        assert_eq!(segmenter.current().map(<[f32]>::len), Some((LEAD + 8) * FRAME));
     }
 
     #[test]

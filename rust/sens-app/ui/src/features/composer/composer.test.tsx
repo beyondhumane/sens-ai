@@ -399,6 +399,10 @@ describe("dictation", () => {
 
     hear({ kind: "level", id: 5, level: 0.6 });
     expect(microphone.style.getPropertyValue("--level")).toBe("0.6");
+    hear({ kind: "guess", id: 5, text: "Añade un test para el formu" });
+    expect(written()).toBe("Primero Añade un test para el formu");
+    hear({ kind: "guess", id: 5, text: "Añade un test para el formulario de" });
+    expect(written()).toBe("Primero Añade un test para el formulario de");
     hear({ kind: "phrase", id: 5, text: "Añade un test para el formulario de contacto." });
     expect(written()).toBe("Primero Añade un test para el formulario de contacto.");
     hear({ kind: "phrase", id: 4, text: "de otra vez" });
