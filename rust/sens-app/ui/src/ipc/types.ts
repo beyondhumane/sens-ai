@@ -1,9 +1,69 @@
+import type { Language } from "../shared/i18n";
+import type { Look } from "../shared/look";
+
+declare global {
+  interface Window {
+    __SENS_HIDDEN__?: boolean;
+  }
+}
+
 export interface Profile {
   name: string;
   checkUpdates: boolean;
   welcomed: boolean;
   seen: string;
   notify: boolean;
+  keepInTray?: boolean;
+  startWithWindows?: boolean;
+}
+
+export interface Front {
+  app: string;
+  title: string;
+}
+
+export interface Copied {
+  preview: string;
+  chars: number;
+}
+
+export interface BarContext {
+  front: Front | null;
+  clip: Copied | null;
+}
+
+export interface Shot {
+  mediaType: "image/png";
+  data: string;
+  width: number;
+  height: number;
+}
+
+export interface BarProject {
+  root: string;
+  name: string;
+}
+
+export interface HandOver {
+  root: string;
+  session: string;
+  text: string;
+}
+
+export interface BarOpened {
+  look: Look;
+  language: Language | null;
+  front: Front | null;
+  pinned: boolean;
+}
+
+export interface Watching {
+  session: string | null;
+}
+
+export interface Shortcut {
+  keys: string;
+  taken: boolean;
 }
 
 export interface Release {

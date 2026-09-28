@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "bar",
+  "description": "La barra flotante se abre con Ctrl+Alt+Espacio sobre cualquier app. Solo escucha eventos: ocultarse, ajustar su altura, fijarse y arrastrarse pasan por los comandos bar_* de Sens, así que no necesita permisos de ventana propios.",
+  "windows": ["bar"],
+  "permissions": ["core:default"]
+}

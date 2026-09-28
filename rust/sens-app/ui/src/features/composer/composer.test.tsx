@@ -391,6 +391,30 @@ describe("a change mid-session that reads the conversation again", () => {
   });
 });
 
+describe("the height of the message", () => {
+  it("is measured only while the chat shows, and again when it shows up", () => {
+    const watchers: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class { constructor(then: () => void) { watchers.push(then); } observe() {} disconnect() {} });
+    let shown = false;
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(() => (shown ? [{}] : []) as unknown as DOMRectList);
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get: () => 52 });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "clientWidth", { configurable: true, get: () => (shown ? 600 : 0) });
+    try {
+      render(<Composer />);
+      act(() => focused().desk.setState({ text: "Una línea\ny otra" }));
+      expect((field() as HTMLTextAreaElement).style.height).toBe("");
+      shown = true;
+      act(() => watchers.forEach((then) => then()));
+      expect((field() as HTMLTextAreaElement).style.height).toBe("52px");
+    } finally {
+      vi.restoreAllMocks();
+      delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+      delete (HTMLTextAreaElement.prototype as { clientWidth?: number }).clientWidth;
+      vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    }
+  });
+});
+
 describe("suggestions while writing", () => {
   const offered = [
     { name: "compact", description: "Resume la conversación", hint: "<instrucciones>" },

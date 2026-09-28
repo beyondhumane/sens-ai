@@ -22,6 +22,9 @@ import { CLOSING, answered, heard, nextKey, opening, type Picture, type Reply } 
 export { notice, warn };
 
 let hellos = 0;
+let quiet = false;
+
+export const keepQuiet = () => void (quiet = true);
 
 const session = (pane: Pane) => pane.desk.getState().session;
 const setSession = (pane: Pane, id: string) => pane.desk.setState({ session: id });
@@ -164,7 +167,7 @@ export async function load(id: string, pane: Pane = focused()) {
   pane.reading = null;
   for (const event of unlogged(entries, meanwhile)) hear(pane, event);
   if (!pane.chat.getState().turns.length) hello(pane);
-  await loadRail();
+  if (!quiet) await loadRail();
 }
 
 function unlogged(entries: SessionEntry[], caught: ChatEvent[]) {
@@ -200,7 +203,7 @@ export async function send({ message, shownFiles, pictures }: Outgoing, settings
     const outgoing = await isolateIfAsked(pane, id, message);
     await commands.chatSend(root, id, outgoing, settings);
     pane.chat.setState({ ranOn: settings.model, ranWith: { effort: settings.effort, thinking: settings.thinking } });
-    loadRail();
+    if (!quiet) loadRail();
   } catch (reason) {
     onReply(pane, pane.replying, (reply) => heard(reply, { kind: "failed", reason: reason instanceof Error ? reason.message : String(reason) }, false));
     pane.replying = null;
@@ -264,6 +267,7 @@ export const whenTurnEnds = (then: (pane: Pane) => unknown) => void turnEnded.pu
 async function afterTurn(pane: Pane) {
   idle(true, pane);
   pane.chat.setState(({ ended }) => ({ ended: ended + 1 }));
+  if (quiet) return;
   for (const then of turnEnded) then(pane);
   if (project.getState().view === "artifacts") loadShelf();
   if (onScreen(pane)) {
@@ -297,8 +301,12 @@ export const hearChat = () =>
       if (CLOSING.has(event.kind)) loadRail();
       return;
     }
-    noteTask(event as AgentEvent, Date.now(), from);
-    if (TASK_EVENTS.has(event.kind)) return;
-    if (pane.reading) pane.reading.push(event);
-    else hear(pane, event);
+    hearIn(pane, from, event);
   });
+
+export function hearIn(pane: Pane, from: string, event: ChatEvent) {
+  noteTask(event as AgentEvent, Date.now(), from);
+  if (TASK_EVENTS.has(event.kind)) return;
+  if (pane.reading) pane.reading.push(event);
+  else hear(pane, event);
+}

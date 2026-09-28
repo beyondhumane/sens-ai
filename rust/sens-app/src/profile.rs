@@ -14,6 +14,8 @@ pub struct Profile {
     pub welcomed: bool,
     pub seen: String,
     pub notify: bool,
+    pub keep_in_tray: bool,
+    pub start_with_windows: bool,
 }
 
 impl Default for Profile {
@@ -24,6 +26,8 @@ impl Default for Profile {
             welcomed: false,
             seen: String::new(),
             notify: true,
+            keep_in_tray: true,
+            start_with_windows: true,
         }
     }
 }
@@ -52,6 +56,14 @@ pub fn set_update_check(base: &Path, on: bool) -> Result<(), String> {
 
 pub fn set_notify(base: &Path, on: bool) -> Result<(), String> {
     change(base, |profile| profile.notify = on)
+}
+
+pub fn set_keep_in_tray(base: &Path, on: bool) -> Result<(), String> {
+    change(base, |profile| profile.keep_in_tray = on)
+}
+
+pub fn set_start_with_windows(base: &Path, on: bool) -> Result<(), String> {
+    change(base, |profile| profile.start_with_windows = on)
 }
 
 pub fn set_welcomed(base: &Path, on: bool) -> Result<(), String> {
@@ -128,6 +140,26 @@ mod tests {
         assert!(!saved.notify);
         assert!(!saved.check_updates);
         assert_eq!(saved.name, "Sofía");
+    }
+
+    #[test]
+    fn sens_stays_in_the_tray_and_starts_with_windows_until_switched_off_even_for_a_profile_from_before_them() {
+        let base = temp_root("tray");
+        std::fs::write(base.join(FILE), r#"{ "name": "Sofía", "notify": false }"#).unwrap();
+        let before = load(&base);
+        assert!(before.keep_in_tray && before.start_with_windows);
+        assert!(Profile::default().keep_in_tray && Profile::default().start_with_windows);
+
+        set_keep_in_tray(&base, false).unwrap();
+        set_start_with_windows(&base, false).unwrap();
+
+        let saved = load(&base);
+        assert!(!saved.keep_in_tray && !saved.start_with_windows);
+        assert!(!saved.notify);
+        assert_eq!(saved.name, "Sofía");
+        let written: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(base.join(FILE)).unwrap()).unwrap();
+        assert_eq!(written["keepInTray"], false);
+        assert_eq!(written["startWithWindows"], false);
     }
 
     #[test]

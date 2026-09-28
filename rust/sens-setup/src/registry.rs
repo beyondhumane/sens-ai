@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use winreg::RegKey;
-use winreg::enums::HKEY_CURRENT_USER;
+use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
 
 use crate::language::said;
 use crate::layout::{APP, Layout};
@@ -56,20 +56,22 @@ pub fn write(layout: &Layout, version: &str, kilobytes: u32) -> Result<(), Strin
 }
 
 pub fn erase(layout: &Layout) -> Result<(), String> {
-    for key in [&layout.uninstall_key, &layout.remembered_key] {
-        match user().delete_subkey_all(key) {
-            Err(error) if error.kind() != ErrorKind::NotFound => {
-                return Err(said!(
-                    en: "couldn’t remove Sens from Windows: {error}",
-                    es: "no pude quitar Sens de Windows: {error}",
-                    fr: "impossible de retirer Sens de Windows : {error}",
-                    de: "Sens konnte nicht aus Windows entfernt werden: {error}",
-                    ja: "Windows から Sens を削除できませんでした: {error}",
-                    zh: "无法从 Windows 中移除 Sens：{error}",
-                ));
-            }
-            _ => {}
-        }
+    let removals = [
+        user().delete_subkey_all(&layout.uninstall_key),
+        user().delete_subkey_all(&layout.remembered_key),
+        user()
+            .open_subkey_with_flags(&layout.run_key, KEY_SET_VALUE)
+            .and_then(|run| run.delete_value(PRODUCT)),
+    ];
+    if let Some(error) = removals.into_iter().filter_map(Result::err).find(|error| error.kind() != ErrorKind::NotFound) {
+        return Err(said!(
+            en: "couldn’t remove Sens from Windows: {error}",
+            es: "no pude quitar Sens de Windows: {error}",
+            fr: "impossible de retirer Sens de Windows : {error}",
+            de: "Sens konnte nicht aus Windows entfernt werden: {error}",
+            ja: "Windows から Sens を削除できませんでした: {error}",
+            zh: "无法从 Windows 中移除 Sens：{error}",
+        ));
     }
     if let Some((parent, _)) = layout.remembered_key.rsplit_once('\\') {
         remove_if_empty(parent);

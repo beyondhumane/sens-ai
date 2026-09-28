@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import { commands, events } from "../../ipc/commands";
 import type { ClaudeCodeProgress, Method, ProviderState } from "../../ipc/types";
 import { checkClaudeCode, noteLockout, readAccount, refreshModels } from "../models/store";
+import { profile } from "../profile/store";
 import { store, stored } from "../../shared/storage.js";
 import { settingsSheet } from "./sheet";
 
@@ -55,6 +56,16 @@ export function settingsClosed() {
   settingsSheet.setState({ open: false });
   if (back?.isConnected) back.focus();
   back = null;
+}
+
+const RESIDENT = {
+  keepInTray: (on: boolean) => commands.setKeepInTray(on),
+  startWithWindows: (on: boolean) => commands.setStartWithWindows(on),
+};
+
+export async function setResident(key: keyof typeof RESIDENT, on: boolean) {
+  await RESIDENT[key](on);
+  profile.setState(({ person }) => ({ person: { ...person, [key]: on } }));
 }
 
 export async function loadProviders() {

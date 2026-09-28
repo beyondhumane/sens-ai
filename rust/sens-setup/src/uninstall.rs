@@ -98,6 +98,9 @@ fn forget(path: &Path, removed: std::io::Result<()>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
     use super::*;
     use crate::install::{self, Job};
     use crate::layout::sandbox::Sandbox;
@@ -156,6 +159,23 @@ mod tests {
         assert!(sandbox.key(&layout.remembered_key).is_none());
         assert!(sandbox.key(&parent).is_none());
         assert!(registry::installed(layout).is_none());
+    }
+
+    #[test]
+    fn an_uninstall_takes_sens_out_of_the_windows_startup_and_nothing_else() {
+        let sandbox = Sandbox::new("startup");
+        installed(&sandbox);
+        let layout = &sandbox.layout;
+        let (run, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(&layout.run_key).unwrap();
+        run.set_value("Sens", &format!("\"{}\" --hidden", layout.app().display())).unwrap();
+        run.set_value("Otra", &"otra.exe".to_string()).unwrap();
+
+        removal(&sandbox, false, &AtomicBool::new(false)).unwrap();
+
+        let run = sandbox.key(&layout.run_key).unwrap();
+        assert!(run.get_raw_value("Sens").is_err());
+        assert_eq!(run.get_value::<String, _>("Otra").unwrap(), "otra.exe");
+        assert_eq!(registry::erase(layout), Ok(()));
     }
 
     #[test]

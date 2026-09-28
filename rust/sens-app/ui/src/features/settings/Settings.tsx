@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { showView } from "../../app/session";
 import { commands, events } from "../../ipc/commands";
+import type { Shortcut } from "../../ipc/types";
 import { looks } from "../../shared/copy";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
@@ -20,7 +21,7 @@ import { openWelcome, type Step } from "../welcome/store";
 import { t } from "./copy";
 import { ProvidersSection } from "./ProvidersSection";
 import { settingsSheet } from "./sheet";
-import { SECTIONS, closeSettings, enterSettings, settings, settingsClosed, showSection, type Section } from "./store";
+import { SECTIONS, closeSettings, enterSettings, setResident, settings, settingsClosed, showSection, type Section } from "./store";
 
 export function SettingsDialog() {
   const open = useStore(settingsSheet, (s) => s.open);
@@ -217,6 +218,7 @@ function GeneralSection() {
       </div>
       <UpdatesBlock />
       <NoticesBlock />
+      <ResidentBlock />
       <VoiceBlock />
       <WelcomeBlock />
     </>
@@ -247,6 +249,7 @@ function WelcomeBlock() {
 
 function UpdatesBlock() {
   const known = useStore(updates);
+  const automatic = useStore(profile, (s) => s.person.checkUpdates !== false);
   const { current, latest, installable, checking, fault } = known;
   const state = updateState(known);
   const version = [current && `Sens ${current}`, !installable && t.devBuild].filter(Boolean).join(" · ");
@@ -274,34 +277,86 @@ function UpdatesBlock() {
           {t.whatsNew}
         </button>
       </div>
-      <UpdateSwitch />
+      <Switch id="settings-update-check" on={automatic} save={setAutomatic}>
+        {t.checkAtStart}
+      </Switch>
     </div>
   );
 }
 
-function NoticesBlock() {
-  const on = useStore(profile, (s) => s.person.notify !== false);
+function Switch({ id, on, save, children }: { id: string; on: boolean; save: (on: boolean) => Promise<unknown>; children: ReactNode }) {
   const [fault, setFault] = useState("");
 
   async function flip() {
     setFault("");
     try {
-      await setNotices(!on);
+      await save(!on);
     } catch (reason) {
       setFault(String(reason));
     }
   }
 
   return (
-    <div className="pair">
-      <span className="label">{t.notices}</span>
+    <>
       <div className="settings-switch">
-        <button className="switch" id="settings-notify" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-notify">{t.noticesSwitch}</label>
+        <button className="switch" id={id} role="switch" aria-checked={on} onClick={flip} />
+        <label htmlFor={id}>{children}</label>
       </div>
       <p className="note fault" role="alert" hidden={!fault}>
         {fault}
       </p>
+    </>
+  );
+}
+
+function NoticesBlock() {
+  const on = useStore(profile, (s) => s.person.notify !== false);
+  return (
+    <div className="pair">
+      <span className="label">{t.notices}</span>
+      <Switch id="settings-notify" on={on} save={setNotices}>
+        {t.noticesSwitch}
+      </Switch>
+    </div>
+  );
+}
+
+function ResidentBlock() {
+  const tray = useStore(profile, (s) => s.person.keepInTray !== false);
+  const startup = useStore(profile, (s) => s.person.startWithWindows !== false);
+  const [shortcut, setShortcut] = useState<Shortcut | null>(null);
+
+  useEffect(() => {
+    commands.shortcutState().then(setShortcut, () => {});
+  }, []);
+
+  return (
+    <div className="pair">
+      <span className="label">{t.resident}</span>
+      <Switch id="settings-tray" on={tray} save={(on) => setResident("keepInTray", on)}>
+        {t.keepInTray}
+      </Switch>
+      <p className="note" hidden={!tray}>
+        {t.quitFromTray}
+      </p>
+      <Switch id="settings-startup" on={startup} save={(on) => setResident("startWithWindows", on)}>
+        {t.startWithWindows}
+      </Switch>
+      {shortcut && (
+        <>
+          <div className="settings-switch">
+            <span>{t.quickBar}</span>
+            <span className="settings-keys keycaps">
+              {shortcut.keys.split("+").map((key) => (
+                <kbd key={key}>{key}</kbd>
+              ))}
+            </span>
+          </div>
+          <p className="note fault" role="status" hidden={!shortcut.taken}>
+            {t.shortcutTaken}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -397,34 +452,5 @@ function VoiceBlock() {
         {fault}
       </p>
     </div>
-  );
-}
-
-function UpdateSwitch() {
-  const [on, setOn] = useState(() => profile.getState().person.checkUpdates !== false);
-  const [fault, setFault] = useState("");
-
-  async function flip() {
-    const next = !on;
-    setOn(next);
-    setFault("");
-    try {
-      await setAutomatic(next);
-    } catch (reason) {
-      setOn(!next);
-      setFault(String(reason));
-    }
-  }
-
-  return (
-    <>
-      <div className="settings-switch">
-        <button className="switch" id="settings-update-check" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-update-check">{t.checkAtStart}</label>
-      </div>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </>
   );
 }

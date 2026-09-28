@@ -18,12 +18,14 @@ const FRESH: &str = "sens-app.exe.new";
 const OLD: &str = "sens-app.exe.old";
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Sens";
 const REMEMBERED_KEY: &str = r"Software\sens\Sens";
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
 #[derive(Clone, Debug)]
 pub struct Layout {
     pub dir: PathBuf,
     pub uninstall_key: String,
     pub remembered_key: String,
+    pub run_key: String,
     pub start_menu: PathBuf,
     pub desktop: PathBuf,
     pub settings: PathBuf,
@@ -38,6 +40,7 @@ impl Layout {
             dir: local.join(PRODUCT),
             uninstall_key: UNINSTALL_KEY.into(),
             remembered_key: REMEMBERED_KEY.into(),
+            run_key: RUN_KEY.into(),
             start_menu: known(&FOLDERID_Programs)?.join(LINK),
             desktop: known(&FOLDERID_Desktop)?.join(LINK),
             data: vec![settings.clone(), local.join(DATA)],
@@ -125,6 +128,7 @@ pub mod sandbox {
                 dir: root.join(PRODUCT),
                 uninstall_key: format!(r"{key}\Uninstall\Sens"),
                 remembered_key: format!(r"{key}\sens\Sens"),
+                run_key: format!(r"{key}\Run"),
                 start_menu: root.join("Programs").join(LINK),
                 desktop: root.join("Desktop").join(LINK),
                 settings: root.join("Roaming").join(DATA),

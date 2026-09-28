@@ -1,13 +1,16 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { Capabilities, Found, News } from "../ipc/types";
+import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, Shot } from "../ipc/types";
+import { languageOf } from "../shared/i18n";
+import { lookOf, tokenOf } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
 
 const now = Date.now();
 const HOUR = 3_600_000;
 const ROOT = "C:/Proyectos/demo";
 const asking = new URLSearchParams(location.search);
-const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true };
+const onBar = location.pathname.endsWith("/bar.html");
+const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, keepInTray: true, startWithWindows: true };
 const SUBSCRIBED = { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" };
 const SIGNED_OUT = { billing: "signedOut", plan: "", source: "", email: "" };
 let account = asking.get("account") === "signedOut" ? SIGNED_OUT : SUBSCRIBED;
@@ -310,7 +313,6 @@ const FOLDERS: Record<string, string[]> = {
 const SAMPLES: Record<string, string> = {
   "main.py": [
     "#!/usr/bin/env python3",
-    '"""Saluda a quien se lo pida."""',
     "from dataclasses import dataclass",
     "",
     "",
@@ -319,7 +321,6 @@ const SAMPLES: Record<string, string> = {
     '    name: str = "mundo"',
     "",
     "    def greet(self, times: int = 1) -> str:",
-    "        # Una línea por vez",
     '        return "\\n".join(f"Hola, {self.name}!" for _ in range(times))',
     "",
     "",
@@ -335,7 +336,6 @@ const SAMPLES: Record<string, string> = {
     "  start?: number;",
     "}",
     "",
-    "// El contador de la portada.",
     "export function App({ title, start = 0 }: Props) {",
     "  const [count, setCount] = useState(start);",
     "  return (",
@@ -349,7 +349,6 @@ const SAMPLES: Record<string, string> = {
   "src/lib.rs": [
     "use std::collections::HashMap;",
     "",
-    "/// Cuenta las palabras de un texto.",
     "pub fn count(text: &str) -> HashMap<&str, usize> {",
     "    let mut seen = HashMap::new();",
     "    for word in text.split_whitespace() {",
@@ -369,14 +368,12 @@ const SAMPLES: Record<string, string> = {
   "src/styles.css": [
     ":root { --accent: #c7ff4a; }",
     "",
-    "/* La tarjeta */",
     ".card:hover > .title {",
     "  color: var(--accent);",
     "  padding: 4px 8px !important;",
     "}",
   ].join("\n"),
   "src/query.sql": [
-    "-- Los proyectos más activos",
     "SELECT p.name, COUNT(*) AS turns",
     "FROM projects p",
     "JOIN turns t ON t.project_id = p.id",
@@ -388,7 +385,6 @@ const SAMPLES: Record<string, string> = {
   "src/build.ps1": [
     "param([switch]$Release)",
     "",
-    "# Compila la app",
     '$mode = if ($Release) { "release" } else { "debug" }',
     'Write-Host "Compilando en $mode..."',
     "cargo build --profile $mode",
@@ -421,7 +417,6 @@ const REPLAY = [
           oldStart: 9,
           newStart: 9,
           lines: [
-            " // El contador de la portada.",
             "-export function App({ title, start = 0 }: Props) {",
             '+export function App({ title, start = 0, greeting = "Hola" }: Props) {',
             "   const [count, setCount] = useState(start);",
@@ -469,6 +464,40 @@ const SPACES = [
 ];
 
 const sessionOf = (id: unknown) => SPACES.flatMap((space) => space.sessions).find((one) => one.id === id)!;
+
+const FRONT = { app: "Windows Terminal", title: "PowerShell" };
+const front = () => (asking.get("front") === "none" ? null : FRONT);
+const PREVIEW = "error TS2307: Cannot find module '../brand/tokens'";
+const CLIP = [
+  `${PREVIEW} or its corresponding type declarations.`,
+  "",
+  "  src/shared/look.ts:2:24",
+  '    2 import { SIGNAL } from "../brand/tokens";',
+  "                             ~~~~~~~~~~~~~~~~~",
+  "",
+  "Found 1 error in src/shared/look.ts:2",
+].join("\n");
+const copied = () => asking.get("clip") !== "none";
+let pinned = asking.has("pinned");
+
+const opened = (): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned });
+
+function shot(): Shot | null {
+  const [width, height] = [960, 540];
+  const canvas = Object.assign(document.createElement("canvas"), { width, height });
+  const paint = canvas.getContext("2d");
+  if (!paint) return null;
+  paint.fillStyle = tokenOf("--ground");
+  paint.fillRect(0, 0, width, height);
+  paint.fillStyle = tokenOf("--card");
+  paint.fillRect(0, 0, width, 36);
+  paint.font = `15px ${tokenOf("--mono") || "monospace"}`;
+  paint.fillStyle = tokenOf("--dim");
+  paint.fillText(`${FRONT.app} · ${FRONT.title}`, 16, 24);
+  [`${promptOf(ROOT)}npx tsc --noEmit`, ...CLIP.split("\n")].forEach((line, at) => paint.fillText(line, 16, 72 + at * 24));
+  const url = canvas.toDataURL("image/png");
+  return { mediaType: "image/png", data: url.slice(url.indexOf(",") + 1), width, height };
+}
 
 const entries = (path: string) =>
   (FOLDERS[path] ?? []).map((name) => {
@@ -728,6 +757,19 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   save_profile: ({ name }) => void (person.name = String(name).trim()),
   set_update_check: ({ on }) => void (person.checkUpdates = Boolean(on)),
   set_notify: ({ on }) => void (person.notify = Boolean(on)),
+  set_keep_in_tray: ({ on }) => void (person.keepInTray = Boolean(on)),
+  set_start_with_windows: ({ on }) => void (person.startWithWindows = Boolean(on)),
+  shortcut_state: (): Shortcut => ({ keys: "Ctrl+Alt+Espacio", taken: asking.has("taken") }),
+  bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
+  bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
+  bar_fit: () => null,
+  bar_pin: ({ on }) => void (pinned = Boolean(on)),
+  bar_drag: () => console.info("[mock-tauri] la barra empezaría a moverse"),
+  bar_hand_over: ({ hand }) => console.info("[mock-tauri] la ventana principal tomaría", hand),
+  bar_context: (): BarContext => ({ front: front(), clip: copied() ? { preview: PREVIEW, chars: CLIP.length } : null }),
+  bar_clip: () => (copied() ? CLIP : null),
+  bar_shot: () => (front() && asking.get("shot") !== "none" ? shot() : null),
+  bar_projects: (): BarProject[] => SPACES.map(({ root, name }) => ({ root, name })),
   notify: ({ title, body }) => console.info(`[aviso] ${title}: ${body}`),
   update_check: () => ({ latest: null, installable: false }),
   news: () => pause(600).then(() => told),
@@ -741,7 +783,7 @@ if (!("__TAURI_INTERNALS__" in window)) {
   window.__SENS_LANGUAGE__ = spoken;
   window.__SENS_WELCOMED__ = person.welcomed;
   window.__SENS_NEWS__ = asking.has("news");
-  mockWindows("main");
+  mockWindows(onBar ? "bar" : "main");
   mockIPC(
     (cmd, args) => {
       const fixture = fixtures[cmd];
@@ -751,4 +793,5 @@ if (!("__TAURI_INTERNALS__" in window)) {
     },
     { shouldMockEvents: true },
   );
+  if (onBar) addEventListener("load", () => setTimeout(() => emit("bar-open", opened()), 100));
 }

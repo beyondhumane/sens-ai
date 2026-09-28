@@ -8,7 +8,7 @@ import { notice, send as sendChat, warm as warmChat, warn, whenTurnEnds } from "
 import { loadFiles } from "../files/store";
 import { openFile, viewer } from "../files/view";
 import { choose, chosenCard, offeredAs, sameModel } from "../models/store";
-import { EFFORT, ISOLATE, THINKING, focused, panes, workOf, type Pane } from "../panes/store";
+import { EFFORT, ISOLATE, THINKING, focused, panes, storedKnobs, workOf, type Pane } from "../panes/store";
 import { forgetEdits, project } from "../project/store";
 import { failRail, loadRail } from "../rail/store";
 import { t } from "./copy";
@@ -46,14 +46,22 @@ export interface Picture extends Partial<Pick<Fitted, "width" | "height" | "was"
   url: string;
 }
 
-const storedMode = stored(MODE, "");
+function storedMode() {
+  const kept = stored(MODE, "");
+  return MODES.some((one) => one.id === kept) ? (kept as string) : "default";
+}
 
 export const composer = createStore(() => ({
-  mode: MODES.some((one) => one.id === storedMode) ? (storedMode as string) : "default",
+  mode: storedMode(),
   dropping: false,
 }));
 
 const set = composer.setState;
+
+export function rereadSettings(pane: Pane = focused()) {
+  set({ mode: storedMode() });
+  pane.desk.setState(storedKnobs());
+}
 const rootOf = (pane: Pane) => pane.desk.getState().root;
 const sharing = (root: string) => panes.getState().open.filter((one) => rootOf(one) === root);
 const workingIn = (work: string) => panes.getState().open.filter((one) => workOf(one) === work);

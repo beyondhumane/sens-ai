@@ -1,17 +1,23 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEvent } from "../../ipc/types";
 import { showLanguage } from "../../shared/i18n";
 import { profile } from "../profile/store";
 import { rail } from "../rail/store";
-import { notePresence, noticeOf, tellAway } from "./store";
+import { hearBarWatching, notePresence, noticeOf, tellAway } from "./store";
 
-const ipc = vi.hoisted(() => ({ commands: { notify: vi.fn() } }));
+const ipc = vi.hoisted(() => ({ commands: { notify: vi.fn() }, watching: (_: string | null) => {} }));
 
-vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: {} }));
+vi.mock("../../ipc/commands", () => ({
+  commands: ipc.commands,
+  events: { barWatching: (heard: (session: string | null) => void) => ((ipc.watching = heard), Promise.resolve(() => {})) },
+}));
 
 const finished = (over: Partial<Extract<ChatEvent, { kind: "finished" }>> = {}): ChatEvent => ({ kind: "finished", ok: true, stopped: false, millis: 1, turns: 1, tokensIn: 1, tokensOut: 1, error: "", ...over });
 const asking = (tool: string, input = {}): ChatEvent => ({ kind: "asking", request: "r", tool, input, suggestions: null });
+
+beforeAll(() => {
+  hearBarWatching();
+});
 
 beforeEach(() => {
   ipc.commands.notify.mockReset().mockResolvedValue(undefined);
@@ -21,6 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  ipc.watching(null);
   notePresence(true);
   showLanguage("es");
 });
@@ -73,6 +80,19 @@ describe("when Sens tells", () => {
     profile.setState(({ person }) => ({ person: { ...person, notify: false } }));
     tellAway("s1", finished());
     expect(ipc.commands.notify).not.toHaveBeenCalled();
+  });
+
+  it("not of the session the quick bar shows, and again once the bar lets it go", () => {
+    ipc.watching("s1");
+    tellAway("s1", finished());
+    expect(ipc.commands.notify).not.toHaveBeenCalled();
+
+    tellAway("s2", finished());
+    expect(ipc.commands.notify).toHaveBeenCalledWith("Sesión nueva", "Ha terminado.");
+
+    ipc.watching(null);
+    tellAway("s1", finished());
+    expect(ipc.commands.notify).toHaveBeenLastCalledWith("Arreglar el login", "Ha terminado.");
   });
 
   it("in the language chosen", () => {

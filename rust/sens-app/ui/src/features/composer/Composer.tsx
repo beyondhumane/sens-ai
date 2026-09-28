@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { useStore } from "zustand";
 import { openPicture } from "../../app/Dialog";
 import { chooseFolder } from "../../app/session";
@@ -194,6 +194,39 @@ function Clips({ inlined }: { inlined: () => void }) {
 
 const GROW_CAP = 260;
 
+function fit(box: HTMLTextAreaElement, grown: { current: number }) {
+  if (!box.getClientRects().length) return;
+  const cap = Math.max(96, Math.min(GROW_CAP, Math.round(window.innerHeight * 0.4)));
+  box.style.transition = "none";
+  box.style.height = "auto";
+  const wanted = Math.min(box.scrollHeight, cap);
+  box.style.height = `${grown.current || wanted}px`;
+  void box.offsetHeight;
+  box.style.transition = "";
+  box.style.height = `${wanted}px`;
+  box.dataset.capped = String(wanted >= cap);
+  grown.current = wanted;
+}
+
+function useFit(field: RefObject<HTMLTextAreaElement | null>, text: string) {
+  const grown = useRef(0);
+  useLayoutEffect(() => {
+    if (field.current) fit(field.current, grown);
+  }, [text]);
+  useEffect(() => {
+    const box = field.current;
+    if (!box) return;
+    let width = box.clientWidth;
+    const watcher = new ResizeObserver(() => {
+      if (box.clientWidth === width) return;
+      width = box.clientWidth;
+      fit(box, grown);
+    });
+    watcher.observe(box);
+    return () => watcher.disconnect();
+  }, []);
+}
+
 function Box() {
   const pane = usePane();
   const id = useIds();
@@ -207,26 +240,11 @@ function Box() {
   const text = useStore(pane.desk, (s) => s.text);
   const setText = (next: string) => writeMessage(next, pane);
   const field = useRef<HTMLTextAreaElement>(null);
-  const grown = useRef(0);
   const toEnd = useRef(false);
   const lap = useLap(busy);
   const dictation = useDictation(pane, text, setText, field);
   const suggest = useSuggestions(pane, text, field, id("suggest"));
-
-  useLayoutEffect(() => {
-    const box = field.current;
-    if (!box) return;
-    const cap = Math.max(96, Math.min(GROW_CAP, Math.round(window.innerHeight * 0.4)));
-    box.style.transition = "none";
-    box.style.height = "auto";
-    const wanted = Math.min(box.scrollHeight, cap);
-    box.style.height = `${grown.current || wanted}px`;
-    void box.offsetHeight;
-    box.style.transition = "";
-    box.style.height = `${wanted}px`;
-    box.dataset.capped = String(wanted >= cap);
-    grown.current = wanted;
-  }, [text]);
+  useFit(field, text);
 
   useLayoutEffect(() => {
     const box = field.current;

@@ -1,0 +1,314 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
+import { useStore } from "zustand";
+import { commands } from "../ipc/commands";
+import { Flow, Live } from "../features/chat/Reply";
+import { halt } from "../features/chat/store";
+import type { Notice, Reply } from "../features/chat/turns";
+import { useDictation } from "../features/composer/dictation";
+import { canSend, pasteText, takeFiles, tooLong, writeMessage } from "../features/composer/store";
+import { shared } from "../shared/copy";
+import { seconds, stem } from "../shared/format.js";
+import { Icon } from "../shared/Icon";
+import { ICONS } from "../shared/icons.js";
+import { Mark } from "../shared/Mark";
+import { Chips } from "./Chips";
+import { t } from "./copy";
+import { Seam } from "./Seam";
+import {
+  ask,
+  bar,
+  choose,
+  cycle,
+  handOver,
+  hide,
+  lastQuestion,
+  lastReply,
+  own,
+  phaseOf,
+  pin,
+  resumeLast,
+  spentOf,
+  takeShot,
+  toggleChoosing,
+} from "./store";
+
+const MARGIN = 24;
+const FIELD_MOST = 120;
+const NEAR_BOTTOM = 48;
+
+export function Bar() {
+  const float = useRef<HTMLDivElement>(null);
+  const turns = useStore(own.chat, (s) => s.turns);
+  const busy = useStore(own.chat, (s) => s.busy);
+  const text = useStore(own.desk, (s) => s.text);
+  const pinned = useStore(bar, (s) => s.pinned);
+  const phase = phaseOf(turns, busy, text);
+  const reply = lastReply(turns);
+  useFit(float);
+  useKeys();
+
+  return (
+    <div className="float" ref={float} data-state={phase} data-pinned={pinned ? "true" : undefined}>
+      <Row />
+      <Projects />
+      <Chips />
+      <Seam />
+      <Answer reply={reply} />
+      {reply?.closed && !busy && <Footer reply={reply} />}
+    </div>
+  );
+}
+
+function useFit(float: RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const box = float.current;
+    if (!box) return;
+    const fit = () => void commands.barFit(Math.ceil(box.getBoundingClientRect().height) + MARGIN * 2).catch(() => {});
+    const watcher = new ResizeObserver(fit);
+    watcher.observe(box);
+    fit();
+    return () => watcher.disconnect();
+  }, []);
+}
+
+function useKeys() {
+  useEffect(() => {
+    const keys = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (bar.getState().choosing) toggleChoosing();
+        else hide();
+        return;
+      }
+      if (!event.ctrlKey || event.altKey || event.metaKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "enter") {
+        event.preventDefault();
+        void handOver();
+      } else if (key === "p" && !event.shiftKey) {
+        event.preventDefault();
+        pin();
+      } else if (key === "s" && event.shiftKey) {
+        event.preventDefault();
+        void takeShot();
+      }
+    };
+    document.addEventListener("keydown", keys);
+    return () => document.removeEventListener("keydown", keys);
+  }, []);
+}
+
+function useGrow(field: RefObject<HTMLTextAreaElement | null>, text: string) {
+  useLayoutEffect(() => {
+    const box = field.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, FIELD_MOST)}px`;
+  }, [text]);
+}
+
+function Row() {
+  const field = useRef<HTMLTextAreaElement>(null);
+  const text = useStore(own.desk, (s) => s.text);
+  const root = useStore(own.desk, (s) => s.root);
+  const provider = useStore(own.desk, (s) => s.choice.provider);
+  const clips = useStore(own.desk, (s) => s.pasted.length + s.attached.length);
+  const busy = useStore(own.chat, (s) => s.busy);
+  const stopping = useStore(own.chat, (s) => s.stopping);
+  const ended = useStore(own.chat, (s) => s.ended);
+  const asked = useStore(own.chat, (s) => lastQuestion(s.turns));
+  const opened = useStore(bar, (s) => s.opened);
+  const pinned = useStore(bar, (s) => s.pinned);
+  const setText = (next: string) => writeMessage(next, own);
+  const dictation = useDictation(own, text, setText, field);
+  useGrow(field, text);
+
+  useEffect(() => {
+    field.current?.focus();
+  }, [opened]);
+
+  const ready = Boolean(root && provider && (text.trim() || clips));
+  const label = busy ? (stopping ? t.stopping : t.stop) : t.send;
+
+  async function go() {
+    if (busy || !canSend(text, own)) return;
+    dictation.hush();
+    await ask();
+  }
+
+  function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === "Tab") {
+      event.preventDefault();
+      cycle(event.shiftKey ? -1 : 1);
+    } else if (event.key === "ArrowUp" && !text) {
+      void resumeLast().then((resumed) => resumed && field.current?.focus());
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void go();
+    }
+  }
+
+  function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = [...(event.clipboardData?.files || [])];
+    const said = event.clipboardData?.getData("text/plain") ?? "";
+    if (files.length && !said) {
+      event.preventDefault();
+      void takeFiles(files, own);
+      return;
+    }
+    const pictures = files.filter((file) => file.type.startsWith("image/"));
+    if (pictures.length) void takeFiles(pictures, own);
+    if (!tooLong(said)) return;
+    event.preventDefault();
+    void pasteText(said, own);
+  }
+
+  return (
+    <div className="bar-row" onPointerDown={(event) => pinned && event.target === event.currentTarget && void commands.barDrag().catch(() => {})}>
+      <Mark key={ended} className="bar-mark" size={22} micro />
+      <textarea
+        ref={field}
+        id="task"
+        className="bar-field"
+        rows={1}
+        placeholder={asked || t.placeholder}
+        data-asked={asked ? "true" : undefined}
+        aria-label={t.message}
+        autoComplete="off"
+        spellCheck={false}
+        disabled={!root}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={keyDown}
+        onPaste={paste}
+      />
+      <ProjectChip />
+      {pinned && (
+        <button type="button" className="round pinned" aria-pressed="true" title={t.pinned} aria-label={t.pinned} onClick={pin}>
+          <Icon svg={ICONS.pin} />
+        </button>
+      )}
+      <button
+        type="button"
+        className="round dictate"
+        title={dictation.label}
+        aria-label={dictation.label}
+        aria-pressed={dictation.phase === "listening"}
+        aria-busy={dictation.phase === "finishing"}
+        disabled={!root}
+        style={{ "--level": dictation.level } as CSSProperties}
+        onClick={dictation.toggle}
+      >
+        <Icon svg={ICONS.mic} />
+      </button>
+      <button
+        type="button"
+        className="round send"
+        data-ready={ready ? "true" : undefined}
+        title={label}
+        aria-label={label}
+        disabled={busy ? stopping : !ready}
+        onClick={() => (busy ? void halt(own) : void go())}
+      >
+        <Icon svg={busy ? ICONS.stopSquare : ICONS.arrowUp} />
+      </button>
+    </div>
+  );
+}
+
+function ProjectChip() {
+  const root = useStore(own.desk, (s) => s.root);
+  const projects = useStore(bar, (s) => s.projects);
+  const choosing = useStore(bar, (s) => s.choosing);
+  if (!root) return <span className="bar-project none">{t.noProject}</span>;
+  const name = projects.find((one) => one.root === root)?.name ?? stem(root);
+  return (
+    <button type="button" className="bar-project" aria-haspopup="listbox" aria-expanded={choosing} title={t.project(name)} aria-label={t.project(name)} onClick={toggleChoosing}>
+      <Icon svg={ICONS.folderSmall} />
+      <span>{name}</span>
+      <Icon svg={ICONS.caret} />
+    </button>
+  );
+}
+
+function Projects() {
+  const choosing = useStore(bar, (s) => s.choosing);
+  const projects = useStore(bar, (s) => s.projects);
+  const root = useStore(own.desk, (s) => s.root);
+  if (!choosing || !projects.length) return null;
+  return (
+    <div className="bar-projects" role="listbox" aria-label={t.projects}>
+      {projects.map((one) => (
+        <button key={one.root} type="button" role="option" className="bar-project-row" aria-selected={one.root === root} onClick={() => choose(one.root)}>
+          <Icon svg={ICONS.folderSmall} />
+          <span className="project-name">{one.name}</span>
+          <span className="mono">{one.root}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Answer({ reply }: { reply: Reply | undefined }) {
+  const box = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const turns = useStore(own.chat, (s) => s.turns);
+  const notices = useMemo(() => turns.slice(turns.findLastIndex((turn) => turn.kind === "you") + 1).filter((turn): turn is Notice => turn.kind === "notice"), [turns]);
+
+  useEffect(() => {
+    const follow = new ResizeObserver(() => {
+      if (stick.current && box.current) box.current.scrollTop = box.current.scrollHeight;
+    });
+    if (inner.current) follow.observe(inner.current);
+    return () => follow.disconnect();
+  }, [Boolean(reply) || notices.length > 0]);
+
+  if (!reply && !notices.length) return null;
+  return (
+    <div
+      className="bar-answer"
+      ref={box}
+      onScroll={() => {
+        const shown = box.current!;
+        stick.current = shown.scrollHeight - shown.scrollTop - shown.clientHeight < NEAR_BOTTOM;
+      }}
+    >
+      <div className="bar-answer-inner" ref={inner}>
+        {reply && <Flow turn={reply} />}
+        {reply?.working && <Live said={reply.working} began={reply.began} />}
+        {notices.map((notice) => (
+          <p key={notice.key} className={notice.tone ? `bar-notice ${notice.tone}` : "bar-notice"}>
+            {notice.parts.map((part) => (typeof part === "string" ? part : part.bold)).join("")}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Footer({ reply }: { reply: Reply }) {
+  const pinned = useStore(bar, (s) => s.pinned);
+  const { reads, millis } = spentOf(reply);
+  const meta = [reads ? t.reads(reads) : "", millis ? seconds(millis) : ""].filter(Boolean).join(" · ");
+  return (
+    <footer className="bar-foot">
+      <div className="keys">
+        <span>
+          <kbd>{`${shared.ctrl} ⏎`}</kbd>
+          {t.openInSens}
+        </span>
+        <span>
+          <kbd>{`${shared.ctrl} P`}</kbd>
+          {pinned ? t.unpin : t.pin}
+        </span>
+        <span>
+          <kbd>Esc</kbd>
+          {t.close}
+        </span>
+      </div>
+      {meta && <span className="meta">{meta}</span>}
+    </footer>
+  );
+}

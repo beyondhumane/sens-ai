@@ -68,6 +68,12 @@ export interface Kept {
 
 let made = 0;
 
+export const storedKnobs = (): Pick<Desk, "choice" | "effort" | "thinking"> => ({
+  choice: { provider: "", model: "", ...stored(CHOICE, {}) },
+  effort: stored(EFFORT, "") as string,
+  thinking: stored(THINKING, true) !== false,
+});
+
 export function newPane(root = ""): Pane {
   made += 1;
   return {
@@ -84,9 +90,7 @@ export function newPane(root = ""): Pane {
       repo: null,
       trusted: "",
       slashes: [],
-      choice: { provider: "", model: "", ...stored(CHOICE, {}) },
-      effort: stored(EFFORT, "") as string,
-      thinking: stored(THINKING, true) !== false,
+      ...storedKnobs(),
     })),
     replying: null,
     named: "",
@@ -143,14 +147,15 @@ function mirror() {
 
 const watched = new Map<Pane, () => void>();
 
-function watch(pane: Pane) {
+function watch(pane: Pane, kept = true) {
   if (watched.has(pane)) return;
   const off = pane.desk.subscribe((now, before) => {
     if (now.root !== before.root || now.session !== before.session || now.worktree !== before.worktree) {
       if (pane === focused()) mirror();
-      return keep();
+      if (kept) keep();
+      return;
     }
-    if (split() && (now.choice !== before.choice || now.effort !== before.effort || now.thinking !== before.thinking)) keep();
+    if (kept && split() && (now.choice !== before.choice || now.effort !== before.effort || now.thinking !== before.thinking)) keep();
   });
   watched.set(pane, off);
 }
@@ -177,6 +182,12 @@ export function place(pane: Pane, side: Side) {
   panes.setState({ open: next, focus: pane.id });
   forget(open.filter((one) => !next.includes(one)));
   keep();
+}
+
+export function adopt(pane: Pane) {
+  forget(panes.getState().open);
+  watch(pane, false);
+  panes.setState({ open: [pane], focus: pane.id });
 }
 
 export function close(pane: Pane) {

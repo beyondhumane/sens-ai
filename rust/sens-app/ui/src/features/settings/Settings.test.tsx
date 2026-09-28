@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClaudeCodeProgress, ProviderState, VoiceHeard } from "../../ipc/types";
@@ -20,6 +19,9 @@ const ipc = vi.hoisted(() => ({
     saveProfile: vi.fn(),
     setUpdateCheck: vi.fn(),
     setNotify: vi.fn(),
+    setKeepInTray: vi.fn(),
+    setStartWithWindows: vi.fn(),
+    shortcutState: vi.fn(),
     voiceMicrophones: vi.fn(),
     voiceMicrophone: vi.fn(),
     voiceChoose: vi.fn(),
@@ -164,6 +166,62 @@ describe("general settings", () => {
     await act(async () => fireEvent.click(toggle));
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("alert").textContent).toBe("sin permiso");
+  });
+
+  it("keeps Sens in the tray and starts it with Windows, and says how to quit it", async () => {
+    await open("general");
+    const tray = screen.getByRole("switch", { name: "Seguir en la bandeja al cerrar" });
+    const startup = screen.getByRole("switch", { name: "Iniciar con Windows" });
+    const quitting = screen.getByText("Para salir de Sens, elige Salir en el menú de la bandeja.");
+    expect([tray.getAttribute("aria-checked"), startup.getAttribute("aria-checked")]).toEqual(["true", "true"]);
+    expect(quitting.hidden).toBe(false);
+
+    await act(async () => fireEvent.click(tray));
+    expect(ipc.commands.setKeepInTray).toHaveBeenCalledWith(false);
+    expect(tray.getAttribute("aria-checked")).toBe("false");
+    expect(profile.getState().person.keepInTray).toBe(false);
+    expect(quitting.hidden).toBe(true);
+
+    await act(async () => fireEvent.click(startup));
+    expect(ipc.commands.setStartWithWindows).toHaveBeenCalledWith(false);
+    expect(startup.getAttribute("aria-checked")).toBe("false");
+    expect(profile.getState().person.startWithWindows).toBe(false);
+  });
+
+  it("reads both from a profile that has them off, and keeps them off when turning one on fails", async () => {
+    profile.setState({ person: { name: "Demo", checkUpdates: true, welcomed: true, seen: "", notify: true, keepInTray: false, startWithWindows: false } });
+    ipc.commands.setStartWithWindows.mockRejectedValue("sin permiso");
+    await open("general");
+    const startup = screen.getByRole("switch", { name: "Iniciar con Windows" });
+    expect(screen.getByRole("switch", { name: "Seguir en la bandeja al cerrar" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("Para salir de Sens, elige Salir en el menú de la bandeja.").hidden).toBe(true);
+
+    await act(async () => fireEvent.click(startup));
+    expect(ipc.commands.setStartWithWindows).toHaveBeenCalledWith(true);
+    expect(startup.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("alert").textContent).toBe("sin permiso");
+  });
+
+  it("shows the quick bar's shortcut, and says when another app already has it", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: "Ctrl+Alt+Espacio", taken: false });
+    await open("general");
+    const keys = () => [...screen.getByText("Barra rápida").parentElement!.querySelectorAll("kbd")].map((key) => key.textContent);
+    const taken = () => screen.getByText("Otra app ya usa este atajo; abre la barra desde la bandeja.");
+    expect(keys()).toEqual(["Ctrl", "Alt", "Espacio"]);
+    expect(taken().hidden).toBe(true);
+
+    cleanup();
+    ipc.commands.shortcutState.mockResolvedValue({ keys: "Ctrl+Alt+Espacio", taken: true });
+    await open("general");
+    expect(keys()).toEqual(["Ctrl", "Alt", "Espacio"]);
+    expect(taken().hidden).toBe(false);
+  });
+
+  it("leaves the shortcut out when Sens cannot say what it is", async () => {
+    ipc.commands.shortcutState.mockRejectedValue("sin atajo");
+    await open("general");
+    expect(screen.queryByText("Barra rápida")).toBeNull();
+    expect(screen.getByRole("switch", { name: "Iniciar con Windows" })).toBeTruthy();
   });
 
   it("chooses the microphone, tests it with a level bar, and says where the voice model is", async () => {

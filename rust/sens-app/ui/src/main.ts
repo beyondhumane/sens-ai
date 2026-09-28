@@ -9,9 +9,10 @@ import { watchWidth, whenShown } from "./app/shell";
 import { loadChanges } from "./features/changes/store";
 import { hearChat } from "./features/chat/store";
 import { hearDrops } from "./features/composer/store";
+import { hearHandOver } from "./features/handover/store";
 import { loadCatalog } from "./features/models/store";
 import { newsAtStart } from "./features/news/store";
-import { watchPresence } from "./features/notify/store";
+import { hearBarWatching, watchPresence } from "./features/notify/store";
 import { loadProfile } from "./features/profile/store";
 import { tickTasks } from "./features/tasks/store";
 import { enterConsole, hearTerminal } from "./features/terminal/store";
@@ -28,12 +29,12 @@ followLook();
 greetAtStart();
 newsAtStart();
 
-// Once: what Rust tells (the chat, the browser, dropped files), what each tool
-// reads as it comes on screen, the window, and then the last project.
 hearChat();
 hearBrowser();
 hearTerminal();
 hearDrops();
+hearHandOver();
+hearBarWatching();
 watchPresence();
 watchWidth();
 whenShown("changes", loadChanges);
@@ -47,7 +48,7 @@ function Spoken() {
 }
 
 createRoot(document.getElementById("app")!).render(createElement(StrictMode, null, createElement(Spoken)));
-requestAnimationFrame(() => requestAnimationFrame(() => getCurrentWindow().show()));
+if (!window.__SENS_HIDDEN__) requestAnimationFrame(() => requestAnimationFrame(() => getCurrentWindow().show()));
 
 loadCatalog();
 watchVoice().catch(() => {});
