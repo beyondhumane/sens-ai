@@ -34,6 +34,12 @@ pub struct Workspace {
     pub trusted: bool,
 }
 
+#[derive(Serialize, PartialEq, Debug)]
+pub struct Recent {
+    pub root: String,
+    pub name: String,
+}
+
 impl Registry {
     fn known(&mut self, root: &str) -> &mut Known {
         let at = match self.projects.iter().position(|known| known.root == root) {
@@ -116,6 +122,18 @@ pub fn workspaces(registry: &Registry) -> Vec<Workspace> {
         .collect();
     found.sort_by_key(|space| Reverse(space.active_at));
     found
+}
+
+pub fn recent(registry: &Registry) -> Vec<Recent> {
+    let mut found: Vec<&Known> = registry.projects.iter().filter(|known| Path::new(&known.root).is_dir()).collect();
+    found.sort_by_key(|known| (registry.last.as_deref() != Some(known.root.as_str()), Reverse(known.opened)));
+    found
+        .into_iter()
+        .map(|known| Recent {
+            root: known.root.clone(),
+            name: name_of(Path::new(&known.root)),
+        })
+        .collect()
 }
 
 fn workspace(known: &Known) -> Workspace {
@@ -352,5 +370,27 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].root, text(&kept));
         assert!(last(&registry).is_none());
+    }
+
+    #[test]
+    fn recent_projects_start_with_the_last_one_then_the_latest_opened_and_skip_missing_folders() {
+        let (old, new, last_one, gone) = (temp_root("recent-old"), temp_root("recent-new"), temp_root("recent-last"), temp_root("recent-gone"));
+        std::fs::remove_dir_all(&gone).unwrap();
+        let registry = Registry {
+            last: Some(text(&last_one)),
+            projects: vec![known(&old, 10), known(&last_one, 20), known(&gone, 90), known(&new, 30)],
+        };
+
+        let order: Vec<Recent> = recent(&registry);
+
+        assert_eq!(
+            order,
+            vec![
+                Recent { root: text(&last_one), name: "sens-projects-recent-last".into() },
+                Recent { root: text(&new), name: "sens-projects-recent-new".into() },
+                Recent { root: text(&old), name: "sens-projects-recent-old".into() },
+            ]
+        );
+        assert!(recent(&Registry::default()).is_empty());
     }
 }

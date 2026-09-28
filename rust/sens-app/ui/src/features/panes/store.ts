@@ -17,10 +17,6 @@ export const LEAST_WIDTH = 340;
 export const SHARE_LEAST = 0.25;
 export const SHARE_MOST = 0.75;
 
-// The chat of the session on screen: its turns; whether Claude is working
-// (`busy`) and being stopped; the hint the empty chat shows; whether a
-// session is being drawn back, which skips the entry animations; and how many
-// turns ended, for what reads the project again after one.
 export interface Chat {
   turns: Turn[];
   busy: boolean;
@@ -29,11 +25,10 @@ export interface Chat {
   replaying: boolean;
   ended: number;
   context: { used: number; window: number } | null;
+  ranOn: string;
+  ranWith: { effort: string; thinking: boolean } | null;
 }
 
-// What goes with the next message: effort, thinking and the permission mode
-// (kept across launches), the files and pictures attached, and the branch of
-// the project, if it is a git repository.
 export interface Desk {
   root: string;
   session: string;
@@ -54,11 +49,8 @@ export interface Pane {
   id: string;
   chat: StoreApi<Chat>;
   desk: StoreApi<Desk>;
-  // The reply the live events go to, if one is open.
   replying: number | null;
-  // The model named last in this chat: a reply names its model only when it changes.
   named: string;
-  // A new session's id, asked for before its first message so it can warm up.
   pendingId: Promise<string> | null;
   warmed: string;
   reading: ChatEvent[] | null;
@@ -76,11 +68,17 @@ export interface Kept {
 
 let made = 0;
 
+export const storedKnobs = (): Pick<Desk, "choice" | "effort" | "thinking"> => ({
+  choice: { provider: "", model: "", ...stored(CHOICE, {}) },
+  effort: stored(EFFORT, "") as string,
+  thinking: stored(THINKING, true) !== false,
+});
+
 export function newPane(root = ""): Pane {
   made += 1;
   return {
     id: `pane-${made}`,
-    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, ended: 0, context: null })),
+    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, ended: 0, context: null, ranOn: "", ranWith: null })),
     desk: createStore<Desk>(() => ({
       root,
       session: "",
@@ -92,9 +90,7 @@ export function newPane(root = ""): Pane {
       repo: null,
       trusted: "",
       slashes: [],
-      choice: { provider: "", model: "", ...stored(CHOICE, {}) },
-      effort: stored(EFFORT, "") as string,
-      thinking: stored(THINKING, true) !== false,
+      ...storedKnobs(),
     })),
     replying: null,
     named: "",
@@ -151,14 +147,15 @@ function mirror() {
 
 const watched = new Map<Pane, () => void>();
 
-function watch(pane: Pane) {
+function watch(pane: Pane, kept = true) {
   if (watched.has(pane)) return;
   const off = pane.desk.subscribe((now, before) => {
     if (now.root !== before.root || now.session !== before.session || now.worktree !== before.worktree) {
       if (pane === focused()) mirror();
-      return keep();
+      if (kept) keep();
+      return;
     }
-    if (split() && (now.choice !== before.choice || now.effort !== before.effort || now.thinking !== before.thinking)) keep();
+    if (kept && split() && (now.choice !== before.choice || now.effort !== before.effort || now.thinking !== before.thinking)) keep();
   });
   watched.set(pane, off);
 }
@@ -185,6 +182,12 @@ export function place(pane: Pane, side: Side) {
   panes.setState({ open: next, focus: pane.id });
   forget(open.filter((one) => !next.includes(one)));
   keep();
+}
+
+export function adopt(pane: Pane) {
+  forget(panes.getState().open);
+  watch(pane, false);
+  panes.setState({ open: [pane], focus: pane.id });
 }
 
 export function close(pane: Pane) {

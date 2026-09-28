@@ -8,16 +8,17 @@ import { boot } from "./app/session";
 import { watchWidth, whenShown } from "./app/shell";
 import { loadChanges } from "./features/changes/store";
 import { hearChat } from "./features/chat/store";
-import { armWake } from "./features/composer/dictation";
 import { hearDrops } from "./features/composer/store";
+import { hearHandOver } from "./features/handover/store";
 import { loadCatalog } from "./features/models/store";
 import { newsAtStart } from "./features/news/store";
-import { watchPresence } from "./features/notify/store";
+import { hearBarWatching, watchPresence } from "./features/notify/store";
 import { loadProfile } from "./features/profile/store";
 import { tickTasks } from "./features/tasks/store";
 import { enterConsole, hearTerminal } from "./features/terminal/store";
 import { startUpdates } from "./features/updates/store";
 import { greetAtStart, greetIfNew } from "./features/welcome/store";
+import { watchVoice } from "./features/voice/store";
 import { enterSite, hearBrowser } from "./features/web/store";
 import { language, languageOf, showLanguage } from "./shared/i18n";
 import { followLook, lookOf, showLook } from "./shared/look";
@@ -28,12 +29,12 @@ followLook();
 greetAtStart();
 newsAtStart();
 
-// Once: what Rust tells (the chat, the browser, dropped files), what each tool
-// reads as it comes on screen, the window, and then the last project.
 hearChat();
 hearBrowser();
 hearTerminal();
 hearDrops();
+hearHandOver();
+hearBarWatching();
 watchPresence();
 watchWidth();
 whenShown("changes", loadChanges);
@@ -47,12 +48,12 @@ function Spoken() {
 }
 
 createRoot(document.getElementById("app")!).render(createElement(StrictMode, null, createElement(Spoken)));
-requestAnimationFrame(() => requestAnimationFrame(() => getCurrentWindow().show()));
+if (!window.__SENS_HIDDEN__) requestAnimationFrame(() => requestAnimationFrame(() => getCurrentWindow().show()));
 
 loadCatalog();
+watchVoice().catch(() => {});
 loadProfile().then(() => {
   startUpdates();
   greetIfNew();
-  armWake();
 });
 boot();

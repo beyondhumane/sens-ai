@@ -1,16 +1,19 @@
-// Lets the shell run in a plain browser: `npm run dev -w sens-app-ui` and open
-// the printed URL. vite.config.ts injects it only into the dev server, and
-// inside Tauri the real IPC is already there, so it steps aside.
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { Capabilities, Found, News } from "../ipc/types";
+import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, Shot } from "../ipc/types";
+import { languageOf } from "../shared/i18n";
+import { lookOf, tokenOf } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
 
 const now = Date.now();
 const HOUR = 3_600_000;
 const ROOT = "C:/Proyectos/demo";
 const asking = new URLSearchParams(location.search);
-const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, wake: false };
+const onBar = location.pathname.endsWith("/bar.html");
+const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, keepInTray: true, startWithWindows: true };
+const SUBSCRIBED = { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" };
+const SIGNED_OUT = { billing: "signedOut", plan: "", source: "", email: "" };
+let account = asking.get("account") === "signedOut" ? SIGNED_OUT : SUBSCRIBED;
 const LOOK = "sens.dev.look";
 const asked = new URLSearchParams(location.search).get("look")?.split(".");
 const kept = asked ? { mode: asked[0], accent: asked[1] } : stored(LOOK, null);
@@ -111,36 +114,39 @@ function typeInShell(id: number, data: string) {
   }
 }
 
-const HEARD = ["Añade", "Añade un saludo", "Añade un saludo configurable", "con un test", "con un test para cada caso"];
-let dictations = 0;
-let dictating: { id: number; timers: ReturnType<typeof setTimeout>[] } | null = null;
+const SAID = ["Añade un test para el formulario de contacto.", "Revisa el componente del botón."];
+const MICROPHONES = [
+  { name: "Voicemeeter Out B2 (VB-Audio Voicemeeter VAIO)", default: true },
+  { name: "Micrófono (USB Audio Device)", default: false },
+];
+let listened = 0;
+let listening: { id: number; timers: ReturnType<typeof setTimeout>[]; transcribe: boolean } | null = null;
+let microphone: string | null = null;
 
-function startDictation(handsFree: boolean) {
-  const refused = asking.get("dictation");
-  if (refused) throw { cause: refused, message: `dictado simulado: ${refused}` };
-  stopDictation();
-  const id = ++dictations;
-  const heard = (at: number, event: object) => setTimeout(() => emit("dictation", { id, ...event }), at);
-  dictating = {
-    id,
-    timers: [
-      heard(400, { kind: "guess", text: HEARD[0] }),
-      heard(800, { kind: "guess", text: HEARD[1] }),
-      heard(1300, { kind: "phrase", text: HEARD[2] }),
-      heard(1800, { kind: "guess", text: HEARD[3] }),
-      heard(2400, { kind: "phrase", text: HEARD[4] }),
-      ...(handsFree ? [heard(3400, { kind: "ended", refusal: null })] : []),
-    ],
-  };
+function listen(transcribe: boolean) {
+  if (asking.get("voice") === "microphone") throw { cause: "microphone", message: "Sens no puede escuchar el micrófono: dispositivo no disponible" };
+  stopListening(true);
+  const id = ++listened;
+  const at = (after: number, event: object) => setTimeout(() => emit("voice", { id, ...event }), after);
+  const levels = Array.from({ length: 40 }, (_, step) => at(step * 100, { kind: "level", level: Math.abs(Math.sin(step / 2)) * 0.8 }));
+  const guesses = ["Añade un", "Añade un test para", "Añade un test para el formulario", "", "Revisa el", "Revisa el componente", "Revisa el componente del"];
+  const phrases = transcribe
+    ? [
+        ...guesses.flatMap((text, step) => (text ? [at(400 + step * 400, { kind: "guess", text })] : [])),
+        at(1600, { kind: "phrase", text: SAID[0] }),
+        at(3200, { kind: "phrase", text: SAID[1] }),
+      ]
+    : [];
+  listening = { id, timers: [...levels, ...phrases], transcribe };
   return id;
 }
 
-function stopDictation() {
-  if (!dictating) return;
-  const { id, timers } = dictating;
+function stopListening(quiet = false) {
+  if (!listening) return;
+  const { id, timers, transcribe } = listening;
   timers.forEach(clearTimeout);
-  dictating = null;
-  setTimeout(() => emit("dictation", { kind: "ended", id, refusal: null }), 60);
+  listening = null;
+  if (!quiet) setTimeout(() => emit("voice", { id, kind: "ended", refusal: null }), transcribe ? 700 : 60);
 }
 
 async function adopt(roots: string[]) {
@@ -297,7 +303,6 @@ const DIFF = [
   "rename to new.txt",
 ].join("\n");
 
-// A project with a bit of everything, to see the file icons.
 const FOLDERS: Record<string, string[]> = {
   "": ["src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
   src: ["components/", "app.tsx", "index.ts", "types.d.ts", "lib.rs", "styles.css", "query.sql", "build.ps1"],
@@ -305,11 +310,9 @@ const FOLDERS: Record<string, string[]> = {
   docs: ["guia.md", "api.yaml", "config.toml"],
 };
 
-// A few files with real code, to see the viewer color each language.
 const SAMPLES: Record<string, string> = {
   "main.py": [
     "#!/usr/bin/env python3",
-    '"""Saluda a quien se lo pida."""',
     "from dataclasses import dataclass",
     "",
     "",
@@ -318,7 +321,6 @@ const SAMPLES: Record<string, string> = {
     '    name: str = "mundo"',
     "",
     "    def greet(self, times: int = 1) -> str:",
-    "        # Una línea por vez",
     '        return "\\n".join(f"Hola, {self.name}!" for _ in range(times))',
     "",
     "",
@@ -334,7 +336,6 @@ const SAMPLES: Record<string, string> = {
     "  start?: number;",
     "}",
     "",
-    "// El contador de la portada.",
     "export function App({ title, start = 0 }: Props) {",
     "  const [count, setCount] = useState(start);",
     "  return (",
@@ -348,7 +349,6 @@ const SAMPLES: Record<string, string> = {
   "src/lib.rs": [
     "use std::collections::HashMap;",
     "",
-    "/// Cuenta las palabras de un texto.",
     "pub fn count(text: &str) -> HashMap<&str, usize> {",
     "    let mut seen = HashMap::new();",
     "    for word in text.split_whitespace() {",
@@ -368,14 +368,12 @@ const SAMPLES: Record<string, string> = {
   "src/styles.css": [
     ":root { --accent: #c7ff4a; }",
     "",
-    "/* La tarjeta */",
     ".card:hover > .title {",
     "  color: var(--accent);",
     "  padding: 4px 8px !important;",
     "}",
   ].join("\n"),
   "src/query.sql": [
-    "-- Los proyectos más activos",
     "SELECT p.name, COUNT(*) AS turns",
     "FROM projects p",
     "JOIN turns t ON t.project_id = p.id",
@@ -387,7 +385,6 @@ const SAMPLES: Record<string, string> = {
   "src/build.ps1": [
     "param([switch]$Release)",
     "",
-    "# Compila la app",
     '$mode = if ($Release) { "release" } else { "debug" }',
     'Write-Host "Compilando en $mode..."',
     "cargo build --profile $mode",
@@ -397,12 +394,11 @@ const SAMPLES: Record<string, string> = {
   "Cargo.toml": ["[package]", 'name = "demo"', 'version = "0.1.0"', "edition = \"2024\"", "", "[dependencies]", 'serde = { version = "1", features = ["derive"] }'].join("\n"),
 };
 
-// A turn with code in its answer and an edit, to see the chat color them.
 const FENCE = "```";
 const agent = (event: Record<string, unknown>) => ({ kind: "agent", at: now - HOUR, event });
 const REPLAY = [
   { kind: "task", text: "Añade un saludo configurable", files: ["src/app.tsx", ".sens/artifacts/demo-1/pasted-text.txt", "docs/"], images: [], at: now - HOUR },
-  agent({ kind: "started", model: "demo-model" }),
+  agent({ kind: "started", model: "claude-sonnet-5" }),
   agent({
     kind: "tool",
     id: "t1",
@@ -421,7 +417,6 @@ const REPLAY = [
           oldStart: 9,
           newStart: 9,
           lines: [
-            " // El contador de la portada.",
             "-export function App({ title, start = 0 }: Props) {",
             '+export function App({ title, start = 0, greeting = "Hola" }: Props) {',
             "   const [count, setCount] = useState(start);",
@@ -449,7 +444,6 @@ const REPLAY = [
   agent({ kind: "finished", millis: 4200, tokensOut: 812, context: 148_300, window: 200_000 }),
 ];
 
-// Two projects whose sessions can be renamed, archived and deleted.
 const SPACES = [
   {
     root: ROOT,
@@ -470,6 +464,40 @@ const SPACES = [
 ];
 
 const sessionOf = (id: unknown) => SPACES.flatMap((space) => space.sessions).find((one) => one.id === id)!;
+
+const FRONT = { app: "Windows Terminal", title: "PowerShell" };
+const front = () => (asking.get("front") === "none" ? null : FRONT);
+const PREVIEW = "error TS2307: Cannot find module '../brand/tokens'";
+const CLIP = [
+  `${PREVIEW} or its corresponding type declarations.`,
+  "",
+  "  src/shared/look.ts:2:24",
+  '    2 import { SIGNAL } from "../brand/tokens";',
+  "                             ~~~~~~~~~~~~~~~~~",
+  "",
+  "Found 1 error in src/shared/look.ts:2",
+].join("\n");
+const copied = () => asking.get("clip") !== "none";
+let pinned = asking.has("pinned");
+
+const opened = (): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned });
+
+function shot(): Shot | null {
+  const [width, height] = [960, 540];
+  const canvas = Object.assign(document.createElement("canvas"), { width, height });
+  const paint = canvas.getContext("2d");
+  if (!paint) return null;
+  paint.fillStyle = tokenOf("--ground");
+  paint.fillRect(0, 0, width, height);
+  paint.fillStyle = tokenOf("--card");
+  paint.fillRect(0, 0, width, 36);
+  paint.font = `15px ${tokenOf("--mono") || "monospace"}`;
+  paint.fillStyle = tokenOf("--dim");
+  paint.fillText(`${FRONT.app} · ${FRONT.title}`, 16, 24);
+  [`${promptOf(ROOT)}npx tsc --noEmit`, ...CLIP.split("\n")].forEach((line, at) => paint.fillText(line, 16, 72 + at * 24));
+  const url = canvas.toDataURL("image/png");
+  return { mediaType: "image/png", data: url.slice(url.indexOf(",") + 1), width, height };
+}
 
 const entries = (path: string) =>
   (FOLDERS[path] ?? []).map((name) => {
@@ -543,7 +571,6 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
     artifact("file", "datos.xlsx", 80, null),
   ],
   artifact_data: () => SQUARE,
-  // No page is drawn here, but the panel hears it load, as from the real one.
   browser_open: ({ url }) => {
     const at = String(url);
     setTimeout(() => emit("browser", { kind: "loading", url: at }), 50);
@@ -557,13 +584,14 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   terminal_open: ({ root }) => openShell(String(root ?? "")),
   terminal_write: ({ id, data }) => typeInShell(Number(id), String(data)),
   terminal_close: ({ id }) => endShell(Number(id), 1),
-  dictation_start: ({ handsFree }) => startDictation(Boolean(handsFree)),
-  dictation_stop: () => stopDictation(),
-  set_wake: ({ on }) => {
-    person.wake = Boolean(on);
-    if (on) setTimeout(() => emit("dictation", { kind: "woke" }), 3000);
-  },
-  dictation_settings: ({ cause }) => console.info(`[mock-tauri] abriría la configuración de Windows: ${cause}`),
+  voice_start: () => listen(true),
+  voice_test: () => listen(false),
+  voice_stop: () => stopListening(),
+  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 59_707_625 }),
+  voice_prepare: () => console.info("[mock-tauri] descargaría el modelo de voz"),
+  voice_microphones: () => MICROPHONES,
+  voice_microphone: () => microphone,
+  voice_choose: ({ microphone: chosen }) => void (microphone = (chosen as string | null) ?? null),
   preview_url: ({ path }) => `http://127.0.0.1:4321/demo/${String(path).split("/").pop()}`,
   artifact_text: ({ path }) => `# ${String(path).split("/").pop()}\n\nTexto de prueba.`,
   capabilities: () => structuredClone(caps),
@@ -623,13 +651,21 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   open_session: ({ id }) => id ?? "demo-new",
   chat_busy: () => false,
   chat_tasks: () => [],
-  // A reply as the real one arrives: text in pieces, a command, the end.
-  chat_send: ({ sessionId, message }) => {
+  chat_send: ({ sessionId, message, settings }) => {
+    const ran = (settings as { model: string }).model;
     const session = String(sessionId);
     if ((message as { text: string }).text.startsWith("/compact")) {
-      setTimeout(() => emit("chat", { session, event: { kind: "started", model: "demo-model" } }), 80);
+      setTimeout(() => emit("chat", { session, event: { kind: "started", model: ran } }), 80);
       setTimeout(() => emit("chat", { session, event: { kind: "compacted", before: 148_300, auto: false } }), 900);
       setTimeout(() => emit("chat", { session, event: { kind: "finished", ok: true, stopped: false, millis: 900, turns: 1, tokensIn: 0, tokensOut: 0, context: 0, window: 200_000, error: "" } }), 1000);
+      return;
+    }
+    const refused = { "/login": ["signIn", "Not logged in · Please run /login"], "/billing": ["billing", "Credit balance is too low"] }[(message as { text: string }).text.trim()];
+    if (refused) {
+      const [reason, text] = refused;
+      setTimeout(() => emit("chat", { session, event: { kind: "started", model: ran } }), 80);
+      setTimeout(() => emit("chat", { session, event: { kind: "lockedOut", reason } }), 600);
+      setTimeout(() => emit("chat", { session, event: { kind: "finished", ok: false, stopped: false, millis: 600, turns: 1, tokensIn: 0, tokensOut: 0, error: text } }), 700);
       return;
     }
     const said = `Recibido: «${(message as { text: string }).text}». Te cuento lo que he mirado:\n\n- El **árbol** del proyecto\n- Los ficheros \`src/app.tsx\` y \`main.py\`\n\n${FENCE}ts\nconst listo = true;\n${FENCE}\n\nListo.`;
@@ -654,7 +690,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
       [4000, { kind: "tool", id: "edit-1", name: "Edit", input: edit }],
       [4400, { kind: "toolDone", id: "edit-1", output: "", error: false, detail: null }],
     ];
-    const events: [number, unknown][] = [[80, { kind: "started", model: "demo-model" }], [120, planLimits()]];
+    const events: [number, unknown][] = [[80, { kind: "started", model: ran }], [120, planLimits()]];
     let clock = 120;
     const think = (text: string) => {
       for (let at = 0; at < text.length; at += 6) events.push([clock + (at / 6) * 40, { kind: "delta", thinking: true, text: text.slice(at, at + 6) }]);
@@ -696,7 +732,8 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
         1500,
       ),
     ),
-  claude_account: () => ({ billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" }),
+  claude_account: () => ({ ...account }),
+  provider_sign_in: () => pause(1500).then(() => void (account = SUBSCRIBED)),
   providers_state: () => [
     {
       id: "claude",
@@ -705,7 +742,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
       method: "subscription",
       keyHint: "",
       version: "2.1.0",
-      account: { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" },
+      account: { ...account },
       error: "",
       installed: true,
     },
@@ -720,6 +757,19 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   save_profile: ({ name }) => void (person.name = String(name).trim()),
   set_update_check: ({ on }) => void (person.checkUpdates = Boolean(on)),
   set_notify: ({ on }) => void (person.notify = Boolean(on)),
+  set_keep_in_tray: ({ on }) => void (person.keepInTray = Boolean(on)),
+  set_start_with_windows: ({ on }) => void (person.startWithWindows = Boolean(on)),
+  shortcut_state: (): Shortcut => ({ keys: "Ctrl+Alt+Espacio", taken: asking.has("taken") }),
+  bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
+  bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
+  bar_fit: () => null,
+  bar_pin: ({ on }) => void (pinned = Boolean(on)),
+  bar_drag: () => console.info("[mock-tauri] la barra empezaría a moverse"),
+  bar_hand_over: ({ hand }) => console.info("[mock-tauri] la ventana principal tomaría", hand),
+  bar_context: (): BarContext => ({ front: front(), clip: copied() ? { preview: PREVIEW, chars: CLIP.length } : null }),
+  bar_clip: () => (copied() ? CLIP : null),
+  bar_shot: () => (front() && asking.get("shot") !== "none" ? shot() : null),
+  bar_projects: (): BarProject[] => SPACES.map(({ root, name }) => ({ root, name })),
   notify: ({ title, body }) => console.info(`[aviso] ${title}: ${body}`),
   update_check: () => ({ latest: null, installable: false }),
   news: () => pause(600).then(() => told),
@@ -733,7 +783,7 @@ if (!("__TAURI_INTERNALS__" in window)) {
   window.__SENS_LANGUAGE__ = spoken;
   window.__SENS_WELCOMED__ = person.welcomed;
   window.__SENS_NEWS__ = asking.has("news");
-  mockWindows("main");
+  mockWindows(onBar ? "bar" : "main");
   mockIPC(
     (cmd, args) => {
       const fixture = fixtures[cmd];
@@ -743,4 +793,5 @@ if (!("__TAURI_INTERNALS__" in window)) {
     },
     { shouldMockEvents: true },
   );
+  if (onBar) addEventListener("load", () => setTimeout(() => emit("bar-open", opened()), 100));
 }

@@ -11,8 +11,11 @@ use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW,
     TerminateProcess,
 };
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GW_OWNER, GetWindow, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE};
-use windows::core::{BOOL, PWSTR};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, FindWindowExW, GW_OWNER, GWL_EXSTYLE, GetWindow, GetWindowLongW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindowVisible,
+    PostMessageW, RegisterWindowMessageW, WM_CLOSE, WS_EX_TOOLWINDOW,
+};
+use windows::core::{BOOL, PCWSTR, PWSTR, w};
 
 use crate::language::said;
 use crate::progress::{self, CANCELLED, Report, Step};
@@ -22,6 +25,8 @@ const PATIENCE: Duration = Duration::from_secs(30);
 const GRACE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(250);
 const GLANCE: Duration = Duration::from_millis(80);
+const LISTENER: PCWSTR = w!("SensListener");
+const QUIT: PCWSTR = w!("SensQuit");
 
 pub enum Closing<'a> {
     Ask(&'a dyn Fn()),
@@ -87,6 +92,9 @@ fn closed_unseen(app: &Path, report: Report) -> bool {
 }
 
 fn shut(app: &Path, ours: &BTreeSet<u32>, force: bool) -> bool {
+    if asked_to_quit(ours) && gone(app) {
+        return true;
+    }
     for window in main_windows(ours) {
         unsafe {
             let _ = PostMessageW(Some(window), WM_CLOSE, WPARAM(0), LPARAM(0));
@@ -95,7 +103,29 @@ fn shut(app: &Path, ours: &BTreeSet<u32>, force: bool) -> bool {
     if force {
         ours.iter().for_each(|process| terminate(*process));
     }
+    gone(app)
+}
+
+fn gone(app: &Path) -> bool {
     wait(app, Some(GRACE), &AtomicBool::new(false)).unwrap_or(false)
+}
+
+fn asked_to_quit(ours: &BTreeSet<u32>) -> bool {
+    let quit = unsafe { RegisterWindowMessageW(QUIT) };
+    listeners()
+        .into_iter()
+        .filter(|window| ours.contains(&process_of(*window)))
+        .filter(|window| unsafe { PostMessageW(Some(*window), quit, WPARAM(0), LPARAM(0)) }.is_ok())
+        .count()
+        > 0
+}
+
+fn listeners() -> Vec<HWND> {
+    let mut found: Vec<HWND> = Vec::new();
+    while let Ok(window) = unsafe { FindWindowExW(Some(HWND_MESSAGE), found.last().copied(), LISTENER, PCWSTR::null()) } {
+        found.push(window);
+    }
+    found
 }
 
 fn main_windows(ours: &BTreeSet<u32>) -> Vec<HWND> {
@@ -143,14 +173,22 @@ fn top_windows() -> Vec<(HWND, u32)> {
 
 unsafe extern "system" fn collect(window: HWND, found: LPARAM) -> BOOL {
     let found = unsafe { &mut *(found.0 as *mut Vec<(HWND, u32)>) };
-    let mut process = 0u32;
-    unsafe { GetWindowThreadProcessId(window, Some(&mut process)) };
-    found.push((window, process));
+    found.push((window, process_of(window)));
     BOOL(1)
 }
 
+fn process_of(window: HWND) -> u32 {
+    let mut process = 0u32;
+    unsafe { GetWindowThreadProcessId(window, Some(&mut process)) };
+    process
+}
+
 fn is_main(window: HWND) -> bool {
-    unsafe { IsWindowVisible(window).as_bool() && GetWindow(window, GW_OWNER).is_err() }
+    unsafe {
+        IsWindowVisible(window).as_bool()
+            && GetWindow(window, GW_OWNER).is_err()
+            && (GetWindowLongW(window, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0) == 0
+    }
 }
 
 fn processes_of(app: &Path) -> BTreeSet<u32> {
@@ -205,12 +243,75 @@ mod tests {
     use std::os::windows::fs::OpenOptionsExt;
     use std::os::windows::process::CommandExt;
     use std::path::PathBuf;
-    use std::process::{Command, Stdio};
+    use std::process::{Child, Command, Stdio};
     use std::sync::Mutex;
     use std::sync::atomic::AtomicUsize;
 
+    use windows::Win32::Foundation::LRESULT;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, DestroyWindow, MSG, PM_REMOVE, PeekMessageW, RegisterClassW, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW,
+    };
+
     use super::*;
     use crate::system::CREATE_NO_WINDOW;
+
+    unsafe extern "system" fn quiet(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        unsafe { DefWindowProcW(window, message, wparam, lparam) }
+    }
+
+    fn listening() -> HWND {
+        let class = WNDCLASSW {
+            lpfnWndProc: Some(quiet),
+            lpszClassName: LISTENER,
+            ..Default::default()
+        };
+        unsafe {
+            RegisterClassW(&class);
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                LISTENER,
+                PCWSTR::null(),
+                WINDOW_STYLE(0),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        }
+    }
+
+    fn heard_quit(listener: HWND) -> bool {
+        let quit = unsafe { RegisterWindowMessageW(QUIT) };
+        let mut message = MSG::default();
+        unsafe { PeekMessageW(&mut message, Some(listener), quit, quit, PM_REMOVE) }.as_bool()
+    }
+
+    fn listens(process: u32) -> bool {
+        let started = Instant::now();
+        while started.elapsed() < GRACE {
+            if listeners().into_iter().any(|window| process_of(window) == process) {
+                return true;
+            }
+            thread::sleep(GLANCE);
+        }
+        false
+    }
+
+    fn stand_in(app: &Path, test: &str) -> Child {
+        fs::copy(std::env::current_exe().unwrap(), app).unwrap();
+        Command::new(app)
+            .args([&format!("running::tests::{test}"), "--exact", "--ignored"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap()
+    }
 
     fn scratch_app(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("sens-setup-running-{name}"));
@@ -318,16 +419,20 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
+    fn listens_as_a_stand_in_for_sens() {
+        let listener = listening();
+        let started = Instant::now();
+        while !heard_quit(listener) {
+            assert!(started.elapsed() < Duration::from_secs(60));
+            thread::sleep(POLL);
+        }
+    }
+
+    #[test]
     fn a_sens_left_running_without_a_window_is_closed_without_asking() {
         let app = scratch_app("unseen");
-        fs::copy(std::env::current_exe().unwrap(), &app).unwrap();
-        let mut stand_in = Command::new(&app)
-            .args(["running::tests::sleeps_as_a_stand_in_for_sens", "--exact", "--ignored"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .unwrap();
+        let mut stand_in = stand_in(&app, "sleeps_as_a_stand_in_for_sens");
         let asked = AtomicUsize::new(0);
         let ask = || {
             asked.fetch_add(1, Ordering::SeqCst);
@@ -343,6 +448,37 @@ mod tests {
         assert_eq!(*lines.lock().unwrap(), [progress::waiting(), progress::unseen(), progress::closed()]);
         assert!(stand_in.try_wait().unwrap().is_some());
         let _ = fs::remove_dir_all(app.parent().unwrap());
+    }
+
+    #[test]
+    fn a_sens_hidden_in_the_tray_is_asked_to_quit_before_anything_is_forced() {
+        let app = scratch_app("tray");
+        let mut stand_in = stand_in(&app, "listens_as_a_stand_in_for_sens");
+        let asked = AtomicUsize::new(0);
+        let ask = || {
+            asked.fetch_add(1, Ordering::SeqCst);
+        };
+
+        assert!(listens(stand_in.id()));
+        let settled = settle(&app, &Closing::Ask(&ask), &AtomicBool::new(false), &|_, _, _| {});
+
+        assert_eq!(settled, Ok(()));
+        assert_eq!(asked.load(Ordering::SeqCst), 0);
+        assert!(stand_in.wait().unwrap().success());
+        let _ = fs::remove_dir_all(app.parent().unwrap());
+    }
+
+    #[test]
+    fn only_the_listener_of_the_sens_being_closed_is_asked_to_quit() {
+        let us = BTreeSet::from([std::process::id()]);
+
+        assert!(!asked_to_quit(&us));
+        let listener = listening();
+        assert!(!asked_to_quit(&BTreeSet::new()));
+        assert!(!heard_quit(listener));
+        assert!(asked_to_quit(&us));
+        assert!(heard_quit(listener));
+        unsafe { DestroyWindow(listener) }.unwrap();
     }
 
     #[test]

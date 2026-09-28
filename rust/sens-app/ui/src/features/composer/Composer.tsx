@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { useStore } from "zustand";
 import { openPicture } from "../../app/Dialog";
 import { chooseFolder } from "../../app/session";
@@ -16,6 +16,8 @@ import { t } from "./copy";
 import { useDictation } from "./dictation";
 import { onEdge, recall } from "./history";
 import { ContextMeter } from "../models/ContextMeter";
+import { LockoutNotice } from "../models/Lockout";
+import { CacheBreakNotice } from "./CacheBreak";
 import { Effort, ModelPicker, ModePicker, Think } from "./Knobs";
 import { Suggestions, useSuggestions } from "./Suggestions";
 import {
@@ -36,12 +38,12 @@ import {
   type File,
 } from "./store";
 
-// Where you write to Claude: the folder and branch, what goes attached, the
-// message, and the knobs of the next turn under it.
 export function Composer() {
   return (
     <div className="composer">
       <div className="composer-inner">
+        <LockoutNotice />
+        <CacheBreakNotice />
         <Workspace />
         <Box />
         <div className="under">
@@ -121,7 +123,6 @@ function WorktreeChip() {
   );
 }
 
-// The branch you are on, and the others to switch to, filtered by name.
 function Branches({ sheet }: { sheet: Sheet }) {
   const pane = usePane();
   const id = useIds();
@@ -191,8 +192,40 @@ function Clips({ inlined }: { inlined: () => void }) {
   );
 }
 
-// The message grows with what is written, up to a cap, then scrolls.
 const GROW_CAP = 260;
+
+function fit(box: HTMLTextAreaElement, grown: { current: number }) {
+  if (!box.getClientRects().length) return;
+  const cap = Math.max(96, Math.min(GROW_CAP, Math.round(window.innerHeight * 0.4)));
+  box.style.transition = "none";
+  box.style.height = "auto";
+  const wanted = Math.min(box.scrollHeight, cap);
+  box.style.height = `${grown.current || wanted}px`;
+  void box.offsetHeight;
+  box.style.transition = "";
+  box.style.height = `${wanted}px`;
+  box.dataset.capped = String(wanted >= cap);
+  grown.current = wanted;
+}
+
+function useFit(field: RefObject<HTMLTextAreaElement | null>, text: string) {
+  const grown = useRef(0);
+  useLayoutEffect(() => {
+    if (field.current) fit(field.current, grown);
+  }, [text]);
+  useEffect(() => {
+    const box = field.current;
+    if (!box) return;
+    let width = box.clientWidth;
+    const watcher = new ResizeObserver(() => {
+      if (box.clientWidth === width) return;
+      width = box.clientWidth;
+      fit(box, grown);
+    });
+    watcher.observe(box);
+    return () => watcher.disconnect();
+  }, []);
+}
 
 function Box() {
   const pane = usePane();
@@ -207,26 +240,11 @@ function Box() {
   const text = useStore(pane.desk, (s) => s.text);
   const setText = (next: string) => writeMessage(next, pane);
   const field = useRef<HTMLTextAreaElement>(null);
-  const grown = useRef(0);
   const toEnd = useRef(false);
   const lap = useLap(busy);
   const dictation = useDictation(pane, text, setText, field);
   const suggest = useSuggestions(pane, text, field, id("suggest"));
-
-  useLayoutEffect(() => {
-    const box = field.current;
-    if (!box) return;
-    const cap = Math.max(96, Math.min(GROW_CAP, Math.round(window.innerHeight * 0.4)));
-    box.style.transition = "none";
-    box.style.height = "auto";
-    const wanted = Math.min(box.scrollHeight, cap);
-    box.style.height = `${grown.current || wanted}px`;
-    void box.offsetHeight;
-    box.style.transition = "";
-    box.style.height = `${wanted}px`;
-    box.dataset.capped = String(wanted >= cap);
-    grown.current = wanted;
-  }, [text]);
+  useFit(field, text);
 
   useLayoutEffect(() => {
     const box = field.current;
@@ -290,12 +308,14 @@ function Box() {
         <Icon svg={ICONS.paperclip} />
       </button>
       <button
-        className="round"
+        className="round dictate"
         id={id("dictate")}
         title={dictation.label}
         aria-label={dictation.label}
-        aria-pressed={dictation.listening}
-        disabled={!dictation.able}
+        aria-pressed={dictation.phase === "listening"}
+        aria-busy={dictation.phase === "finishing"}
+        disabled={!root}
+        style={{ "--level": dictation.level } as CSSProperties}
         onClick={dictation.toggle}
       >
         <Icon svg={ICONS.mic} />
@@ -360,8 +380,6 @@ function Box() {
   );
 }
 
-// While Claude works a light laps the box, at a speed that wanders: each lap
-// gets new keyframes, from a few random harmonics.
 const HARMONICS = [1, 2, 3];
 const SWELL = [0.04, 0.12];
 const SAMPLES = 60;

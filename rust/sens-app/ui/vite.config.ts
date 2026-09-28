@@ -5,14 +5,10 @@ import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import table from "./src/shared/file-icons.json" with { type: "json" };
 
-// tauri.conf.json loads this port in `tauri dev` and dist/ in `tauri build`.
-// The dev server also loads a simulated Tauri first, so the shell runs in any
-// browser; the build never includes it.
 export default defineConfig({
   clearScreen: false,
   server: { port: 5173, strictPort: true },
-  // The syntax worker loads each grammar as its own chunk, which only module
-  // workers can.
+  build: { rolldownOptions: { input: { main: "index.html", bar: "bar.html" } } },
   worker: { format: "es" },
   plugins: [
     react(),
@@ -27,14 +23,10 @@ export default defineConfig({
   ],
 });
 
-// The Material Icon Theme SVGs that src/shared/file-icons.json names, served
-// from the installed package under /file-icons, and copied there in the build
-// with the package's licence.
 function fileIcons(): Plugin {
   const theme = path.dirname(createRequire(import.meta.url).resolve("material-icon-theme/package.json"));
   const manifest = JSON.parse(readFileSync(path.join(theme, "dist", "material-icons.json"), "utf8"));
   const icons = new Set([table.file, ...Object.values(table.names), ...Object.values(table.extensions)]);
-  // The manifest says where each icon is: some are clones built into dist/.
   const svg = (icon: string) => readFileSync(path.resolve(theme, "dist", manifest.iconDefinitions[icon].iconPath));
 
   return {

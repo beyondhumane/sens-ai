@@ -1,7 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import { commands, events } from "../../ipc/commands";
 import type { ClaudeCodeProgress, Method, ProviderState } from "../../ipc/types";
-import { checkClaudeCode, readAccount, refreshModels } from "../models/store";
+import { checkClaudeCode, noteLockout, readAccount, refreshModels } from "../models/store";
+import { profile } from "../profile/store";
 import { store, stored } from "../../shared/storage.js";
 import { settingsSheet } from "./sheet";
 
@@ -11,8 +12,6 @@ const SECTION = "sens.settings.section";
 export const SECTIONS: Section[] = ["general", "look", "language", "providers"];
 const kept = stored(SECTION, "");
 
-// `visits` counts every time the view opens, so the pane starts fresh each
-// time. `connecting` is read by the model picker too, while a sign-in runs.
 export const settings = createStore(() => ({
   section: (SECTIONS.includes(kept) ? kept : "general") as Section,
   visits: 0,
@@ -59,6 +58,16 @@ export function settingsClosed() {
   back = null;
 }
 
+const RESIDENT = {
+  keepInTray: (on: boolean) => commands.setKeepInTray(on),
+  startWithWindows: (on: boolean) => commands.setStartWithWindows(on),
+};
+
+export async function setResident(key: keyof typeof RESIDENT, on: boolean) {
+  await RESIDENT[key](on);
+  profile.setState(({ person }) => ({ person: { ...person, [key]: on } }));
+}
+
 export async function loadProviders() {
   try {
     settings.setState({ providers: await commands.providersState(), fault: "" });
@@ -79,6 +88,7 @@ async function act(state: ProviderState, work: () => Promise<unknown>) {
   try {
     await work();
     settings.setState(({ choosing }) => ({ choosing: without(choosing, state.id) }));
+    noteLockout(null);
   } catch (reason) {
     failing(state.id, reason);
   }
@@ -121,11 +131,19 @@ export async function signIn(state: ProviderState, method: Method) {
   settings.setState(({ faults }) => ({ connecting: true, faults: without(faults, state.id) }));
   try {
     await commands.providerSignIn(method);
+    noteLockout(null);
   } catch (reason) {
     failing(state.id, reason);
   }
   settings.setState({ connecting: false });
   await afterProviderChange();
+}
+
+export async function signInAgain(from?: HTMLElement | null) {
+  await loadProviders();
+  const state = settings.getState().providers?.[0];
+  if (!state || state.method === "apiKey") return openSettings("providers", from);
+  await signIn(state, state.method);
 }
 
 events.claudeCode((progress) => {

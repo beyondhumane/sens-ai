@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEvent } from "../../ipc/types";
@@ -11,7 +10,7 @@ import { project } from "../project/store";
 import { rail } from "../rail/store";
 import { drag, lift } from "./drag";
 import { Panes } from "./Panes";
-import { focused, panes } from "./store";
+import { adopt, focused, newPane, panes } from "./store";
 
 const ipc = vi.hoisted(() => {
   const made: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -161,5 +160,22 @@ describe("two sessions side by side", () => {
     expect(document.querySelector(".snap-hint")?.textContent).toBe("Drop to replace “Sesión s2”");
     act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     await settle();
+  });
+});
+
+describe("a pane of its own", () => {
+  it("becomes the only pane, in focus, follows its project, and never writes the layout", () => {
+    const kept = localStorage.getItem("sens.panes");
+    const [left] = panes.getState().open;
+    const own = newPane("C:/otro");
+    act(() => adopt(own));
+    expect(panes.getState().open).toEqual([own]);
+    expect(focused()).toBe(own);
+    expect(project.getState().root).toBe("C:/otro");
+
+    act(() => own.desk.setState({ root: "C:/demo", session: "b1" }));
+    expect(project.getState()).toMatchObject({ root: "C:/demo", session: "b1" });
+    act(() => left.desk.setState({ session: "s9" }));
+    expect(localStorage.getItem("sens.panes")).toBe(kept);
   });
 });

@@ -42,6 +42,7 @@ const DESCRIPTION_CAP: usize = 160;
 const OFFER_PATIENCE: Duration = Duration::from_secs(10);
 const GREETING: &str = "sens-initialize";
 const SEARCHED: &str = "Web search results for query:";
+const REFUSALS_BEFORE_LOCKOUT: u64 = 2;
 
 fn denied() -> String {
     said!(
@@ -193,6 +194,16 @@ pub enum Event {
     Failed {
         reason: String,
     },
+    LockedOut {
+        reason: Lockout,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Lockout {
+    SignIn,
+    Billing,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -229,7 +240,7 @@ impl Event {
     pub fn lasting(&self) -> bool {
         !matches!(
             self,
-            Event::Delta { .. } | Event::Limits { .. } | Event::TaskProgress { .. }
+            Event::Delta { .. } | Event::Limits { .. } | Event::TaskProgress { .. } | Event::LockedOut { .. }
         )
     }
 
@@ -1053,6 +1064,7 @@ pub fn interpret(message: &Value) -> Vec<Event> {
     }
     match message["type"].as_str().unwrap_or_default() {
         "stream_event" => delta(&message["event"]).into_iter().collect(),
+        "assistant" if message["is_api_error_message"] == true => locked_out(message).into_iter().collect(),
         "assistant" => blocks(&message["message"]["content"])
             .filter_map(said)
             .collect(),
@@ -1255,8 +1267,18 @@ fn system(message: &Value) -> Option<Event> {
             before: message["compact_metadata"]["pre_tokens"].as_u64().unwrap_or_default(),
             auto: message["compact_metadata"]["trigger"] == "auto",
         }),
+        "api_retry" if message["attempt"].as_u64().unwrap_or_default() >= REFUSALS_BEFORE_LOCKOUT => locked_out(message),
         _ => None,
     }
+}
+
+fn locked_out(message: &Value) -> Option<Event> {
+    let reason = match message["error"].as_str()? {
+        "authentication_failed" => Lockout::SignIn,
+        "billing_error" => Lockout::Billing,
+        _ => return None,
+    };
+    Some(Event::LockedOut { reason })
 }
 
 fn spent(message: &Value, key: &str) -> u64 {
@@ -1640,6 +1662,34 @@ mod tests {
         assert_eq!(offered(&json!({ "type": "control_response", "response": { "subtype": "success", "request_id": "sens-2", "response": { "commands": [] } } })), None);
         assert_eq!(offered(&json!({ "type": "control_response", "response": { "subtype": "error", "request_id": GREETING, "error": "no" } })), Some(Vec::new()));
         assert_eq!(offered(&json!({ "type": "assistant" })), None);
+    }
+
+    #[test]
+    fn an_api_error_is_left_to_the_result_and_a_lost_sign_in_is_told() {
+        assert_eq!(
+            translate(r#"{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Not logged in · Please run /login"}]},"parent_tool_use_id":null,"error":"authentication_failed","is_api_error_message":true}"#),
+            [Event::LockedOut { reason: Lockout::SignIn }]
+        );
+        assert_eq!(
+            translate(r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Credit balance is too low"}]},"parent_tool_use_id":null,"error":"billing_error","is_api_error_message":true}"#),
+            [Event::LockedOut { reason: Lockout::Billing }]
+        );
+        assert!(translate(r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Límite"}]},"parent_tool_use_id":null,"error":"rate_limit","is_api_error_message":true}"#).is_empty());
+        let Event::Finished { ok, error, .. } = one(r#"{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login","terminal_reason":"api_error"}"#) else { panic!() };
+        assert_eq!((ok, error.as_str()), (false, "Not logged in · Please run /login"));
+    }
+
+    #[test]
+    fn a_retry_refused_again_by_the_account_is_told_before_claude_gives_up() {
+        assert!(translate(r#"{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":536,"error_status":401,"error":"authentication_failed"}"#).is_empty());
+        assert_eq!(
+            one(r#"{"type":"system","subtype":"api_retry","attempt":2,"max_retries":10,"retry_delay_ms":1243,"error_status":401,"error":"authentication_failed"}"#),
+            Event::LockedOut { reason: Lockout::SignIn }
+        );
+        assert!(translate(r#"{"type":"system","subtype":"api_retry","attempt":3,"error_status":529,"error":"server_error"}"#).is_empty());
+        assert!(!Event::LockedOut { reason: Lockout::SignIn }.lasting());
+        let sent = serde_json::to_value(Event::LockedOut { reason: Lockout::Billing }).unwrap();
+        assert_eq!(sent, json!({ "kind": "lockedOut", "reason": "billing" }));
     }
 
     #[test]

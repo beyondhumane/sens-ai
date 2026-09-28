@@ -2,10 +2,8 @@ import { createStore } from "zustand/vanilla";
 import { commands } from "../../ipc/commands";
 import type { Profile } from "../../ipc/types";
 
-// Who uses Sens: the rail footer paints it, settings edits it, and updates
-// read whether to check on their own.
 export const profile = createStore<{ person: Profile; fault: string }>(() => ({
-  person: { name: "", checkUpdates: true, welcomed: true, seen: "", notify: true, wake: false },
+  person: { name: "", checkUpdates: true, welcomed: true, seen: "", notify: true, keepInTray: true, startWithWindows: true },
   fault: "",
 }));
 

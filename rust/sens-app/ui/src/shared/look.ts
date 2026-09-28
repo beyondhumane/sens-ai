@@ -52,14 +52,17 @@ export function showLook(chosen: Look) {
 
 export const tokenOf = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-export function linearRgb(hex: string): [number, number, number] {
-  const digits = hex.replace("#", "");
-  const channel = (at: number) => {
-    const value = parseInt(digits.slice(at, at + 2), 16) / 255;
-    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  return [channel(0), channel(2), channel(4)];
+type Rgb = [number, number, number];
+
+export function srgbOf(hex: string): Rgb {
+  const digits = hex.trim().replace("#", "");
+  const full = digits.length === 3 ? digits.replace(/./g, "$&$&") : digits;
+  return [0, 2, 4].map((at) => parseInt(full.slice(at, at + 2), 16) / 255) as Rgb;
 }
+
+const linear = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+
+export const linearRgb = (hex: string) => srgbOf(hex).map(linear) as Rgb;
 
 export function followLook() {
   const frame = getCurrentWindow();

@@ -1,5 +1,4 @@
-// The welcome's "sens", filled with a moving, grainy gradient of the Signal
-// tones, drawn by WebGL2 on a canvas behind the letters.
+import { srgbOf, tokenOf } from "../../shared/look";
 
 const TOKENS = ["--grain-1", "--grain-2", "--grain-3"];
 const GROUND = "--ground";
@@ -61,10 +60,7 @@ col=uLight>0.5?min(col,uGround):max(col,uGround);
 fragColor=vec4(col,1.0);
 }`;
 
-function tokenRgb(name: string) {
-  const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace("#", "");
-  return [0, 2, 4].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
-}
+const tokenRgb = (name: string) => srgbOf(tokenOf(name));
 
 function shader(gl: WebGL2RenderingContext, kind: number, source: string) {
   const made = gl.createShader(kind);
@@ -85,8 +81,6 @@ function program(gl: WebGL2RenderingContext) {
   return gl.getProgramParameter(made, gl.LINK_STATUS) ? made : null;
 }
 
-// Draws on `canvas`, sized to `mark`, while the mark is on screen (once, with
-// reduced motion). Returns how to stop, or null when WebGL2 is not there.
 export function grain(canvas: HTMLCanvasElement, mark: HTMLElement): (() => void) | null {
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
   const made = gl && program(gl);

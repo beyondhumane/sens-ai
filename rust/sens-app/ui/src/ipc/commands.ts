@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Language } from "../shared/i18n";
 import type { Look } from "../shared/look";
 import type {
@@ -8,6 +8,9 @@ import type {
   Artifact,
   AttachedFile,
   Attachments,
+  BarContext,
+  BarOpened,
+  BarProject,
   Card,
   Capabilities,
   Changes,
@@ -15,11 +18,10 @@ import type {
   ClaudeCodeProgress,
   Decision,
   Detail,
-  DictationCause,
-  DictationHeard,
   Entry,
   Found,
   Frame,
+  HandOver,
   Heard,
   Imported,
   Isolation,
@@ -27,6 +29,7 @@ import type {
   Market,
   Message,
   Method,
+  Microphone,
   News,
   NewServer,
   Opened,
@@ -36,24 +39,32 @@ import type {
   Repo,
   SessionEntry,
   Settings,
+  Shortcut,
+  Shot,
   Slash,
   TerminalHeard,
   TerminalOpened,
   TerminalReading,
   UpdateCheck,
   UpdateStage,
+  VoiceHeard,
+  VoiceModel,
+  Watching,
   Workspace,
 } from "./types";
 
 export type CapabilityKind = "skill" | "server" | "plugin";
 
-// Every call from the shell to Rust, typed.
+const HOST = "main";
+
 export const commands = {
   profile: () => invoke<Profile>("profile"),
   saveProfile: (name: string) => invoke<void>("save_profile", { name }),
   setUpdateCheck: (on: boolean) => invoke<void>("set_update_check", { on }),
   setNotify: (on: boolean) => invoke<void>("set_notify", { on }),
-  setWake: (on: boolean) => invoke<void>("set_wake", { on }),
+  setKeepInTray: (on: boolean) => invoke<void>("set_keep_in_tray", { on }),
+  setStartWithWindows: (on: boolean) => invoke<void>("set_start_with_windows", { on }),
+  shortcutState: () => invoke<Shortcut>("shortcut_state"),
   notify: (title: string, body: string) => invoke<void>("notify", { title, body }),
   setWelcomed: (on: boolean) => invoke<void>("set_welcomed", { on }),
   news: () => invoke<News[]>("news"),
@@ -64,12 +75,9 @@ export const commands = {
   welcomeAdopt: (roots: string[]) => invoke<Adopted>("welcome_adopt", { roots }),
   welcomeServers: (ids: string[], roots: string[]) => invoke<Imported>("welcome_servers", { ids, roots }),
   updateCheck: (manual: boolean) => invoke<UpdateCheck>("update_check", { manual }),
-  // Downloads, verifies and installs the update, then Sens restarts.
   updateInstall: () => invoke<void>("update_install"),
-  // How many sessions are working right now, in any project.
   chatWorking: () => invoke<number>("chat_working"),
   providersState: () => invoke<ProviderState[]>("providers_state"),
-  // The providers Sens can chat through, and the models each offers now.
   providers: () => invoke<Provider[]>("providers"),
   models: (provider: string) => invoke<Card[] | null>("models", { provider }),
   claudeAccount: () => invoke<Account | null>("claude_account"),
@@ -100,7 +108,6 @@ export const commands = {
     invoke<string>("market_install", { root, id, values }),
   marketUpdate: (id: string, name: string) => invoke<void>("market_update", { id, name }),
 
-  // A session and its chat with Claude Code.
   replay: (root: string, id: string) => invoke<SessionEntry[]>("replay", { root, id }),
   newSessionId: () => invoke<string>("new_session_id"),
   openSession: (root: string, id: string | null) => invoke<string>("open_session", { root, id }),
@@ -110,11 +117,9 @@ export const commands = {
   chatStop: (sessionId: string) => invoke<void>("chat_stop", { sessionId }),
   chatAnswer: (sessionId: string, request: string, decision: Decision) => invoke<void>("chat_answer", { sessionId, request, decision }),
   chatBusy: (sessionId: string) => invoke<boolean>("chat_busy", { sessionId }),
-  // The background tasks still running in a session.
   chatTasks: (sessionId: string) => invoke<string[]>("chat_tasks", { sessionId }),
 
   workspaces: () => invoke<Workspace[]>("workspaces"),
-  // A title the model suggests once a session has something to name, if it has none yet.
   titleSession: (root: string, id: string) => invoke<string | null>("title_session", { root, id }),
   renameSession: (root: string, id: string, title: string) => invoke<string>("rename_session", { root, id, title }),
   archiveSession: (root: string, id: string, archived: boolean) => invoke<void>("archive_session", { root, id, archived }),
@@ -122,12 +127,10 @@ export const commands = {
   isolateSession: (root: string, id: string) => invoke<Isolation>("isolate_session", { root, id }),
 
   artifacts: () => invoke<Artifact[]>("artifacts"),
-  // A data: URL, ready for an <img>.
   artifactData: (path: string) => invoke<string>("artifact_data", { path }),
   artifactText: (path: string) => invoke<string>("artifact_text", { path }),
   openExternal: (target: string) => invoke<void>("open_external", { target }),
 
-  // The address a page of the project is served at, for the browser.
   previewUrl: (root: string, path: string) => invoke<string>("preview_url", { root, path }),
   browserOpen: (url: string, frame: Frame, zoom: number) => invoke<void>("browser_open", { url, frame, zoom }),
   browserPlace: (frame: Frame, zoom: number) => invoke<void>("browser_place", { frame, zoom }),
@@ -139,15 +142,19 @@ export const commands = {
   terminalResize: (id: number, cols: number, rows: number) => invoke<void>("terminal_resize", { id, cols, rows }),
   terminalClose: (id: number) => invoke<void>("terminal_close", { id }),
   terminalScreen: (ask: number, text: string) => invoke<void>("terminal_screen", { ask, text }),
-  dictationStart: (language: string, handsFree: boolean) => invoke<number>("dictation_start", { language, handsFree }),
-  dictationStop: () => invoke<void>("dictation_stop"),
-  dictationSettings: (cause: DictationCause) => invoke<void>("dictation_settings", { cause }),
+  voiceStart: (language: string) => invoke<number>("voice_start", { language }),
+  voiceTest: () => invoke<number>("voice_test"),
+  voiceStop: () => invoke<void>("voice_stop"),
+  voiceModel: () => invoke<VoiceModel>("voice_model"),
+  voicePrepare: () => invoke<void>("voice_prepare"),
+  voiceMicrophones: () => invoke<Microphone[]>("voice_microphones"),
+  voiceMicrophone: () => invoke<string | null>("voice_microphone"),
+  voiceChoose: (microphone: string | null) => invoke<void>("voice_choose", { microphone }),
 
   folder: (root: string, path: string) => invoke<Entry[]>("folder", { root, path }),
   findFiles: (root: string, needle: string) => invoke<Entry[]>("find_files", { root, needle }),
   changes: (root: string) => invoke<Changes | null>("changes", { root }),
   openFile: (root: string, path: string) => invoke<Opened>("open_file", { root, path }),
-  // Files or pictures to send with a message: pictures come back as data.
   attach: (root: string, paths: string[]) => invoke<Attachments>("attach", { root, paths }),
   stageFile: (name: string, data: string) => invoke<AttachedFile>("stage_file", { name, data }),
   repo: (root: string) => invoke<Repo | null>("repo", { root }),
@@ -158,10 +165,20 @@ export const commands = {
   lastProject: () => invoke<string | null>("last_project"),
   taskOutput: (path: string) => invoke<string>("task_output", { path }),
   stopTask: (sessionId: string, taskId: string) => invoke<void>("chat_stop_task", { sessionId, taskId }),
+
+  barOpen: () => invoke<void>("bar_open"),
+  barHide: () => invoke<void>("bar_hide"),
+  barFit: (height: number) => invoke<void>("bar_fit", { height }),
+  barPin: (on: boolean) => invoke<void>("bar_pin", { on }),
+  barDrag: () => invoke<void>("bar_drag"),
+  barHandOver: (hand: HandOver) => invoke<void>("bar_hand_over", { hand }),
+  barContext: () => invoke<BarContext>("bar_context"),
+  barClip: () => invoke<string | null>("bar_clip"),
+  barShot: () => invoke<Shot | null>("bar_shot"),
+  barProjects: () => invoke<BarProject[]>("bar_projects"),
+  barWatching: (session: string | null) => emitTo<Watching>(HOST, "bar-watching", { session }),
 };
 
-// One listener per channel, registered by the store that owns it, never by a
-// component: StrictMode mounts twice and would hear everything twice.
 export const events = {
   claudeCode: (heard: (progress: ClaudeCodeProgress) => void): Promise<UnlistenFn> =>
     listen<ClaudeCodeProgress>("claude-code", ({ payload }) => heard(payload)),
@@ -170,12 +187,15 @@ export const events = {
     listen<TerminalHeard>("terminal", ({ payload }) => heard(payload)),
   terminalRead: (heard: (reading: TerminalReading) => void): Promise<UnlistenFn> =>
     listen<TerminalReading>("terminal-read", ({ payload }) => heard(payload)),
-  dictation: (heard: (what: DictationHeard) => void): Promise<UnlistenFn> =>
-    listen<DictationHeard>("dictation", ({ payload }) => heard(payload)),
+  voice: (heard: (what: VoiceHeard) => void): Promise<UnlistenFn> => listen<VoiceHeard>("voice", ({ payload }) => heard(payload)),
   welcome: (heard: (done: number, total: number) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("welcome", ({ payload }) => heard(payload.done, payload.total)),
   update: (heard: (stage: UpdateStage) => void): Promise<UnlistenFn> =>
     listen<{ version: string; stage: UpdateStage }>("update", ({ payload }) => heard(payload.stage)),
   chat: (heard: (session: string, event: ChatEvent) => void): Promise<UnlistenFn> =>
     listen<{ session: string; event: ChatEvent }>("chat", ({ payload }) => heard(payload.session, payload.event)),
+  barOpen: (heard: (opened: BarOpened) => void): Promise<UnlistenFn> => listen<BarOpened>("bar-open", ({ payload }) => heard(payload)),
+  barHandOver: (heard: (hand: HandOver) => void): Promise<UnlistenFn> => listen<HandOver>("bar-hand-over", ({ payload }) => heard(payload)),
+  barWatching: (heard: (session: string | null) => void): Promise<UnlistenFn> =>
+    listen<Watching>("bar-watching", ({ payload }) => heard(payload.session)),
 };

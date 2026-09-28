@@ -1,17 +1,71 @@
-// What Rust sends, mirrored by hand from its serde types until they are
-// generated. Each one names the type it follows.
+import type { Language } from "../shared/i18n";
+import type { Look } from "../shared/look";
 
-/** profile::Profile, rust/sens-app/src/profile.rs */
+declare global {
+  interface Window {
+    __SENS_HIDDEN__?: boolean;
+  }
+}
+
 export interface Profile {
   name: string;
   checkUpdates: boolean;
   welcomed: boolean;
   seen: string;
   notify: boolean;
-  wake: boolean;
+  keepInTray?: boolean;
+  startWithWindows?: boolean;
 }
 
-/** update::Release, rust/sens-app/src/update.rs */
+export interface Front {
+  app: string;
+  title: string;
+}
+
+export interface Copied {
+  preview: string;
+  chars: number;
+}
+
+export interface BarContext {
+  front: Front | null;
+  clip: Copied | null;
+}
+
+export interface Shot {
+  mediaType: "image/png";
+  data: string;
+  width: number;
+  height: number;
+}
+
+export interface BarProject {
+  root: string;
+  name: string;
+}
+
+export interface HandOver {
+  root: string;
+  session: string;
+  text: string;
+}
+
+export interface BarOpened {
+  look: Look;
+  language: Language | null;
+  front: Front | null;
+  pinned: boolean;
+}
+
+export interface Watching {
+  session: string | null;
+}
+
+export interface Shortcut {
+  keys: string;
+  taken: boolean;
+}
+
 export interface Release {
   version: string;
   notes: string;
@@ -19,10 +73,8 @@ export interface Release {
   size: number;
 }
 
-/** update::Stage, rust/sens-app/src/update.rs: where an install is */
 export type UpdateStage = "downloading" | "verifying" | "installing";
 
-/** update::Check, rust/sens-app/src/update.rs */
 export interface UpdateCheck {
   latest: Release | null;
   installable: boolean;
@@ -36,10 +88,8 @@ export interface News {
   published: string;
 }
 
-/** providers::Method, rust/sens-app/src/providers.rs */
 export type Method = "subscription" | "console" | "apiKey";
 
-/** account::Account, rust/sens-agent/src/account.rs */
 export interface Account {
   billing: "subscription" | "noPlan" | "elsewhere" | "signedOut";
   plan: string;
@@ -47,7 +97,6 @@ export interface Account {
   email: string;
 }
 
-/** providers::State, rust/sens-app/src/providers.rs */
 export interface ProviderState {
   id: string;
   vendor: string;
@@ -60,14 +109,12 @@ export interface ProviderState {
   installed: boolean;
 }
 
-/** capabilities::Skill, rust/sens-app/src/capabilities.rs */
 export interface Skill {
   name: string;
   description: string;
   enabled: boolean;
 }
 
-/** capabilities::Plugin */
 export interface Plugin {
   name: string;
   description: string;
@@ -75,7 +122,6 @@ export interface Plugin {
   enabled: boolean;
 }
 
-/** capabilities::Server: `url` is set for remote servers, `command` for local ones */
 export interface Server {
   name: string;
   command: string;
@@ -86,7 +132,6 @@ export interface Server {
   enabled: boolean;
 }
 
-/** capabilities::Provenance: where an installed capability came from */
 export interface Provenance {
   listing: string;
   revision: string;
@@ -94,7 +139,6 @@ export interface Provenance {
   installedAt: number;
 }
 
-/** capabilities::Capabilities, keyed `kind:name` in `origins` */
 export interface Capabilities {
   skills: Skill[];
   servers: Server[];
@@ -102,7 +146,6 @@ export interface Capabilities {
   origins: Record<string, Provenance>;
 }
 
-/** capabilities::NewServer */
 export interface NewServer {
   name: string;
   command: string;
@@ -110,7 +153,6 @@ export interface NewServer {
   env: Record<string, string>;
 }
 
-/** market::Listing, rust/sens-app/src/market.rs */
 export interface Listing {
   id: string;
   kind: "plugin" | "skill" | "connector";
@@ -130,27 +172,23 @@ export interface Listing {
   revision: string;
 }
 
-/** market::SourceState */
 export interface SourceState {
   id: string;
   fetchedAt: number;
   error: string;
 }
 
-/** market::Market */
 export interface Market {
   listings: Listing[];
   sources: SourceState[];
 }
 
-/** market::Part */
 export interface Part {
   name: string;
   path: string;
   description: string;
 }
 
-/** market::Parts: what a listing brings and what it runs */
 export interface Parts {
   skills: Part[];
   commands: Part[];
@@ -161,7 +199,6 @@ export interface Parts {
   bin: string[];
 }
 
-/** market::Need: a value the install asks for */
 export interface Need {
   name: string;
   description: string;
@@ -170,7 +207,6 @@ export interface Need {
   default: string;
 }
 
-/** market::Detail */
 export interface Detail {
   listing: Listing;
   readme: string;
@@ -180,7 +216,6 @@ export interface Detail {
   needs: Need[];
 }
 
-/** artifacts::Artifact, rust/sens-app/src/artifacts.rs: something a session left */
 export interface Artifact {
   kind: "image" | "file" | "link";
   root: string;
@@ -193,12 +228,10 @@ export interface Artifact {
   bytes: number | null;
 }
 
-/** files::Entry, rust/sens-app/src/files.rs: one row of a folder */
 export interface Entry {
   name: string;
   path: string;
   dir: boolean;
-  // Matched by .gitignore: shown, but dimmed.
   ignored: boolean;
 }
 
@@ -208,16 +241,11 @@ export type Opened =
   | { kind: "tooBig"; bytes: number; cap: number }
   | { kind: "binary"; bytes: number };
 
-/** git::Changes, rust/sens-app/src/git.rs: null outside a repository */
 export interface Changes {
   diff: string;
   fresh: string[];
 }
 
-/**
- * The fields of an agent event (rust/sens-agent) that the tasks panel reads.
- * The chat gets the whole event; `kind` says which fields are there.
- */
 export interface AgentEvent {
   kind: string;
   id?: string;
@@ -238,14 +266,12 @@ export interface AgentEvent {
   millis?: number;
 }
 
-/** claude_code::Progress, the payload of the "claude-code" event */
 export interface ClaudeCodeProgress {
   stage: "downloading" | "verifying" | "installing" | "updating";
   done: number;
   total: number;
 }
 
-/** session::Summary, rust/sens-agent/src/session.rs */
 export interface SessionSummary {
   id: string;
   title: string;
@@ -254,7 +280,6 @@ export interface SessionSummary {
   archived: boolean;
 }
 
-/** projects::Workspace, rust/sens-app/src/projects.rs: a project Sens worked in */
 export interface Workspace {
   root: string;
   name: string;
@@ -263,7 +288,6 @@ export interface Workspace {
   trusted: boolean;
 }
 
-/** browser::Frame, rust/sens-app/src/browser.rs: where the page goes, in window pixels */
 export interface Frame {
   x: number;
   y: number;
@@ -271,7 +295,6 @@ export interface Frame {
   height: number;
 }
 
-/** browser::Heard, rust/sens-app/src/browser.rs, the payload of the "browser" event */
 export type Heard =
   | { kind: "loading" | "loaded"; url: string }
   | { kind: "titled"; title: string }
@@ -291,19 +314,32 @@ export interface TerminalReading {
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };
 
-export type DictationCause = "speech" | "microphone" | "unsupported" | "other";
+export type VoiceCause = "microphone" | "model" | "other";
 
-export interface DictationRefusal {
-  cause: DictationCause;
+export interface VoiceRefusal {
+  cause: VoiceCause;
   message: string;
 }
 
-export type DictationHeard =
+export type VoiceHeard =
+  | { kind: "level"; id: number; level: number }
   | { kind: "guess"; id: number; text: string }
   | { kind: "phrase"; id: number; text: string }
-  | { kind: "ended"; id: number; refusal: DictationRefusal | null }
-  | { kind: "woke" }
-  | { kind: "slept"; refusal: DictationRefusal };
+  | { kind: "ended"; id: number; refusal: VoiceRefusal | null }
+  | { kind: "fetching"; done: number; total: number }
+  | { kind: "ready" }
+  | { kind: "unfetched"; message: string };
+
+export interface VoiceModel {
+  ready: boolean;
+  fetching: boolean;
+  bytes: number;
+}
+
+export interface Microphone {
+  name: string;
+  default: boolean;
+}
 
 export interface Todo {
   content: string;
@@ -318,7 +354,6 @@ export interface Question {
   options?: { label: string; description?: string }[];
 }
 
-// What a tool was called with, by the fields the chat reads.
 export interface ToolInput {
   file_path?: string;
   notebook_path?: string;
@@ -340,7 +375,6 @@ export interface ToolInput {
   [field: string]: unknown;
 }
 
-// What Claude Code adds to a tool's result, by the fields the chat reads.
 export interface ToolDetail {
   stdout?: string;
   stderr?: string;
@@ -353,7 +387,6 @@ export interface ToolDetail {
   [field: string]: unknown;
 }
 
-/** chat::Link, rust/sens-agent/src/chat.rs */
 export interface Link {
   url: string;
   title: string;
@@ -416,7 +449,6 @@ export interface Slash {
   hint: string;
 }
 
-/** chat::Event, rust/sens-agent/src/chat.rs; task events go to the tasks panel as AgentEvent */
 export type ChatEvent =
   | { kind: "started"; model: string }
   | { kind: "delta"; thinking: boolean; text: string }
@@ -431,7 +463,10 @@ export type ChatEvent =
   | { kind: "taskStarted" | "taskProgress" | "taskEnded" }
   | { kind: "compacted"; before: number; auto: boolean }
   | Finished
-  | { kind: "failed"; reason: string };
+  | { kind: "failed"; reason: string }
+  | { kind: "lockedOut"; reason: Lockout };
+
+export type Lockout = "signIn" | "billing";
 
 export interface Isolation {
   path: string;
@@ -439,7 +474,6 @@ export interface Isolation {
   base: string;
 }
 
-/** session::Entry, rust/sens-agent/src/session.rs: a session as it was saved */
 export type SessionEntry =
   | { kind: "opened"; at: number; root: string }
   | ({ kind: "isolated"; at: number } & Isolation)
@@ -447,8 +481,6 @@ export type SessionEntry =
   | { kind: "agent"; at: number; event: ChatEvent }
   | { kind: "titled"; at: number; title: string };
 
-// How a question is answered: allowed or not, with a mode or a message for
-// the model, and the answers to a form.
 export interface Decision {
   allow: boolean;
   remember?: boolean;
@@ -457,14 +489,12 @@ export interface Decision {
   answers?: Answers;
 }
 
-/** chat::Message, rust/sens-agent/src/chat.rs */
 export interface Message {
   text: string;
   files: string[];
   images: { mediaType: string; data: string }[];
 }
 
-/** chat::Settings, rust/sens-agent/src/chat.rs */
 export interface Settings {
   provider: string;
   model: string;
@@ -473,14 +503,12 @@ export interface Settings {
   mode: string;
 }
 
-/** catalog::Provider, rust/sens-agent/src/catalog.rs */
 export interface Provider {
   id: string;
   vendor: string;
   label: string;
 }
 
-/** catalog::Card, rust/sens-agent/src/catalog.rs: a model as the picker lists it */
 export interface Card {
   id: string;
   label: string;
@@ -491,7 +519,6 @@ export interface Card {
   thinking: "always" | "toggle";
 }
 
-/** artifacts::Attached, rust/sens-app/src/artifacts.rs */
 export type AttachedFile = { kind: "file"; path: string; name: string; bytes: number; outside: boolean };
 
 export type Attached =
@@ -504,13 +531,11 @@ export interface Refused {
   why: "missing" | "unreadable" | "tooBig" | "project";
 }
 
-/** artifacts::Attachments, rust/sens-app/src/artifacts.rs */
 export interface Attachments {
   items: Attached[];
   refused: Refused[];
 }
 
-/** git::Repo, rust/sens-app/src/git.rs */
 export interface Repo {
   branch: string;
   detached: boolean;

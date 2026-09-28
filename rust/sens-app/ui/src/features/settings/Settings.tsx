@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { showView } from "../../app/session";
+import { commands, events } from "../../ipc/commands";
+import type { Shortcut } from "../../ipc/types";
 import { looks } from "../../shared/copy";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
@@ -8,18 +10,18 @@ import { LanguagePicker } from "../../shared/LanguagePicker";
 import { accentName, look, modeName, type Look } from "../../shared/look";
 import { AccentPicker, ModePicker } from "../../shared/LookPicker";
 import { Mark } from "../../shared/Mark";
-import { setWake } from "../composer/dictation";
 import { chooseLook } from "../look/store";
 import { useLanguageChoice } from "../look/useLanguageChoice";
 import { setNotices } from "../notify/store";
 import { profile, saveProfileName } from "../profile/store";
 import { checkUpdates, setAutomatic, updateState, updates } from "../updates/store";
 import { openUpdate } from "../updates/UpdatePanel";
+import { chooseMicrophone, loadMicrophones, percentOf, prepareVoice, voice } from "../voice/store";
 import { openWelcome, type Step } from "../welcome/store";
 import { t } from "./copy";
 import { ProvidersSection } from "./ProvidersSection";
 import { settingsSheet } from "./sheet";
-import { SECTIONS, closeSettings, enterSettings, settings, settingsClosed, showSection, type Section } from "./store";
+import { SECTIONS, closeSettings, enterSettings, setResident, settings, settingsClosed, showSection, type Section } from "./store";
 
 export function SettingsDialog() {
   const open = useStore(settingsSheet, (s) => s.open);
@@ -216,6 +218,7 @@ function GeneralSection() {
       </div>
       <UpdatesBlock />
       <NoticesBlock />
+      <ResidentBlock />
       <VoiceBlock />
       <WelcomeBlock />
     </>
@@ -246,6 +249,7 @@ function WelcomeBlock() {
 
 function UpdatesBlock() {
   const known = useStore(updates);
+  const automatic = useStore(profile, (s) => s.person.checkUpdates !== false);
   const { current, latest, installable, checking, fault } = known;
   const state = updateState(known);
   const version = [current && `Sens ${current}`, !installable && t.devBuild].filter(Boolean).join(" · ");
@@ -273,78 +277,21 @@ function UpdatesBlock() {
           {t.whatsNew}
         </button>
       </div>
-      <UpdateSwitch />
+      <Switch id="settings-update-check" on={automatic} save={setAutomatic}>
+        {t.checkAtStart}
+      </Switch>
     </div>
   );
 }
 
-function NoticesBlock() {
-  const on = useStore(profile, (s) => s.person.notify !== false);
+function Switch({ id, on, save, children }: { id: string; on: boolean; save: (on: boolean) => Promise<unknown>; children: ReactNode }) {
   const [fault, setFault] = useState("");
 
   async function flip() {
     setFault("");
     try {
-      await setNotices(!on);
+      await save(!on);
     } catch (reason) {
-      setFault(String(reason));
-    }
-  }
-
-  return (
-    <div className="pair">
-      <span className="label">{t.notices}</span>
-      <div className="settings-switch">
-        <button className="switch" id="settings-notify" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-notify">{t.noticesSwitch}</label>
-      </div>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </div>
-  );
-}
-
-function VoiceBlock() {
-  const on = useStore(profile, (s) => s.person.wake === true);
-  const [fault, setFault] = useState("");
-
-  async function flip() {
-    setFault("");
-    try {
-      await setWake(!on);
-    } catch (reason) {
-      setFault(String(reason));
-    }
-  }
-
-  return (
-    <div className="pair">
-      <span className="label">{t.voice}</span>
-      <div className="settings-switch">
-        <button className="switch" id="settings-wake" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-wake">{t.wakeSwitch}</label>
-      </div>
-      <p className="note">{t.wakeNote}</p>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </div>
-  );
-}
-
-function UpdateSwitch() {
-  const [on, setOn] = useState(() => profile.getState().person.checkUpdates !== false);
-  const [fault, setFault] = useState("");
-
-  async function flip() {
-    const next = !on;
-    setOn(next);
-    setFault("");
-    try {
-      await setAutomatic(next);
-    } catch (reason) {
-      setOn(!next);
       setFault(String(reason));
     }
   }
@@ -352,12 +299,158 @@ function UpdateSwitch() {
   return (
     <>
       <div className="settings-switch">
-        <button className="switch" id="settings-update-check" role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor="settings-update-check">{t.checkAtStart}</label>
+        <button className="switch" id={id} role="switch" aria-checked={on} onClick={flip} />
+        <label htmlFor={id}>{children}</label>
       </div>
       <p className="note fault" role="alert" hidden={!fault}>
         {fault}
       </p>
     </>
+  );
+}
+
+function NoticesBlock() {
+  const on = useStore(profile, (s) => s.person.notify !== false);
+  return (
+    <div className="pair">
+      <span className="label">{t.notices}</span>
+      <Switch id="settings-notify" on={on} save={setNotices}>
+        {t.noticesSwitch}
+      </Switch>
+    </div>
+  );
+}
+
+function ResidentBlock() {
+  const tray = useStore(profile, (s) => s.person.keepInTray !== false);
+  const startup = useStore(profile, (s) => s.person.startWithWindows !== false);
+  const [shortcut, setShortcut] = useState<Shortcut | null>(null);
+
+  useEffect(() => {
+    commands.shortcutState().then(setShortcut, () => {});
+  }, []);
+
+  return (
+    <div className="pair">
+      <span className="label">{t.resident}</span>
+      <Switch id="settings-tray" on={tray} save={(on) => setResident("keepInTray", on)}>
+        {t.keepInTray}
+      </Switch>
+      <p className="note" hidden={!tray}>
+        {t.quitFromTray}
+      </p>
+      <Switch id="settings-startup" on={startup} save={(on) => setResident("startWithWindows", on)}>
+        {t.startWithWindows}
+      </Switch>
+      {shortcut && (
+        <>
+          <div className="settings-switch">
+            <span>{t.quickBar}</span>
+            <span className="settings-keys keycaps">
+              {shortcut.keys.split("+").map((key) => (
+                <kbd key={key}>{key}</kbd>
+              ))}
+            </span>
+          </div>
+          <p className="note fault" role="status" hidden={!shortcut.taken}>
+            {t.shortcutTaken}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+const MEBIBYTE = 1024 * 1024;
+
+function VoiceBlock() {
+  const known = useStore(voice);
+  const [testing, setTesting] = useState<number | null>(null);
+  const [level, setLevel] = useState(0);
+  const [fault, setFault] = useState("");
+  const listening = useRef<number | null>(null);
+
+  useEffect(() => {
+    loadMicrophones().catch((reason) => setFault(String(reason)));
+    return () => {
+      if (listening.current !== null) void commands.voiceStop();
+    };
+  }, []);
+
+  useEffect(() => {
+    listening.current = testing;
+    if (testing === null) return;
+    const heard = events.voice((what) => {
+      if (!("id" in what) || what.id !== testing) return;
+      if (what.kind === "level") setLevel(what.level);
+      if (what.kind === "ended") {
+        setTesting(null);
+        setLevel(0);
+        if (what.refusal) setFault(what.refusal.message);
+      }
+    });
+    return () => void heard.then((unlisten) => unlisten());
+  }, [testing]);
+
+  async function test() {
+    setFault("");
+    if (testing !== null) return void commands.voiceStop();
+    try {
+      setTesting(await commands.voiceTest());
+    } catch (reason) {
+      setFault(typeof reason === "object" && reason !== null && "message" in reason ? String(reason.message) : String(reason));
+    }
+  }
+
+  async function pick(chosen: string) {
+    setFault("");
+    try {
+      await chooseMicrophone(chosen || null);
+    } catch (reason) {
+      setFault(String(reason));
+    }
+  }
+
+  const fallback = known.microphones.find((one) => one.default)?.name ?? "";
+  const missing = known.chosen !== null && !known.microphones.some((one) => one.name === known.chosen);
+  const model = known.ready
+    ? t.modelReady(Math.round(known.total / MEBIBYTE))
+    : known.fetching
+      ? t.modelFetching(percentOf(known.done, known.total))
+      : known.fault || t.modelMissing;
+
+  return (
+    <div className="pair">
+      <span className="label">{t.voice}</span>
+      <div className="settings-row">
+        <select className="field" id="settings-microphone" aria-label={t.microphone} value={known.chosen ?? ""} onChange={(event) => void pick(event.target.value)}>
+          <option value="">{t.windowsDefault(fallback)}</option>
+          {known.microphones.map((one) => (
+            <option key={one.name} value={one.name}>
+              {one.name}
+            </option>
+          ))}
+          {missing && <option value={known.chosen ?? ""}>{known.chosen}</option>}
+        </select>
+        <button className="quiet" id="settings-microphone-test" aria-pressed={testing !== null} onClick={() => void test()}>
+          {testing !== null ? t.stopTest : t.testMicrophone}
+        </button>
+      </div>
+      <div className="voice-level" role="meter" aria-label={t.level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)} hidden={testing === null}>
+        <span style={{ width: `${Math.round(level * 100)}%` }} />
+      </div>
+      <p className="note">{t.voiceNote}</p>
+      <div className="settings-row">
+        <p className={known.fault && !known.ready ? "note fault" : "note"} role="status">
+          {model}
+        </p>
+        <button className="quiet" hidden={known.ready || known.fetching} onClick={() => void prepareVoice()}>
+          {t.modelFetch}
+        </button>
+      </div>
+      <p className="note fault" role="alert" hidden={!fault}>
+        {fault}
+      </p>
+    </div>
   );
 }

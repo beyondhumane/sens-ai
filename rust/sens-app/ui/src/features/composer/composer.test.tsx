@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Card, DictationHeard } from "../../ipc/types";
+import type { Card, VoiceHeard } from "../../ipc/types";
 import { dialog } from "../../app/modal";
 import { chooseFolder } from "../../app/session";
 import { blank, warm as warmChat } from "../chat/store";
 import { focused } from "../panes/store";
-import { accountLine, choose, loadCatalog, models, noteLimits } from "../models/store";
+import { accountLine, choose, loadCatalog, models, noteLimits, noteLockout, readAccount } from "../models/store";
 import { project } from "../project/store";
 import { settingsSheet } from "../settings/sheet";
 import { settings } from "../settings/store";
+import { voice } from "../voice/store";
 import { Composer } from "./Composer";
-import { BYPASS, composer, currentSettings, readRepo, readTrust, switchTo } from "./store";
+import { BYPASS, composer, currentSettings, pickEffort, readRepo, readTrust, switchTo, toggleThinking } from "./store";
 
 const ipc = vi.hoisted(() => ({
   commands: {
@@ -31,18 +32,20 @@ const ipc = vi.hoisted(() => ({
     trustProject: vi.fn(),
     projectTrusted: vi.fn(),
     findFiles: vi.fn(),
-    dictationStart: vi.fn(),
-    dictationStop: vi.fn(),
-    dictationSettings: vi.fn(),
+    voiceStart: vi.fn(),
+    voiceStop: vi.fn(),
+    voicePrepare: vi.fn(),
+    providersState: vi.fn(),
+    providerSignIn: vi.fn(),
   },
-  listeners: new Set<(what: DictationHeard) => void>(),
+  listeners: new Set<(what: VoiceHeard) => void>(),
 }));
 
 vi.mock("../../ipc/commands", () => ({
   commands: ipc.commands,
   events: {
     claudeCode: () => Promise.resolve(() => {}),
-    dictation: (hear: (what: DictationHeard) => void) => {
+    voice: (hear: (what: VoiceHeard) => void) => {
       ipc.listeners.add(hear);
       return Promise.resolve(() => void ipc.listeners.delete(hear));
     },
@@ -69,6 +72,7 @@ beforeEach(async () => {
   localStorage.clear();
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.listeners.clear();
+  voice.setState({ ready: true, fetching: false, done: 0, total: 59_707_625, fault: "" });
   ipc.commands.providers.mockResolvedValue([{ id: "claude", vendor: "Anthropic", label: "Claude Code" }]);
   ipc.commands.models.mockResolvedValue([card("claude-sonnet"), card("claude-opus", { thinking: "always" }), card("claude-haiku", { latest: false, efforts: [] })]);
   ipc.commands.claudeAccount.mockResolvedValue({ billing: "subscription", plan: "max", source: "claude.ai", email: "ada@example.com" });
@@ -278,6 +282,139 @@ describe("the composer", () => {
   });
 });
 
+describe("a lost sign-in", () => {
+  const claudeCode = { id: "claude", vendor: "Anthropic", label: "Claude Code", method: "subscription", keyHint: "", version: "2.1.0", account: null, error: "", installed: true };
+
+  it("asks to sign in above the message, and goes once Claude Code is signed in again", async () => {
+    render(<Composer />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    act(() => noteLockout("signIn"));
+    const notice = screen.getByRole("alert");
+    expect(notice.textContent).toContain("Tu sesión de Claude se ha cerrado");
+    expect(notice.nextElementSibling?.className).toBe("workspace");
+    ipc.commands.providersState.mockResolvedValue([claudeCode]);
+    await act(async () => fireEvent.click(within(notice).getByRole("button", { name: "Iniciar sesión" })));
+    await act(async () => new Promise((settle) => setTimeout(settle)));
+    expect(ipc.commands.providerSignIn).toHaveBeenCalledWith("subscription");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("stays while the sign-in is not finished", async () => {
+    render(<Composer />);
+    act(() => noteLockout("billing"));
+    expect(screen.getByRole("alert").textContent).toContain("Claude no puede usar tu suscripción");
+    ipc.commands.providersState.mockResolvedValue([claudeCode]);
+    ipc.commands.providerSignIn.mockRejectedValue("no terminaste el inicio de sesión");
+    await act(async () => fireEvent.click(button("Iniciar sesión")));
+    await act(async () => new Promise((settle) => setTimeout(settle)));
+    expect(screen.getByRole("alert").textContent).toContain("Claude no puede usar tu suscripción");
+  });
+
+  it("shows while Claude Code is signed out, and sends the trouble of a key to Providers", async () => {
+    ipc.commands.claudeAccount.mockResolvedValue({ billing: "signedOut", plan: "", source: "", email: "" });
+    await readAccount();
+    render(<Composer />);
+    expect(screen.getByRole("alert").textContent).toContain("Tu sesión de Claude se ha cerrado");
+    act(() => models.setState({ account: { billing: "elsewhere", plan: "", source: "ANTHROPIC_API_KEY", email: "" }, lockout: "billing" }));
+    expect(screen.getByRole("alert").textContent).toContain("La cuenta de la clave de API no tiene saldo");
+    await act(async () => fireEvent.click(button("Abrir Proveedores")));
+    expect(settingsSheet.getState().open).toBe(true);
+    expect(settings.getState().section).toBe("providers");
+    act(() => settingsSheet.setState({ open: false }));
+  });
+});
+
+describe("a change mid-session that reads the conversation again", () => {
+  const ranOn = (model: string, ranWith: { effort: string; thinking: boolean } | null = { effort: "medium", thinking: true }) =>
+    act(() => focused().chat.setState({ ranOn: model, ranWith, context: { used: 31_400, window: 200_000 } }));
+
+  it("names another model, and goes back to the model of the session", () => {
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => choose("claude", "claude-opus"));
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Cambiar de modelo a mitad de sesión gasta más de tu plan");
+    expect(notice.textContent).toContain("Esta sesión iba con Sonnet. Con Opus, el próximo mensaje vuelve a leer toda la conversación (31,4k tokens) sin caché");
+    fireEvent.click(within(notice).getByRole("button", { name: "Deshacer" }));
+    expect(focused().desk.getState().choice.model).toBe("claude-sonnet");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("names thinking and effort changed together, and undoes both", () => {
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    act(() => toggleThinking());
+    expect(screen.getByRole("status").textContent).toContain("Cambiar el razonamiento a mitad de sesión gasta más de tu plan");
+    expect(screen.getByRole("status").textContent).toContain("Esta sesión iba con razonamiento activado. Con razonamiento desactivado,");
+    act(() => pickEffort(2));
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Estos cambios a mitad de sesión gastan más de tu plan");
+    expect(notice.textContent).toContain("Esta sesión iba con razonamiento activado y esfuerzo medio. Con razonamiento desactivado y esfuerzo alto,");
+    fireEvent.click(within(notice).getByRole("button", { name: "Deshacer" }));
+    expect(currentSettings()).toMatchObject({ model: "claude-sonnet", effort: "medium", thinking: true });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("knows what the last message went with, and warns when the effort changes after it", async () => {
+    render(<Composer />);
+    fireEvent.change(field(), { target: { value: "Hola" } });
+    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
+    act(() => focused().chat.setState({ busy: false, stopping: false }));
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => pickEffort(0));
+    expect(screen.getByRole("status").textContent).toContain("Cambiar el esfuerzo a mitad de sesión gasta más de tu plan");
+  });
+
+  it("recommends a new session, which keeps the model chosen", async () => {
+    const { draft } = await import("../../app/session");
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    act(() => choose("claude", "claude-opus"));
+    fireEvent.click(button("Sesión nueva"));
+    expect(draft).toHaveBeenCalledWith("C:/demo", focused());
+    act(() => blank(""));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(focused().desk.getState().choice.model).toBe("claude-opus");
+  });
+
+  it("stays away for a new session, the same model with another context window, and knobs of a session only read back", () => {
+    render(<Composer />);
+    act(() => choose("claude", "claude-opus"));
+    expect(screen.queryByRole("status")).toBeNull();
+    ranOn("claude-opus[1m]");
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => choose("claude", "claude-sonnet"));
+    ranOn("claude-sonnet", null);
+    act(() => pickEffort(0));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("the height of the message", () => {
+  it("is measured only while the chat shows, and again when it shows up", () => {
+    const watchers: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class { constructor(then: () => void) { watchers.push(then); } observe() {} disconnect() {} });
+    let shown = false;
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(() => (shown ? [{}] : []) as unknown as DOMRectList);
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get: () => 52 });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "clientWidth", { configurable: true, get: () => (shown ? 600 : 0) });
+    try {
+      render(<Composer />);
+      act(() => focused().desk.setState({ text: "Una línea\ny otra" }));
+      expect((field() as HTMLTextAreaElement).style.height).toBe("");
+      shown = true;
+      act(() => watchers.forEach((then) => then()));
+      expect((field() as HTMLTextAreaElement).style.height).toBe("52px");
+    } finally {
+      vi.restoreAllMocks();
+      delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+      delete (HTMLTextAreaElement.prototype as { clientWidth?: number }).clientWidth;
+      vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    }
+  });
+});
+
 describe("suggestions while writing", () => {
   const offered = [
     { name: "compact", description: "Resume la conversación", hint: "<instrucciones>" },
@@ -381,6 +518,84 @@ describe("the context meter", () => {
   });
 });
 
+describe("dictation", () => {
+  const hear = (what: VoiceHeard) => act(() => [...ipc.listeners].forEach((listener) => listener(what)));
+  const written = () => (field() as HTMLTextAreaElement).value;
+  const lastNotice = () => focused().chat.getState().turns.at(-1);
+
+  it("writes what the microphone of Sens hears, phrase by phrase, and waits for the last one after stopping", async () => {
+    ipc.commands.voiceStart.mockResolvedValue(5);
+    render(<Composer />);
+    fireEvent.change(field(), { target: { value: "Primero " } });
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(ipc.commands.voiceStart).toHaveBeenCalledWith("es");
+    const microphone = button("Parar el dictado");
+    expect(microphone.getAttribute("aria-pressed")).toBe("true");
+
+    hear({ kind: "level", id: 5, level: 0.6 });
+    expect(microphone.style.getPropertyValue("--level")).toBe("0.6");
+    hear({ kind: "guess", id: 5, text: "Añade un test para el formu" });
+    expect(written()).toBe("Primero Añade un test para el formu");
+    hear({ kind: "guess", id: 5, text: "Añade un test para el formulario de" });
+    expect(written()).toBe("Primero Añade un test para el formulario de");
+    hear({ kind: "phrase", id: 5, text: "Añade un test para el formulario de contacto." });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto.");
+    hear({ kind: "phrase", id: 4, text: "de otra vez" });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto.");
+
+    await act(async () => fireEvent.click(microphone));
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+    expect(button("Transcribiendo…").getAttribute("aria-busy")).toBe("true");
+    hear({ kind: "phrase", id: 5, text: "Revisa el componente del botón." });
+    hear({ kind: "ended", id: 5, refusal: null });
+    expect(written()).toBe("Primero Añade un test para el formulario de contacto. Revisa el componente del botón.");
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+    expect(document.activeElement).toBe(field());
+  });
+
+  it("says the voice model is on its way instead of listening before it arrives", async () => {
+    voice.setState({ ready: false, fetching: false });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(ipc.commands.voicePrepare).toHaveBeenCalled();
+    expect(ipc.commands.voiceStart).not.toHaveBeenCalled();
+    expect(lastNotice()).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("una sola vez")] });
+
+    act(() => voice.setState({ fetching: true, done: 30, total: 100 }));
+    const preparing = button("Preparando el modelo de voz · 30 %");
+    await act(async () => fireEvent.click(preparing));
+    expect(lastNotice()).toMatchObject({ parts: ["Preparando el modelo de voz · 30 %"] });
+    expect(ipc.commands.voiceStart).not.toHaveBeenCalled();
+  });
+
+  it("says why the microphone refused, and where another one is chosen", async () => {
+    ipc.commands.voiceStart.mockRejectedValue({ cause: "microphone", message: "Sens no puede escuchar el micrófono: dispositivo no disponible" });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(lastNotice()).toMatchObject({
+      kind: "notice",
+      tone: "warn",
+      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › General › Voz"],
+    });
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("stops dictating when the message is sent, and writes nothing more into the next one", async () => {
+    ipc.commands.voiceStart.mockResolvedValue(9);
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    hear({ kind: "phrase", id: 9, text: "Añade un test" });
+    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
+    expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "Añade un test", files: [], images: [] }, currentSettings());
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+
+    hear({ kind: "phrase", id: 9, text: "y otro" });
+    hear({ kind: "ended", id: 9, refusal: null });
+    expect(written()).toBe("");
+    act(() => focused().chat.setState({ busy: false, stopping: false }));
+  });
+});
+
 describe("a worktree for a new session", () => {
   const repo = { branch: "main", detached: false, dirty: 0, branches: ["main"] };
 
@@ -406,98 +621,5 @@ describe("a worktree for a new session", () => {
     const label = document.getElementById("worktree")!;
     expect(label.textContent).toBe("worktree");
     expect(label.title).toBe("Trabaja en un worktree aparte, en la rama sens/ab12cd34 (creada desde main): C:/demo/.sens/worktrees/ab12cd34");
-  });
-});
-
-describe("dictation", () => {
-  const hear = (what: DictationHeard) => act(() => [...ipc.listeners].forEach((listener) => listener(what)));
-  const written = () => (field() as HTMLTextAreaElement).value;
-
-  it("writes what Windows hears after what was written, in the language shown, until the second press", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(7);
-    render(<Composer />);
-    fireEvent.change(field(), { target: { value: "Revisa " } });
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledWith("es-ES", false);
-    expect(button("Dejar de dictar").getAttribute("aria-pressed")).toBe("true");
-
-    hear({ kind: "guess", id: 7, text: "el formu" });
-    expect(written()).toBe("Revisa el formu");
-    hear({ kind: "phrase", id: 7, text: "el formulario de contacto" });
-    hear({ kind: "guess", id: 7, text: "y los tests" });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests");
-    hear({ kind: "guess", id: 3, text: "de otra vez" });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests");
-
-    await act(async () => fireEvent.click(button("Dejar de dictar")));
-    expect(ipc.commands.dictationStop).toHaveBeenCalled();
-    hear({ kind: "phrase", id: 7, text: "y los tests." });
-    hear({ kind: "ended", id: 7, refusal: null });
-    expect(written()).toBe("Revisa el formulario de contacto y los tests.");
-    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("says when Windows online speech recognition is off, and the next press opens its setting", async () => {
-    ipc.commands.dictationStart.mockRejectedValue({ cause: "speech", message: "el reconocimiento de voz en línea de Windows está desactivado" });
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("reconocimiento de voz en línea")] });
-
-    await act(async () => fireEvent.click(button("Abrir la configuración de voz de Windows")));
-    expect(ipc.commands.dictationSettings).toHaveBeenCalledWith("speech");
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(1);
-
-    ipc.commands.dictationStart.mockResolvedValue(8);
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(2);
-  });
-
-  it("says why dictation ended when Windows ends it, and turns the microphone off where there is no dictation", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(4);
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    hear({ kind: "ended", id: 4, refusal: { cause: "other", message: "no pude conectar con el reconocimiento de voz de Windows" } });
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: ["no pude conectar con el reconocimiento de voz de Windows"] });
-
-    ipc.commands.dictationStart.mockRejectedValue({ cause: "unsupported", message: "" });
-    await act(async () => fireEvent.click(button("Dictar")));
-    expect(button("Windows no tiene dictado en este equipo")).toHaveProperty("disabled", true);
-  });
-
-  it("stops dictating when the message is sent, and writes nothing more into the next one", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(9);
-    render(<Composer />);
-    await act(async () => fireEvent.click(button("Dictar")));
-    hear({ kind: "phrase", id: 9, text: "Añade un test" });
-    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
-    expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "Añade un test", files: [], images: [] }, currentSettings());
-    expect(ipc.commands.dictationStop).toHaveBeenCalled();
-
-    hear({ kind: "phrase", id: 9, text: "y otro" });
-    hear({ kind: "ended", id: 9, refusal: null });
-    expect(written()).toBe("");
-    act(() => focused().chat.setState({ busy: false, stopping: false }));
-  });
-
-  it("starts dictating hands-free when Windows hears Hey Sens, and not again while it already listens", async () => {
-    ipc.commands.dictationStart.mockResolvedValue(11);
-    render(<Composer />);
-    await act(async () => hear({ kind: "woke" }));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledWith("es-ES", true);
-    expect(button("Dejar de dictar").getAttribute("aria-pressed")).toBe("true");
-
-    await act(async () => hear({ kind: "woke" }));
-    expect(ipc.commands.dictationStart).toHaveBeenCalledTimes(1);
-    hear({ kind: "phrase", id: 11, text: "Explica el middleware" });
-    hear({ kind: "ended", id: 11, refusal: null });
-    expect(written()).toBe("Explica el middleware");
-    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
-  });
-
-  it("says so when listening for Hey Sens stops on its own", () => {
-    render(<Composer />);
-    hear({ kind: "slept", refusal: { cause: "microphone", message: "Windows no deja que Sens use el micrófono" } });
-    expect(focused().chat.getState().turns.at(-1)).toMatchObject({ kind: "notice", tone: "warn", parts: [expect.stringContaining("micrófono")] });
-    expect(button("Abrir la configuración del micrófono de Windows")).toBeTruthy();
   });
 });

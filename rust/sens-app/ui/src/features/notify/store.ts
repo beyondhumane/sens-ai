@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { commands } from "../../ipc/commands";
+import { commands, events } from "../../ipc/commands";
 import type { ChatEvent } from "../../ipc/types";
 import { shared } from "../../shared/copy";
 import { describe } from "../chat/looks";
@@ -12,8 +12,11 @@ const BODY_CAP = 120;
 
 const told = new Map<string, number>();
 let present = true;
+let watched: string | null = null;
 
 export const notePresence = (on: boolean) => void (present = on);
+
+export const hearBarWatching = () => events.barWatching((session) => void (watched = session));
 
 export function watchPresence() {
   const frame = getCurrentWindow();
@@ -46,7 +49,7 @@ const titleOf = (session: string) =>
     .find((one) => one.id === session)?.title || shared.newSession;
 
 export function tellAway(session: string, event: ChatEvent, now = Date.now()) {
-  if (!profile.getState().person.notify || present) return;
+  if (!profile.getState().person.notify || present || session === watched) return;
   const body = noticeOf(event);
   if (!body) return;
   const asking = event.kind === "asking";

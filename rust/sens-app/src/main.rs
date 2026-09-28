@@ -1,14 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artifacts;
+mod bar;
 mod browser;
 mod capabilities;
 mod claude_code;
-mod dictation;
 mod files;
+mod front;
 mod icon;
 mod git;
 mod language;
+mod life;
 mod look;
 mod market;
 mod mcp;
@@ -22,6 +24,7 @@ mod snapshot;
 mod store;
 mod terminal;
 mod update;
+mod voice;
 mod web;
 mod welcome;
 mod worktree;
@@ -356,50 +359,43 @@ fn terminal_close(consoles: State<terminal::Consoles>, id: u32) -> Result<(), St
 }
 
 #[tauri::command(async)]
-fn dictation_start(dictation: State<dictation::Dictation>, language: String, hands_free: bool) -> Result<u32, dictation::Refusal> {
-    dictation.start(&language, hands_free)
+fn voice_start(voice: State<voice::Voice>, language: String) -> Result<u32, voice::Refusal> {
+    voice.start(&language, true)
 }
 
 #[tauri::command(async)]
-fn set_wake(app: AppHandle, dictation: State<dictation::Dictation>, on: bool) -> Result<(), String> {
-    let language = on.then(|| sens_agent::language::now().id());
-    dictation.wake(language).map_err(|refusal| refusal.message)?;
-    profile::set_wake(&data_dir(&app)?, on)
-}
-
-fn hearing(app: AppHandle) -> impl Fn(dictation::Heard) + Send + Sync + 'static {
-    move |heard| {
-        if heard == dictation::Heard::Woke
-            && let Some(window) = app.get_webview_window("main")
-        {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-        let _ = app.emit("dictation", heard);
-    }
-}
-
-#[tauri::command(async)]
-fn dictation_stop(dictation: State<dictation::Dictation>) {
-    dictation.stop();
+fn voice_test(voice: State<voice::Voice>) -> Result<u32, voice::Refusal> {
+    voice.start("", false)
 }
 
 #[tauri::command]
-fn dictation_settings(app: AppHandle, cause: dictation::Cause) -> Result<(), String> {
-    let Some(page) = dictation::settings(cause) else {
-        return Ok(());
-    };
-    app.opener().open_url(page, None::<&str>).map_err(|error| {
-        said!(
-            en: "couldn’t open Windows settings: {error}",
-            es: "no pude abrir la configuración de Windows: {error}",
-            fr: "impossible d’ouvrir les paramètres de Windows : {error}",
-            de: "die Windows-Einstellungen konnten nicht geöffnet werden: {error}",
-            ja: "Windows の設定を開けませんでした: {error}",
-            zh: "无法打开 Windows 设置：{error}",
-        )
-    })
+fn voice_stop(voice: State<voice::Voice>) {
+    voice.finish();
+}
+
+#[tauri::command]
+fn voice_model(voice: State<voice::Voice>) -> voice::Model {
+    voice.model()
+}
+
+#[tauri::command]
+fn voice_prepare(voice: State<voice::Voice>) {
+    voice.prepare();
+}
+
+#[tauri::command(async)]
+fn voice_microphones() -> Vec<voice::Microphone> {
+    voice::microphones()
+}
+
+#[tauri::command]
+fn voice_microphone(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(voice::chosen(&data_dir(&app)?))
+}
+
+#[tauri::command]
+fn voice_choose(app: AppHandle, microphone: Option<String>) -> Result<(), String> {
+    voice::choose(&data_dir(&app)?, microphone)
 }
 
 #[tauri::command]
@@ -550,6 +546,18 @@ fn set_notify(app: AppHandle, on: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_keep_in_tray(app: AppHandle, on: bool) -> Result<(), String> {
+    profile::set_keep_in_tray(&data_dir(&app)?, on)
+}
+
+#[tauri::command]
+fn set_start_with_windows(app: AppHandle, on: bool) -> Result<(), String> {
+    profile::set_start_with_windows(&data_dir(&app)?, on)?;
+    life::start_with_windows(on);
+    Ok(())
+}
+
+#[tauri::command]
 fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
     app.notification()
         .builder()
@@ -592,12 +600,13 @@ fn set_look(app: AppHandle, look: look::Look) -> Result<(), String> {
 fn set_language(app: AppHandle, language: Language) -> Result<(), String> {
     language::save(&data_dir(&app)?, language)?;
     sens_agent::language::set(language);
+    life::retitle(&app);
     Ok(())
 }
 
 const UNPAINTED: std::time::Duration = std::time::Duration::from_secs(4);
 
-fn open_window(app: &App) -> tauri::Result<()> {
+fn open_window(app: &App, hidden: bool) -> tauri::Result<()> {
     let Some(config) = app.config().app.windows.first().cloned() else {
         return Ok(());
     };
@@ -611,9 +620,13 @@ fn open_window(app: &App) -> tauri::Result<()> {
         .initialization_script(look.script())
         .initialization_script(person.script())
         .initialization_script(language::script(base.as_deref().and_then(language::load)))
+        .initialization_script(life::script(hidden))
         .build()?;
     if theme.is_none() {
         window.set_background_color(Some(look::ground(window.theme()?)))?;
+    }
+    if hidden {
+        return Ok(());
     }
     std::thread::spawn(move || {
         std::thread::sleep(UNPAINTED);
@@ -664,10 +677,7 @@ fn update_install(app: AppHandle) -> Result<(), String> {
     update::install(&data_dir(&app)?, |version, stage| {
         let _ = app.emit("update", Updating { version, stage });
     })?;
-    app.state::<Arc<Engine>>().shutdown();
-    app.state::<terminal::Consoles>().shutdown();
-    app.cleanup_before_exit();
-    std::process::exit(0)
+    life::quit(&app)
 }
 
 #[tauri::command(async)]
@@ -761,6 +771,10 @@ fn market_update(app: AppHandle, id: String, name: String) -> Result<(), String>
 }
 
 fn main() {
+    let hidden = life::hidden(std::env::args());
+    if !life::claim(hidden) {
+        return;
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -769,18 +783,31 @@ fn main() {
         .manage(preview::Site::default())
         .manage(terminal::Consoles::default())
         .manage(mcp::Bridge::default())
-        .setup(|app| {
-            app.manage(dictation::Dictation::new(hearing(app.handle().clone())));
+        .setup(move |app| {
+            let heard = app.handle().clone();
+            let voice_base = data_dir(app.handle()).unwrap_or_else(|_| std::env::temp_dir().join("sens"));
+            app.manage(voice::Voice::new(voice_base, move |said| {
+                let _ = heard.emit("voice", said);
+            }));
             let base = data_dir(app.handle());
             language::speak(base.as_deref().ok());
-            open_window(app)?;
+            open_window(app, hidden)?;
+            bar::build(app)?;
             icon::sharpen(app);
+            life::tray(app.handle())?;
+            life::listen(app.handle());
             if let Ok(base) = base {
                 share_environment(&base);
                 update::sweep(&base);
                 claude_code::sweep(&base);
+                app.state::<voice::Voice>().prepare();
+                life::start_with_windows(profile::load(&base).start_with_windows);
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            life::closing(window, event);
+            bar::heard(window, event);
         })
         .invoke_handler(tauri::generate_handler![
             chat_send,
@@ -829,6 +856,8 @@ fn main() {
             save_profile,
             set_update_check,
             set_notify,
+            set_keep_in_tray,
+            set_start_with_windows,
             notify,
             set_welcomed,
             news,
@@ -854,10 +883,14 @@ fn main() {
             terminal_resize,
             terminal_close,
             terminal_screen,
-            dictation_start,
-            dictation_stop,
-            dictation_settings,
-            set_wake,
+            voice_start,
+            voice_test,
+            voice_stop,
+            voice_model,
+            voice_prepare,
+            voice_microphones,
+            voice_microphone,
+            voice_choose,
             capabilities,
             skill_text,
             create_skill,
@@ -874,15 +907,24 @@ fn main() {
             market_detail,
             market_file,
             market_install,
-            market_update
+            market_update,
+            bar::bar_open,
+            bar::bar_hide,
+            bar::bar_fit,
+            bar::bar_pin,
+            bar::bar_drag,
+            bar::bar_hand_over,
+            bar::bar_context,
+            bar::bar_clip,
+            bar::bar_shot,
+            bar::bar_projects,
+            bar::shortcut_state
         ])
         .build(tauri::generate_context!())
         .expect("sens app")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                app.state::<Arc<Engine>>().shutdown();
-                app.state::<terminal::Consoles>().shutdown();
-                app.state::<dictation::Dictation>().shutdown();
+                life::quit(app)
             }
         });
 }

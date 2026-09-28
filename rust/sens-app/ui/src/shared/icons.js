@@ -1,6 +1,3 @@
-// Every icon in the shell, as SVG markup that also names it: Icon draws the
-// <svg> from its shape.
-
 const shapes = new Map();
 
 const icon = (paths, size = 16, stroke = 1.5) => {
@@ -9,7 +6,6 @@ const icon = (paths, size = 16, stroke = 1.5) => {
   return svg;
 };
 
-/** @returns {{ paths: string, size: number, stroke: number }} */
 export const iconShape = (svg) => shapes.get(svg);
 
 const FILES = '<path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/>';
@@ -103,7 +99,6 @@ export const ICONS = {
   done: icon('<path d="M20 6 9 17l-5-5"/>'),
   arrow: icon('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>'),
   updateReady: icon('<circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/>'),
-  // The composer's own, at the sizes its controls draw them.
   folderSmall: icon(FOLDER, 13, 1.8),
   fork: icon('<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>'),
   branch: icon('<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>', 13, 1.8),
@@ -115,7 +110,9 @@ export const ICONS = {
   caret: icon('<path d="M6 9l6 6 6-6"/>', 11, 2.4),
   remove: icon('<path d="M6 6l12 12M18 6L6 18"/>', 11, 2.4),
   tick: icon('<path d="M20 6 9 17l-5-5"/>', 12, 2.4),
-  // The shell's own: the tree switch, the tools and the window's controls.
+  pin: icon('<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>', 15, 1.7),
+  scan: icon('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>', 13, 1.8),
+  clipboard: icon('<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>', 13, 1.8),
   treeLines: icon('<path d="M4 6h6M4 12h16M4 18h10"/>', 13, 1.8),
   moreVertical: icon('<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>', 15, 1.8),
   minimize: icon('<path d="M5 12h14"/>', 15, 1.8),
