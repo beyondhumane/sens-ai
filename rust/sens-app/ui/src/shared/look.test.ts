@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FIRST_LOOK, linearRgb, look, lookOf, showLook, shownOf } from "./look";
+import { FIRST_LOOK, linearRgb, look, lookOf, showLook, shownOf, srgbOf } from "./look";
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({}) }));
 
@@ -44,5 +44,12 @@ describe("a look", () => {
     expect(red).toBeCloseTo(0.571, 2);
     expect(green).toBe(1);
     expect(blue).toBeCloseTo(0.069, 2);
+  });
+
+  it("reads the short hex a minified build leaves", () => {
+    expect(srgbOf("#fff")).toEqual([1, 1, 1]);
+    expect(srgbOf(" #a9e52d")).toEqual(srgbOf("#a9e52d"));
+    expect(linearRgb("#fff")).toEqual([1, 1, 1]);
+    expect(srgbOf("#0c0")).toEqual([0, 0.8, 0]);
   });
 });
