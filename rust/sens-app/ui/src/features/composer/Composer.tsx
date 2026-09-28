@@ -16,6 +16,8 @@ import { t } from "./copy";
 import { useDictation } from "./dictation";
 import { onEdge, recall } from "./history";
 import { ContextMeter } from "../models/ContextMeter";
+import { LockoutNotice } from "../models/Lockout";
+import { CacheBreakNotice } from "./CacheBreak";
 import { Effort, ModelPicker, ModePicker, Think } from "./Knobs";
 import { Suggestions, useSuggestions } from "./Suggestions";
 import {
@@ -36,12 +38,12 @@ import {
   type File,
 } from "./store";
 
-// Where you write to Claude: the folder and branch, what goes attached, the
-// message, and the knobs of the next turn under it.
 export function Composer() {
   return (
     <div className="composer">
       <div className="composer-inner">
+        <LockoutNotice />
+        <CacheBreakNotice />
         <Workspace />
         <Box />
         <div className="under">
@@ -121,7 +123,6 @@ function WorktreeChip() {
   );
 }
 
-// The branch you are on, and the others to switch to, filtered by name.
 function Branches({ sheet }: { sheet: Sheet }) {
   const pane = usePane();
   const id = useIds();
@@ -191,7 +192,6 @@ function Clips({ inlined }: { inlined: () => void }) {
   );
 }
 
-// The message grows with what is written, up to a cap, then scrolls.
 const GROW_CAP = 260;
 
 function Box() {
@@ -362,8 +362,6 @@ function Box() {
   );
 }
 
-// While Claude works a light laps the box, at a speed that wanders: each lap
-// gets new keyframes, from a few random harmonics.
 const HARMONICS = [1, 2, 3];
 const SWELL = [0.04, 0.12];
 const SAMPLES = 60;

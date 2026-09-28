@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { commands } from "../../ipc/commands";
-import type { Account, Card, Limits, Provider } from "../../ipc/types";
+import type { Account, Card, Limits, Lockout, Provider } from "../../ipc/types";
 import { API_KEY_SOURCE, PLANS, keyed } from "../../shared/account";
 import { store, stored } from "../../shared/storage.js";
 import { CHOICE, focused, panes, type Pane } from "../panes/store";
@@ -18,10 +18,6 @@ function keptReading() {
   return kept && typeof kept.seen === "number" && kept.windows && typeof kept.windows === "object" ? kept : null;
 }
 
-// The providers Sens chats through and the models each offers (kept across
-// launches, asked for again once a day), the ones hidden from the picker, the
-// one chosen, and what the account says: its billing, its usage, or why it
-// could not be read.
 export const models = createStore(() => ({
   catalog: [] as Provider[],
   known: stored(KNOWN, {}) as Record<string, Card[]>,
@@ -32,6 +28,7 @@ export const models = createStore(() => ({
   accountFault: "",
   limits: keptReading(),
   behind: "",
+  lockout: null as Lockout | null,
 }));
 
 const set = models.setState;
@@ -41,9 +38,10 @@ export function saidOf(card: Card) {
   return (t.taglines as Record<string, string>)[tagline] || tagline;
 }
 
-// "claude-opus-5-5" reads "Opus 5.5" when the catalog does not name it.
+const bare = (id: string) => id.replace(/\[.*$/, "");
+
 function prettyModel(id: string) {
-  const [family, ...rest] = id.replace(/^claude-/, "").replace(/\[.*$/, "").split("-");
+  const [family, ...rest] = bare(id).replace(/^claude-/, "").split("-");
   const version = [];
   for (const part of rest) {
     if (!/^\d{1,7}$/.test(part)) break;
@@ -61,13 +59,19 @@ export function modelName(id: string) {
   return card ? card.label : prettyModel(id);
 }
 
+export const sameModel = (one: string, other: string) => bare(one) === bare(other);
+
+export function offeredAs(provider: string, model: string) {
+  const offering = models.getState().catalog.find((one) => one.id === provider);
+  return offering && offeredBy(offering).find((card) => sameModel(card.id, model));
+}
+
 export function chosenCard(pane: Pane = focused()) {
   const { known } = models.getState();
   const { choice } = pane.desk.getState();
   return (known[choice.provider] || []).find((card) => card.id === choice.model);
 }
 
-// The choice kept if it is still offered, else the first model offered.
 export function settle(pane: Pane, wanted = pane.desk.getState().choice) {
   const { catalog } = models.getState();
   const offered = catalog.flatMap((provider) => offeredBy(provider).map((card) => ({ provider, card })));
@@ -93,8 +97,6 @@ export function toggleHidden(id: string) {
   settleAll();
 }
 
-// What the chosen model is called in the picker: the model, or its provider
-// while there is none.
 export function chosenLabel(pane: Pane = focused()) {
   const card = chosenCard(pane);
   if (card) return card.label;
@@ -122,7 +124,6 @@ export async function refreshModels() {
   settleAll();
 }
 
-// A provider without models, or a day without asking, asks again.
 export function refreshWhenDue() {
   const missing = models.getState().catalog.some((provider) => !modelsOf(provider).length);
   const stale = stored(ASKED, "") !== new Date().toDateString();
@@ -191,8 +192,20 @@ export function accountLine(now = Date.now()) {
   };
 }
 
-// Signing in is offered while it is being done, or when the account cannot chat.
 export const signInWanted = () => {
   const { account, accountFault } = models.getState();
   return Boolean(accountFault) || ["signedOut", "noPlan"].includes(account?.billing ?? "");
 };
+
+export const noteLockout = (lockout: Lockout | null) => set({ lockout });
+
+type LockoutShown ="session" | "plan" | "key" | "credit";
+
+export function lockoutShown(): LockoutShown | null {
+  const { account, lockout } = models.getState();
+  const reason = lockout ?? (account?.billing === "signedOut" ? "signIn" : null);
+  if (!reason) return null;
+  const elsewhere = account?.billing === "elsewhere";
+  if (reason === "signIn") return elsewhere ? "key" : "session";
+  return elsewhere ? "credit" : "plan";
+}

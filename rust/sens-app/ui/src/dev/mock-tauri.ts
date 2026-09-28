@@ -1,6 +1,3 @@
-// Lets the shell run in a plain browser: `npm run dev -w sens-app-ui` and open
-// the printed URL. vite.config.ts injects it only into the dev server, and
-// inside Tauri the real IPC is already there, so it steps aside.
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { Capabilities, Found, News } from "../ipc/types";
@@ -11,6 +8,9 @@ const HOUR = 3_600_000;
 const ROOT = "C:/Proyectos/demo";
 const asking = new URLSearchParams(location.search);
 const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true };
+const SUBSCRIBED = { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" };
+const SIGNED_OUT = { billing: "signedOut", plan: "", source: "", email: "" };
+let account = asking.get("account") === "signedOut" ? SIGNED_OUT : SUBSCRIBED;
 const LOOK = "sens.dev.look";
 const asked = new URLSearchParams(location.search).get("look")?.split(".");
 const kept = asked ? { mode: asked[0], accent: asked[1] } : stored(LOOK, null);
@@ -300,7 +300,6 @@ const DIFF = [
   "rename to new.txt",
 ].join("\n");
 
-// A project with a bit of everything, to see the file icons.
 const FOLDERS: Record<string, string[]> = {
   "": ["src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
   src: ["components/", "app.tsx", "index.ts", "types.d.ts", "lib.rs", "styles.css", "query.sql", "build.ps1"],
@@ -308,7 +307,6 @@ const FOLDERS: Record<string, string[]> = {
   docs: ["guia.md", "api.yaml", "config.toml"],
 };
 
-// A few files with real code, to see the viewer color each language.
 const SAMPLES: Record<string, string> = {
   "main.py": [
     "#!/usr/bin/env python3",
@@ -400,12 +398,11 @@ const SAMPLES: Record<string, string> = {
   "Cargo.toml": ["[package]", 'name = "demo"', 'version = "0.1.0"', "edition = \"2024\"", "", "[dependencies]", 'serde = { version = "1", features = ["derive"] }'].join("\n"),
 };
 
-// A turn with code in its answer and an edit, to see the chat color them.
 const FENCE = "```";
 const agent = (event: Record<string, unknown>) => ({ kind: "agent", at: now - HOUR, event });
 const REPLAY = [
   { kind: "task", text: "Añade un saludo configurable", files: ["src/app.tsx", ".sens/artifacts/demo-1/pasted-text.txt", "docs/"], images: [], at: now - HOUR },
-  agent({ kind: "started", model: "demo-model" }),
+  agent({ kind: "started", model: "claude-sonnet-5" }),
   agent({
     kind: "tool",
     id: "t1",
@@ -452,7 +449,6 @@ const REPLAY = [
   agent({ kind: "finished", millis: 4200, tokensOut: 812, context: 148_300, window: 200_000 }),
 ];
 
-// Two projects whose sessions can be renamed, archived and deleted.
 const SPACES = [
   {
     root: ROOT,
@@ -546,7 +542,6 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
     artifact("file", "datos.xlsx", 80, null),
   ],
   artifact_data: () => SQUARE,
-  // No page is drawn here, but the panel hears it load, as from the real one.
   browser_open: ({ url }) => {
     const at = String(url);
     setTimeout(() => emit("browser", { kind: "loading", url: at }), 50);
@@ -627,13 +622,21 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   open_session: ({ id }) => id ?? "demo-new",
   chat_busy: () => false,
   chat_tasks: () => [],
-  // A reply as the real one arrives: text in pieces, a command, the end.
-  chat_send: ({ sessionId, message }) => {
+  chat_send: ({ sessionId, message, settings }) => {
+    const ran = (settings as { model: string }).model;
     const session = String(sessionId);
     if ((message as { text: string }).text.startsWith("/compact")) {
-      setTimeout(() => emit("chat", { session, event: { kind: "started", model: "demo-model" } }), 80);
+      setTimeout(() => emit("chat", { session, event: { kind: "started", model: ran } }), 80);
       setTimeout(() => emit("chat", { session, event: { kind: "compacted", before: 148_300, auto: false } }), 900);
       setTimeout(() => emit("chat", { session, event: { kind: "finished", ok: true, stopped: false, millis: 900, turns: 1, tokensIn: 0, tokensOut: 0, context: 0, window: 200_000, error: "" } }), 1000);
+      return;
+    }
+    const refused = { "/login": ["signIn", "Not logged in · Please run /login"], "/billing": ["billing", "Credit balance is too low"] }[(message as { text: string }).text.trim()];
+    if (refused) {
+      const [reason, text] = refused;
+      setTimeout(() => emit("chat", { session, event: { kind: "started", model: ran } }), 80);
+      setTimeout(() => emit("chat", { session, event: { kind: "lockedOut", reason } }), 600);
+      setTimeout(() => emit("chat", { session, event: { kind: "finished", ok: false, stopped: false, millis: 600, turns: 1, tokensIn: 0, tokensOut: 0, error: text } }), 700);
       return;
     }
     const said = `Recibido: «${(message as { text: string }).text}». Te cuento lo que he mirado:\n\n- El **árbol** del proyecto\n- Los ficheros \`src/app.tsx\` y \`main.py\`\n\n${FENCE}ts\nconst listo = true;\n${FENCE}\n\nListo.`;
@@ -658,7 +661,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
       [4000, { kind: "tool", id: "edit-1", name: "Edit", input: edit }],
       [4400, { kind: "toolDone", id: "edit-1", output: "", error: false, detail: null }],
     ];
-    const events: [number, unknown][] = [[80, { kind: "started", model: "demo-model" }], [120, planLimits()]];
+    const events: [number, unknown][] = [[80, { kind: "started", model: ran }], [120, planLimits()]];
     let clock = 120;
     const think = (text: string) => {
       for (let at = 0; at < text.length; at += 6) events.push([clock + (at / 6) * 40, { kind: "delta", thinking: true, text: text.slice(at, at + 6) }]);
@@ -700,7 +703,8 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
         1500,
       ),
     ),
-  claude_account: () => ({ billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" }),
+  claude_account: () => ({ ...account }),
+  provider_sign_in: () => pause(1500).then(() => void (account = SUBSCRIBED)),
   providers_state: () => [
     {
       id: "claude",
@@ -709,7 +713,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
       method: "subscription",
       keyHint: "",
       version: "2.1.0",
-      account: { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" },
+      account: { ...account },
       error: "",
       installed: true,
     },

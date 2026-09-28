@@ -49,6 +49,16 @@ export const t = copy({
     plan: "Plan usage limits",
     planOf: (plan: string) => `Plan usage limits · ${plan}`,
     pending: "Limits show after Claude’s first reply.",
+    lockout: { session: "Your Claude session has ended", plan: "Claude can’t use your subscription", key: "Claude Code doesn’t accept the API key", credit: "The API key’s account is out of credit" },
+    lockoutSaid: {
+      session: "Sign in again to keep working. Your sessions stay as they are.",
+      plan: "Check your plan on claude.ai, or sign in with another account.",
+      key: "Check it in Settings › Providers.",
+      credit: "Add credit in the Console, or switch to your subscription in Settings › Providers.",
+    },
+    signIn: "Sign in",
+    signingIn: "Waiting for sign-in…",
+    providers: "Open Providers",
   },
   es: {
     taglines: {
@@ -98,6 +108,16 @@ export const t = copy({
     plan: "Límites de uso del plan",
     planOf: (plan: string) => `Límites de uso del plan · ${plan}`,
     pending: "Los límites aparecen tras la primera respuesta de Claude.",
+    lockout: { session: "Tu sesión de Claude se ha cerrado", plan: "Claude no puede usar tu suscripción", key: "Claude Code no acepta la clave de API", credit: "La cuenta de la clave de API no tiene saldo" },
+    lockoutSaid: {
+      session: "Vuelve a iniciar sesión para seguir. Tus sesiones se quedan como están.",
+      plan: "Revisa tu plan en claude.ai o inicia sesión con otra cuenta.",
+      key: "Revísala en Ajustes › Proveedores.",
+      credit: "Añade saldo en la Consola o cambia a tu suscripción en Ajustes › Proveedores.",
+    },
+    signIn: "Iniciar sesión",
+    signingIn: "Esperando al inicio de sesión…",
+    providers: "Abrir Proveedores",
   },
   fr: {
     taglines: {
@@ -147,6 +167,16 @@ export const t = copy({
     plan: "Limites d’utilisation du forfait",
     planOf: (plan: string) => `Limites d’utilisation du forfait · ${plan}`,
     pending: "Les limites s’affichent après la première réponse de Claude.",
+    lockout: { session: "Votre session Claude est terminée", plan: "Claude ne peut pas utiliser votre abonnement", key: "Claude Code n’accepte pas la clé d’API", credit: "Le compte de la clé d’API n’a plus de crédit" },
+    lockoutSaid: {
+      session: "Reconnectez-vous pour continuer. Vos sessions restent telles quelles.",
+      plan: "Vérifiez votre forfait sur claude.ai, ou connectez-vous avec un autre compte.",
+      key: "Vérifiez-la dans Paramètres › Fournisseurs.",
+      credit: "Ajoutez du crédit dans la Console, ou passez à votre abonnement dans Paramètres › Fournisseurs.",
+    },
+    signIn: "Se connecter",
+    signingIn: "En attente de la connexion…",
+    providers: "Ouvrir Fournisseurs",
   },
   de: {
     taglines: {
@@ -196,6 +226,16 @@ export const t = copy({
     plan: "Nutzungslimits des Tarifs",
     planOf: (plan: string) => `Nutzungslimits des Tarifs · ${plan}`,
     pending: "Die Limits erscheinen nach Claudes erster Antwort.",
+    lockout: { session: "Deine Claude-Sitzung ist beendet", plan: "Claude kann dein Abo nicht nutzen", key: "Claude Code akzeptiert den API-Schlüssel nicht", credit: "Das Konto des API-Schlüssels hat kein Guthaben mehr" },
+    lockoutSaid: {
+      session: "Melde dich erneut an, um weiterzuarbeiten. Deine Sitzungen bleiben, wie sie sind.",
+      plan: "Prüfe deinen Plan auf claude.ai oder melde dich mit einem anderen Konto an.",
+      key: "Prüfe ihn unter Einstellungen › Anbieter.",
+      credit: "Lade Guthaben in der Console auf oder wechsle unter Einstellungen › Anbieter zu deinem Abo.",
+    },
+    signIn: "Anmelden",
+    signingIn: "Wartet auf die Anmeldung…",
+    providers: "Anbieter öffnen",
   },
   ja: {
     taglines: {
@@ -245,6 +285,16 @@ export const t = copy({
     plan: "プランの使用量の上限",
     planOf: (plan: string) => `プランの使用量の上限 · ${plan}`,
     pending: "上限は Claude の最初の返信のあとに表示されます。",
+    lockout: { session: "Claude のセッションが終了しました", plan: "Claude がサブスクリプションを利用できません", key: "Claude Code が API キーを受け付けません", credit: "API キーのアカウントにクレジットがありません" },
+    lockoutSaid: {
+      session: "作業を続けるには、もう一度サインインしてください。セッションはそのまま残ります。",
+      plan: "claude.ai でプランを確認するか、別のアカウントでサインインしてください。",
+      key: "設定 › プロバイダーで確認してください。",
+      credit: "Console でクレジットを追加するか、設定 › プロバイダーでサブスクリプションに切り替えてください。",
+    },
+    signIn: "サインイン",
+    signingIn: "サインインを待っています…",
+    providers: "プロバイダーを開く",
   },
   zh: {
     taglines: {
@@ -294,5 +344,15 @@ export const t = copy({
     plan: "套餐用量限制",
     planOf: (plan: string) => `套餐用量限制 · ${plan}`,
     pending: "Claude 首次回复后显示限制。",
+    lockout: { session: "你的 Claude 会话已结束", plan: "Claude 无法使用你的订阅", key: "Claude Code 不接受该 API 密钥", credit: "该 API 密钥所属账户余额不足" },
+    lockoutSaid: {
+      session: "请重新登录以继续工作。你的会话会保持原样。",
+      plan: "请在 claude.ai 上检查你的套餐，或使用其他账户登录。",
+      key: "请在 设置 › 提供商 中检查。",
+      credit: "请在 Console 中充值，或在 设置 › 提供商 中切换到你的订阅。",
+    },
+    signIn: "登录",
+    signingIn: "正在等待登录…",
+    providers: "打开提供商",
   },
 });

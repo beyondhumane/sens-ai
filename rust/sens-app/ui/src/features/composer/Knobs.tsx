@@ -10,14 +10,12 @@ import { accountLine, chosenCard, chosenLabel, choose, models, modelsOf, offered
 import { useIds, usePane } from "../panes/context";
 import type { Pane } from "../panes/store";
 import { openSettings, settings } from "../settings/store";
-import { t } from "./knobs.copy";
+import { effortName, t } from "./knobs.copy";
 import { BYPASS, MODES, chooseMode, composer, effortLevels, effortNow, modeNow, pickEffort, toggleThinking, trustProject, trustedHere } from "./store";
 
 const modeName = (id: string) => (t.modes as Record<string, string>)[id] ?? id;
 const modeSaid = (id: string) => (t.modesSaid as Record<string, string>)[id] ?? "";
-const effortName = (level: string) => (t.efforts as Record<string, string>)[level] || level;
 
-// A choice in a knob's menu: its name, what it means, and a tick when chosen.
 function KnobRow({ label, sub, checked, risky, onPick }: { label: string; sub?: string; checked: boolean; risky?: boolean; onPick: () => void }) {
   return (
     <button className="menu-item" tabIndex={-1} role="menuitemradio" aria-checked={checked} data-risky={risky ? "true" : undefined} onClick={onPick}>
@@ -41,8 +39,6 @@ function PickerButton({ sheet, id, title, risky, children }: { sheet: Sheet; id:
   );
 }
 
-// The models of each provider, newest first; the account under them; and, in
-// edit mode, which models the picker hides.
 export function ModelPicker() {
   const pane = usePane();
   const id = useIds();
@@ -218,7 +214,6 @@ export function ModePicker() {
   );
 }
 
-// Thinking before answering, unless the model always does.
 export function Think() {
   const pane = usePane();
   const id = useIds();
@@ -242,8 +237,6 @@ export function Think() {
   );
 }
 
-// How hard the model thinks, on a slider of the levels it offers. At the top,
-// the track fills with Signal pixels.
 export function Effort() {
   const pane = usePane();
   const id = useIds();
@@ -330,8 +323,6 @@ export function Effort() {
   );
 }
 
-// Signal pixels, ordered-dithered denser to the right, swelling slowly; they
-// sweep in from the left the first time. Still with reduced motion.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((step) => (step + 0.5) / 16);
 const CELL = 3;
 const ENTER = 1500;

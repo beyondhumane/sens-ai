@@ -6,7 +6,7 @@ import { loadChanges, soonChanges } from "../changes/store";
 import { inFolder } from "../composer/suggest";
 import { loadFiles } from "../files/store";
 import { openFile, viewer } from "../files/view";
-import { modelName, noteLimits } from "../models/store";
+import { modelName, noteLimits, noteLockout } from "../models/store";
 import { tellAway } from "../notify/store";
 import { focused, isolating, paneOf, workOf, worktreePending, type Pane } from "../panes/store";
 import { noteEdit, project } from "../project/store";
@@ -28,7 +28,6 @@ const setSession = (pane: Pane, id: string) => pane.desk.setState({ session: id 
 const rootOf = (pane: Pane) => pane.desk.getState().root;
 const onScreen = (pane: Pane) => workOf(pane) === project.getState().work;
 
-// The empty chat invites to start, or to pick a folder first.
 export const hello = (pane: Pane = focused()) => pane.chat.setState({ hint: String((hellos += 1)) });
 
 function onReply(pane: Pane, key: number | null, change: (reply: Reply) => Reply) {
@@ -36,7 +35,6 @@ function onReply(pane: Pane, key: number | null, change: (reply: Reply) => Reply
   pane.chat.setState(({ turns }) => ({ turns: turns.map((turn) => (turn.kind === "reply" && turn.key === key ? change(turn) : turn)) }));
 }
 
-// A new reply, named after its model when the model changed since the last.
 function open(pane: Pane, model: string) {
   const reply = opening(nameOf(pane, model));
   pane.chat.setState(({ turns }) => ({ turns: [...turns, reply] }));
@@ -56,7 +54,6 @@ export function idle(on: boolean, pane: Pane = focused()) {
   pane.chat.setState({ busy: !on, stopping: false });
 }
 
-// A new session, empty: it gets its id once the first message goes.
 export function blank(id: string, pane: Pane = focused()) {
   pane.desk.setState({ session: id, worktree: null, isolate: !id && isolating() });
   pane.named = "";
@@ -64,13 +61,11 @@ export function blank(id: string, pane: Pane = focused()) {
   pane.pendingId = null;
   pane.warmed = "";
   pane.reading = null;
-  pane.chat.setState({ turns: [], context: null });
+  pane.chat.setState({ turns: [], context: null, ranOn: "", ranWith: null });
   unspent(pane);
   forgetTasks(id);
 }
 
-// The agent changed a file: the tree and the viewer mark it, and what shows it
-// (the file, the page, the changes) reads it again.
 function touched(edit: { path: string; lines: number[]; plus: number; minus: number }) {
   noteEdit(edit);
   if (viewer.getState().opened === edit.path) openFile(edit.path);
@@ -78,12 +73,12 @@ function touched(edit: { path: string; lines: number[]; plus: number; minus: num
   if (panelShows("changes")) soonChanges();
 }
 
-// One event on the reply it goes to, and what the live line says of it.
 function route(pane: Pane, key: number, event: ChatEvent, live: boolean) {
   onReply(pane, key, (reply) => heard(reply, event, live));
   if (event.kind === "finished") spend(pane, event);
   if (event.kind === "finished" && event.window) pane.chat.setState({ context: { used: event.context ?? 0, window: event.window } });
   if (event.kind === "started") {
+    if (event.model) pane.chat.setState({ ranOn: event.model });
     const who = nameOf(pane, event.model);
     if (who) onReply(pane, key, (reply) => ({ ...reply, who }));
   }
@@ -119,8 +114,6 @@ function working(event: ChatEvent) {
 
 const inRoot = (pane: Pane, path: string) => inFolder(rootOf(pane), path);
 
-// A saved session drawn back as it went. A question still waiting when the
-// session is still running can be answered.
 export async function load(id: string, pane: Pane = focused()) {
   blank(id, pane);
   const meanwhile: ChatEvent[] = [];
@@ -188,7 +181,6 @@ function asked(pane: Pane, text: string, files: string[], pictures: Picture[]) {
   pane.chat.setState(({ turns }) => ({ turns: [...turns, { kind: "you", key: nextKey(), text, files, pictures }] }));
 }
 
-// A message as the composer hands it: what to send, and how it shows.
 export interface Outgoing {
   message: Message;
   shownFiles: string[];
@@ -207,6 +199,7 @@ export async function send({ message, shownFiles, pictures }: Outgoing, settings
     pane.pendingId = null;
     const outgoing = await isolateIfAsked(pane, id, message);
     await commands.chatSend(root, id, outgoing, settings);
+    pane.chat.setState({ ranOn: settings.model, ranWith: { effort: settings.effort, thinking: settings.thinking } });
     loadRail();
   } catch (reason) {
     onReply(pane, pane.replying, (reply) => heard(reply, { kind: "failed", reason: reason instanceof Error ? reason.message : String(reason) }, false));
@@ -243,8 +236,6 @@ export async function halt(pane: Pane = focused()) {
   }
 }
 
-// Claude Code starts before the first message, with the settings chosen, so
-// the reply comes sooner.
 export async function warm(settings: Settings, pane: Pane = focused()) {
   const root = rootOf(pane);
   if (!root || pane.chat.getState().busy || !settings.provider) return;
@@ -262,8 +253,6 @@ export async function warm(settings: Settings, pane: Pane = focused()) {
   }
 }
 
-// An answer to a question in `reply`: it shows at once, or the question says
-// why it could not go.
 export async function answer(reply: number, request: string, decision: Decision, pane: Pane = focused()) {
   await commands.chatAnswer(session(pane), request, decision);
   onReply(pane, reply, (open) => answered(open, request, decision.allow, decision.answers ?? null));
@@ -292,14 +281,14 @@ function hear(pane: Pane, event: ChatEvent) {
   afterTurn(pane);
 }
 
-// Once: what every session says. Another session's end only refreshes the
-// rail; its title may come then.
 const activityAfter = (kind: string, seen: boolean): Activity | null =>
   CLOSING.has(kind) ? (seen ? null : "done") : kind === "asking" ? "waiting" : "working";
 
 export const hearChat = () =>
   events.chat((from, event) => {
     if (event.kind === "limits") return noteLimits(event);
+    if (event.kind === "lockedOut") return noteLockout(event.reason);
+    if (event.kind === "finished" && event.ok) noteLockout(null);
     tellAway(from, event);
     const pane = paneOf(from);
     if (!TASK_EVENTS.has(event.kind)) noteActivity(from, activityAfter(event.kind, Boolean(pane)));

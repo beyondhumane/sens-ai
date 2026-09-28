@@ -7,7 +7,7 @@ import { forgetChanges } from "../changes/store";
 import { notice, send as sendChat, warm as warmChat, warn, whenTurnEnds } from "../chat/store";
 import { loadFiles } from "../files/store";
 import { openFile, viewer } from "../files/view";
-import { chosenCard } from "../models/store";
+import { choose, chosenCard, offeredAs, sameModel } from "../models/store";
 import { EFFORT, ISOLATE, THINKING, focused, panes, workOf, type Pane } from "../panes/store";
 import { forgetEdits, project } from "../project/store";
 import { failRail, loadRail } from "../rail/store";
@@ -29,8 +29,6 @@ export const LONG_PASTE = { characters: 2500, lines: 40 };
 const PASTED_TEXT = "pasted-text.txt";
 const TOLD_KEPT = 50;
 
-// A file attached from the project (or from outside it), and a picture pasted
-// or dropped, as the message will carry them.
 export interface File {
   path: string;
   name: string;
@@ -52,7 +50,6 @@ const storedMode = stored(MODE, "");
 
 export const composer = createStore(() => ({
   mode: MODES.some((one) => one.id === storedMode) ? (storedMode as string) : "default",
-  // Files dragged over the window, while they may be dropped here.
   dropping: false,
 }));
 
@@ -63,7 +60,6 @@ const workingIn = (work: string) => panes.getState().open.filter((one) => workOf
 
 export const effortLevels = (card = chosenCard()) => card?.efforts || [];
 
-// The effort chosen when the model offers it, else the model's own.
 export function effortNow(card: Card | undefined = chosenCard(), pane: Pane = focused()) {
   const { effort } = pane.desk.getState();
   return card?.efforts.includes(effort) ? effort : card?.effort || "";
@@ -84,14 +80,18 @@ export function currentSettings(pane: Pane = focused()): Settings {
 
 export const warm = (pane: Pane = focused()) => warmChat(currentSettings(pane), pane);
 
+function setEffort(level: string, pane: Pane) {
+  store(EFFORT, level);
+  pane.desk.setState({ effort: level });
+  warm(pane);
+}
+
 export function pickEffort(at: number, pane: Pane = focused()) {
   const card = chosenCard(pane);
   const levels = effortLevels(card);
   const level = levels[Math.min(Math.max(at, 0), levels.length - 1)];
   if (!level || level === effortNow(card, pane)) return;
-  store(EFFORT, level);
-  pane.desk.setState({ effort: level });
-  warm(pane);
+  setEffort(level, pane);
 }
 
 export function toggleThinking(pane: Pane = focused()) {
@@ -99,6 +99,29 @@ export function toggleThinking(pane: Pane = focused()) {
   const thinking = !pane.desk.getState().thinking;
   store(THINKING, thinking);
   pane.desk.setState({ thinking });
+}
+
+export type Changed = "model" | "thinking" | "effort";
+
+export function cacheBreak(pane: Pane = focused()) {
+  const { ranOn, ranWith, context } = pane.chat.getState();
+  const now = currentSettings(pane);
+  if (!ranOn || !now.model) return null;
+  const knobs: Changed[] = ranWith ? (["thinking", "effort"] as const).filter((knob) => ranWith[knob] !== now[knob]) : [];
+  const changed: Changed[] = sameModel(ranOn, now.model) ? knobs : ["model"];
+  if (!changed.length) return null;
+  const back = offeredAs(now.provider, ranOn);
+  return { changed, was: { ...ranWith, model: back?.id ?? ranOn }, now, tokens: context?.used ?? 0, undoable: Boolean(back) || !changed.includes("model") };
+}
+
+export function undoChange(pane: Pane = focused()) {
+  const { ranOn, ranWith } = pane.chat.getState();
+  const { provider } = pane.desk.getState().choice;
+  const back = offeredAs(provider, ranOn);
+  if (back) choose(provider, back.id, pane);
+  if (!ranWith) return;
+  if (currentSettings(pane).thinking !== ranWith.thinking) toggleThinking(pane);
+  if (effortLevels(chosenCard(pane)).includes(ranWith.effort) && ranWith.effort !== effortNow(chosenCard(pane), pane)) setEffort(ranWith.effort, pane);
 }
 
 export function chooseMode(id: string, pane: Pane = focused()) {
@@ -277,7 +300,6 @@ export async function readRepo(pane: Pane = focused()) {
   if (workOf(pane) === work && repoLaps.get(pane) === mine) pane.desk.setState({ repo });
 }
 
-// A branch switched: the agent's marks go, and what shows files reads them again.
 export async function switchTo(name: string, pane: Pane = focused()) {
   const root = workOf(pane);
   let repo;
@@ -299,7 +321,6 @@ export async function switchTo(name: string, pane: Pane = focused()) {
   if (opened) await openFile(opened);
 }
 
-// A message goes when there is a project, a model and something to say.
 export function canSend(text: string, pane: Pane = focused()) {
   const { root, choice, pasted, attached } = pane.desk.getState();
   return Boolean(root && choice.provider && (text.trim() || pasted.length || attached.length));
@@ -324,8 +345,6 @@ export async function compactNow(pane: Pane = focused()) {
   await sendChat({ message: { text: COMPACT, files: [], images: [] }, shownFiles: [], pictures: [] }, currentSettings(pane), pane);
 }
 
-// Files dropped on the window attach to the message, while the chat of a
-// project shows.
 export function hearDrops() {
   getCurrentWindow().onDragDropEvent(({ payload }) => {
     const pane = focused();
@@ -341,5 +360,4 @@ export function hearDrops() {
   });
 }
 
-// The branch is read again after every turn: the agent may have committed.
 whenTurnEnds(readRepo);

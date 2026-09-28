@@ -50,6 +50,16 @@ export const t = copy({
     tooManyPictures: (most: number) => `Up to ${most} pictures per message · the rest were left out`,
     tooManyFiles: (most: number) => `Up to ${most} attachments per message · the rest were left out`,
     stageFailed: (name: string, reason: string) => `Couldn’t attach ${name}: ${reason}`,
+    change: {
+      title: { model: "Switching models mid-session uses more of your plan", thinking: "Turning thinking on or off mid-session uses more of your plan", effort: "Changing the effort mid-session uses more of your plan", several: "These changes mid-session use more of your plan" },
+      said: (before: string, after: string, tokens: string) =>
+        `This session ran with ${before}. With ${after}, the next message reads the whole conversation${tokens ? ` (${tokens} tokens)` : ""} again without the cache, and that uses more of your plan. We recommend starting a new session.`,
+      thinkingOn: "thinking on",
+      thinkingOff: "thinking off",
+      effortAt: (level: string) => `${level.toLowerCase()} effort`,
+      newSession: "New session",
+      undo: "Undo",
+    },
   },
   es: {
     chooseFolderTitle: "Elegir carpeta de trabajo",
@@ -100,6 +110,16 @@ export const t = copy({
     tooManyPictures: (most: number) => `Hasta ${most} imágenes por mensaje · el resto no se adjuntó`,
     tooManyFiles: (most: number) => `Hasta ${most} adjuntos por mensaje · el resto no se adjuntó`,
     stageFailed: (name: string, reason: string) => `No pude adjuntar ${name}: ${reason}`,
+    change: {
+      title: { model: "Cambiar de modelo a mitad de sesión gasta más de tu plan", thinking: "Cambiar el razonamiento a mitad de sesión gasta más de tu plan", effort: "Cambiar el esfuerzo a mitad de sesión gasta más de tu plan", several: "Estos cambios a mitad de sesión gastan más de tu plan" },
+      said: (before: string, after: string, tokens: string) =>
+        `Esta sesión iba con ${before}. Con ${after}, el próximo mensaje vuelve a leer toda la conversación${tokens ? ` (${tokens} tokens)` : ""} sin caché, y eso gasta más de tu plan. Te recomendamos empezar una sesión nueva.`,
+      thinkingOn: "razonamiento activado",
+      thinkingOff: "razonamiento desactivado",
+      effortAt: (level: string) => `esfuerzo ${level.toLowerCase()}`,
+      newSession: "Sesión nueva",
+      undo: "Deshacer",
+    },
   },
   fr: {
     chooseFolderTitle: "Choisir un dossier de travail",
@@ -150,6 +170,16 @@ export const t = copy({
     tooManyPictures: (most: number) => `Jusqu’à ${most} images par message · les autres n’ont pas été jointes`,
     tooManyFiles: (most: number) => `Jusqu’à ${most} pièces jointes par message · les autres n’ont pas été jointes`,
     stageFailed: (name: string, reason: string) => `Impossible de joindre ${name} : ${reason}`,
+    change: {
+      title: { model: "Changer de modèle en cours de session consomme davantage votre forfait", thinking: "Activer ou désactiver la réflexion en cours de session consomme davantage votre forfait", effort: "Changer l’effort en cours de session consomme davantage votre forfait", several: "Ces changements en cours de session consomment davantage votre forfait" },
+      said: (before: string, after: string, tokens: string) =>
+        `Cette session utilisait ${before}. Avec ${after}, le prochain message relit toute la conversation${tokens ? ` (${tokens} tokens)` : ""} sans cache, ce qui consomme davantage votre forfait. Nous vous conseillons de démarrer une nouvelle session.`,
+      thinkingOn: "la réflexion activée",
+      thinkingOff: "la réflexion désactivée",
+      effortAt: (level: string) => `un effort ${level.toLowerCase()}`,
+      newSession: "Nouvelle session",
+      undo: "Annuler",
+    },
   },
   de: {
     chooseFolderTitle: "Arbeitsordner wählen",
@@ -200,6 +230,16 @@ export const t = copy({
     tooManyPictures: (most: number) => `Bis zu ${most} Bilder pro Nachricht · der Rest wurde nicht angehängt`,
     tooManyFiles: (most: number) => `Bis zu ${most} Anhänge pro Nachricht · der Rest wurde nicht angehängt`,
     stageFailed: (name: string, reason: string) => `${name} konnte nicht angehängt werden: ${reason}`,
+    change: {
+      title: { model: "Ein Modellwechsel mitten in der Sitzung verbraucht mehr von deinem Plan", thinking: "Denken mitten in der Sitzung ein- oder auszuschalten verbraucht mehr von deinem Plan", effort: "Den Aufwand mitten in der Sitzung zu ändern verbraucht mehr von deinem Plan", several: "Diese Änderungen mitten in der Sitzung verbrauchen mehr von deinem Plan" },
+      said: (before: string, after: string, tokens: string) =>
+        `Diese Sitzung lief mit ${before}. Mit ${after} liest die nächste Nachricht das ganze Gespräch${tokens ? ` (${tokens} Tokens)` : ""} ohne Cache neu ein und verbraucht dadurch mehr von deinem Plan. Wir empfehlen, eine neue Sitzung zu starten.`,
+      thinkingOn: "eingeschaltetem Denken",
+      thinkingOff: "ausgeschaltetem Denken",
+      effortAt: (level: string) => `Aufwand „${level}“`,
+      newSession: "Neue Sitzung",
+      undo: "Rückgängig",
+    },
   },
   ja: {
     chooseFolderTitle: "作業フォルダーを選択",
@@ -250,6 +290,16 @@ export const t = copy({
     tooManyPictures: (most: number) => `画像は 1 メッセージにつき ${most} 枚までです · 残りは添付されませんでした`,
     tooManyFiles: (most: number) => `添付ファイルは 1 メッセージにつき ${most} 個までです · 残りは添付されませんでした`,
     stageFailed: (name: string, reason: string) => `${name} を添付できませんでした: ${reason}`,
+    change: {
+      title: { model: "セッションの途中でモデルを変えると、プランの消費が増えます", thinking: "セッションの途中で思考を切り替えると、プランの消費が増えます", effort: "セッションの途中で推論の強さを変えると、プランの消費が増えます", several: "セッションの途中でこれらを変えると、プランの消費が増えます" },
+      said: (before: string, after: string, tokens: string) =>
+        `このセッションは ${before} を使っていました。${after} に変えると、次のメッセージで会話全体${tokens ? `（${tokens} トークン）` : ""}をキャッシュなしで読み直すため、プランの消費が増えます。新しいセッションを始めることをおすすめします。`,
+      thinkingOn: "思考オン",
+      thinkingOff: "思考オフ",
+      effortAt: (level: string) => `推論の強さ「${level}」`,
+      newSession: "新しいセッション",
+      undo: "元に戻す",
+    },
   },
   zh: {
     chooseFolderTitle: "选择工作文件夹",
@@ -300,5 +350,15 @@ export const t = copy({
     tooManyPictures: (most: number) => `每条消息最多 ${most} 张图片 · 其余未附加`,
     tooManyFiles: (most: number) => `每条消息最多 ${most} 个附件 · 其余未附加`,
     stageFailed: (name: string, reason: string) => `无法附加 ${name}：${reason}`,
+    change: {
+      title: { model: "在会话中途切换模型会消耗更多套餐用量", thinking: "在会话中途开关思考会消耗更多套餐用量", effort: "在会话中途调整推理强度会消耗更多套餐用量", several: "在会话中途做这些更改会消耗更多套餐用量" },
+      said: (before: string, after: string, tokens: string) =>
+        `此会话使用的是 ${before}。换成 ${after} 后，下一条消息会在没有缓存的情况下重新读取整个对话${tokens ? `（${tokens} 个 token）` : ""}，消耗更多套餐用量。建议开始一个新会话。`,
+      thinkingOn: "开启思考",
+      thinkingOff: "关闭思考",
+      effortAt: (level: string) => `推理强度「${level}」`,
+      newSession: "新会话",
+      undo: "撤销",
+    },
   },
 });

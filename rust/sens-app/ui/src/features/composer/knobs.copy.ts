@@ -266,3 +266,5 @@ export const t = copy({
     efforts: { low: "低", medium: "中", high: "高", xhigh: "超高", max: "最高" },
   },
 });
+
+export const effortName = (level: string) => (t.efforts as Record<string, string>)[level] || level;

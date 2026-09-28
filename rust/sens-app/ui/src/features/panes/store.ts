@@ -17,10 +17,6 @@ export const LEAST_WIDTH = 340;
 export const SHARE_LEAST = 0.25;
 export const SHARE_MOST = 0.75;
 
-// The chat of the session on screen: its turns; whether Claude is working
-// (`busy`) and being stopped; the hint the empty chat shows; whether a
-// session is being drawn back, which skips the entry animations; and how many
-// turns ended, for what reads the project again after one.
 export interface Chat {
   turns: Turn[];
   busy: boolean;
@@ -29,11 +25,10 @@ export interface Chat {
   replaying: boolean;
   ended: number;
   context: { used: number; window: number } | null;
+  ranOn: string;
+  ranWith: { effort: string; thinking: boolean } | null;
 }
 
-// What goes with the next message: effort, thinking and the permission mode
-// (kept across launches), the files and pictures attached, and the branch of
-// the project, if it is a git repository.
 export interface Desk {
   root: string;
   session: string;
@@ -54,11 +49,8 @@ export interface Pane {
   id: string;
   chat: StoreApi<Chat>;
   desk: StoreApi<Desk>;
-  // The reply the live events go to, if one is open.
   replying: number | null;
-  // The model named last in this chat: a reply names its model only when it changes.
   named: string;
-  // A new session's id, asked for before its first message so it can warm up.
   pendingId: Promise<string> | null;
   warmed: string;
   reading: ChatEvent[] | null;
@@ -80,7 +72,7 @@ export function newPane(root = ""): Pane {
   made += 1;
   return {
     id: `pane-${made}`,
-    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, ended: 0, context: null })),
+    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, ended: 0, context: null, ranOn: "", ranWith: null })),
     desk: createStore<Desk>(() => ({
       root,
       session: "",

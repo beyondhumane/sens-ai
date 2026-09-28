@@ -6,13 +6,13 @@ import { dialog } from "../../app/modal";
 import { chooseFolder } from "../../app/session";
 import { blank, warm as warmChat } from "../chat/store";
 import { focused } from "../panes/store";
-import { accountLine, choose, loadCatalog, models, noteLimits } from "../models/store";
+import { accountLine, choose, loadCatalog, models, noteLimits, noteLockout, readAccount } from "../models/store";
 import { project } from "../project/store";
 import { settingsSheet } from "../settings/sheet";
 import { settings } from "../settings/store";
 import { voice } from "../voice/store";
 import { Composer } from "./Composer";
-import { BYPASS, composer, currentSettings, readRepo, readTrust, switchTo } from "./store";
+import { BYPASS, composer, currentSettings, pickEffort, readRepo, readTrust, switchTo, toggleThinking } from "./store";
 
 const ipc = vi.hoisted(() => ({
   commands: {
@@ -35,6 +35,8 @@ const ipc = vi.hoisted(() => ({
     voiceStart: vi.fn(),
     voiceStop: vi.fn(),
     voicePrepare: vi.fn(),
+    providersState: vi.fn(),
+    providerSignIn: vi.fn(),
   },
   listeners: new Set<(what: VoiceHeard) => void>(),
 }));
@@ -277,6 +279,115 @@ describe("the composer", () => {
     await act(async () => reading);
 
     expect(focused().desk.getState().repo?.branch).toBe("feat/ui");
+  });
+});
+
+describe("a lost sign-in", () => {
+  const claudeCode = { id: "claude", vendor: "Anthropic", label: "Claude Code", method: "subscription", keyHint: "", version: "2.1.0", account: null, error: "", installed: true };
+
+  it("asks to sign in above the message, and goes once Claude Code is signed in again", async () => {
+    render(<Composer />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    act(() => noteLockout("signIn"));
+    const notice = screen.getByRole("alert");
+    expect(notice.textContent).toContain("Tu sesión de Claude se ha cerrado");
+    expect(notice.nextElementSibling?.className).toBe("workspace");
+    ipc.commands.providersState.mockResolvedValue([claudeCode]);
+    await act(async () => fireEvent.click(within(notice).getByRole("button", { name: "Iniciar sesión" })));
+    await act(async () => new Promise((settle) => setTimeout(settle)));
+    expect(ipc.commands.providerSignIn).toHaveBeenCalledWith("subscription");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("stays while the sign-in is not finished", async () => {
+    render(<Composer />);
+    act(() => noteLockout("billing"));
+    expect(screen.getByRole("alert").textContent).toContain("Claude no puede usar tu suscripción");
+    ipc.commands.providersState.mockResolvedValue([claudeCode]);
+    ipc.commands.providerSignIn.mockRejectedValue("no terminaste el inicio de sesión");
+    await act(async () => fireEvent.click(button("Iniciar sesión")));
+    await act(async () => new Promise((settle) => setTimeout(settle)));
+    expect(screen.getByRole("alert").textContent).toContain("Claude no puede usar tu suscripción");
+  });
+
+  it("shows while Claude Code is signed out, and sends the trouble of a key to Providers", async () => {
+    ipc.commands.claudeAccount.mockResolvedValue({ billing: "signedOut", plan: "", source: "", email: "" });
+    await readAccount();
+    render(<Composer />);
+    expect(screen.getByRole("alert").textContent).toContain("Tu sesión de Claude se ha cerrado");
+    act(() => models.setState({ account: { billing: "elsewhere", plan: "", source: "ANTHROPIC_API_KEY", email: "" }, lockout: "billing" }));
+    expect(screen.getByRole("alert").textContent).toContain("La cuenta de la clave de API no tiene saldo");
+    await act(async () => fireEvent.click(button("Abrir Proveedores")));
+    expect(settingsSheet.getState().open).toBe(true);
+    expect(settings.getState().section).toBe("providers");
+    act(() => settingsSheet.setState({ open: false }));
+  });
+});
+
+describe("a change mid-session that reads the conversation again", () => {
+  const ranOn = (model: string, ranWith: { effort: string; thinking: boolean } | null = { effort: "medium", thinking: true }) =>
+    act(() => focused().chat.setState({ ranOn: model, ranWith, context: { used: 31_400, window: 200_000 } }));
+
+  it("names another model, and goes back to the model of the session", () => {
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => choose("claude", "claude-opus"));
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Cambiar de modelo a mitad de sesión gasta más de tu plan");
+    expect(notice.textContent).toContain("Esta sesión iba con Sonnet. Con Opus, el próximo mensaje vuelve a leer toda la conversación (31,4k tokens) sin caché");
+    fireEvent.click(within(notice).getByRole("button", { name: "Deshacer" }));
+    expect(focused().desk.getState().choice.model).toBe("claude-sonnet");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("names thinking and effort changed together, and undoes both", () => {
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    act(() => toggleThinking());
+    expect(screen.getByRole("status").textContent).toContain("Cambiar el razonamiento a mitad de sesión gasta más de tu plan");
+    expect(screen.getByRole("status").textContent).toContain("Esta sesión iba con razonamiento activado. Con razonamiento desactivado,");
+    act(() => pickEffort(2));
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Estos cambios a mitad de sesión gastan más de tu plan");
+    expect(notice.textContent).toContain("Esta sesión iba con razonamiento activado y esfuerzo medio. Con razonamiento desactivado y esfuerzo alto,");
+    fireEvent.click(within(notice).getByRole("button", { name: "Deshacer" }));
+    expect(currentSettings()).toMatchObject({ model: "claude-sonnet", effort: "medium", thinking: true });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("knows what the last message went with, and warns when the effort changes after it", async () => {
+    render(<Composer />);
+    fireEvent.change(field(), { target: { value: "Hola" } });
+    await act(async () => fireEvent.keyDown(field(), { key: "Enter" }));
+    act(() => focused().chat.setState({ busy: false, stopping: false }));
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => pickEffort(0));
+    expect(screen.getByRole("status").textContent).toContain("Cambiar el esfuerzo a mitad de sesión gasta más de tu plan");
+  });
+
+  it("recommends a new session, which keeps the model chosen", async () => {
+    const { draft } = await import("../../app/session");
+    render(<Composer />);
+    ranOn("claude-sonnet");
+    act(() => choose("claude", "claude-opus"));
+    fireEvent.click(button("Sesión nueva"));
+    expect(draft).toHaveBeenCalledWith("C:/demo", focused());
+    act(() => blank(""));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(focused().desk.getState().choice.model).toBe("claude-opus");
+  });
+
+  it("stays away for a new session, the same model with another context window, and knobs of a session only read back", () => {
+    render(<Composer />);
+    act(() => choose("claude", "claude-opus"));
+    expect(screen.queryByRole("status")).toBeNull();
+    ranOn("claude-opus[1m]");
+    expect(screen.queryByRole("status")).toBeNull();
+    act(() => choose("claude", "claude-sonnet"));
+    ranOn("claude-sonnet", null);
+    act(() => pickEffort(0));
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
 
