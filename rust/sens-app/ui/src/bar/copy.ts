@@ -28,6 +28,8 @@ export const t = copy({
     unpin: "unpin",
     close: "close",
     pinned: "Pinned: it stays on top until you unpin it",
+    pinAction: "Pin: it stays visible over every window on this screen (Ctrl+P)",
+    move: "Drag to move it · double-click to center it",
     reads: (count: number) => (count === 1 ? "1 file read" : `${count} files read`),
   },
   es: {
@@ -57,6 +59,8 @@ export const t = copy({
     unpin: "soltar",
     close: "cerrar",
     pinned: "Fijada: se queda encima hasta que la sueltes",
+    pinAction: "Fijar: se queda visible sobre cualquier ventana de esta pantalla (Ctrl+P)",
+    move: "Arrastra para moverla · doble clic para centrarla",
     reads: (count: number) => (count === 1 ? "1 fichero leído" : `${count} ficheros leídos`),
   },
   fr: {
@@ -86,6 +90,8 @@ export const t = copy({
     unpin: "détacher",
     close: "fermer",
     pinned: "Épinglée : elle reste au premier plan jusqu’à ce que vous la détachiez",
+    pinAction: "Épingler : elle reste visible par-dessus toutes les fenêtres de cet écran (Ctrl+P)",
+    move: "Faites-la glisser pour la déplacer · double-clic pour la centrer",
     reads: (count: number) => (count <= 1 ? `${count} fichier lu` : `${count} fichiers lus`),
   },
   de: {
@@ -115,6 +121,8 @@ export const t = copy({
     unpin: "lösen",
     close: "schließen",
     pinned: "Angeheftet: Sie bleibt im Vordergrund, bis du sie löst",
+    pinAction: "Anheften: Sie bleibt auf diesem Bildschirm über jedem Fenster sichtbar (Strg+P)",
+    move: "Zum Verschieben ziehen · Doppelklick zentriert sie",
     reads: (count: number) => (count === 1 ? "1 Datei gelesen" : `${count} Dateien gelesen`),
   },
   ja: {
@@ -144,6 +152,8 @@ export const t = copy({
     unpin: "固定を解除",
     close: "閉じる",
     pinned: "固定中: 解除するまで最前面に表示されます",
+    pinAction: "固定: この画面のどのウィンドウよりも前面に表示し続けます (Ctrl+P)",
+    move: "ドラッグで移動 · ダブルクリックで中央へ",
     reads: (count: number) => `${count} 個のファイルを読み込み`,
   },
   zh: {
@@ -173,6 +183,8 @@ export const t = copy({
     unpin: "取消固定",
     close: "关闭",
     pinned: "已固定：取消固定前会一直置顶",
+    pinAction: "固定：在此屏幕上始终显示在所有窗口之上 (Ctrl+P)",
+    move: "拖动以移动 · 双击居中",
     reads: (count: number) => `已读取 ${count} 个文件`,
   },
 });

@@ -1,4 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type PointerEvent as HeldPointer,
+  type RefObject,
+} from "react";
 import { useStore } from "zustand";
 import { commands } from "../ipc/commands";
 import { Flow, Live } from "../features/chat/Reply";
@@ -34,6 +44,7 @@ import {
 } from "./store";
 
 const MARGIN = 24;
+const DRAG_FROM = 4;
 const FIELD_MOST = 120;
 const NEAR_BOTTOM = 48;
 
@@ -148,6 +159,24 @@ function useKeys() {
   }, []);
 }
 
+function follow(held: HeldPointer<HTMLElement>) {
+  if (held.button !== 0) return;
+  const { clientX: x, clientY: y } = held;
+  const moved = (now: PointerEvent) => {
+    if (Math.hypot(now.clientX - x, now.clientY - y) < DRAG_FROM) return;
+    stop();
+    void commands.barDrag().catch(() => {});
+  };
+  const stop = () => {
+    removeEventListener("pointermove", moved);
+    removeEventListener("pointerup", stop);
+  };
+  addEventListener("pointermove", moved);
+  addEventListener("pointerup", stop);
+}
+
+const recenter = () => void commands.barRecenter().catch(() => {});
+
 function useGrow(field: RefObject<HTMLTextAreaElement | null>, text: string) {
   useLayoutEffect(() => {
     const box = field.current;
@@ -217,8 +246,14 @@ function Row() {
   }
 
   return (
-    <div className="bar-row" onPointerDown={(event) => pinned && event.target === event.currentTarget && void commands.barDrag().catch(() => {})}>
-      <Mark key={ended} className="bar-mark" size={22} micro />
+    <div
+      className="bar-row"
+      onPointerDown={(event) => event.target === event.currentTarget && follow(event)}
+      onDoubleClick={(event) => event.target === event.currentTarget && recenter()}
+    >
+      <span className="bar-handle" title={t.move} onPointerDown={follow} onDoubleClick={recenter}>
+        <Mark key={ended} className="bar-mark" size={22} micro />
+      </span>
       <textarea
         ref={field}
         id="task"
@@ -236,11 +271,9 @@ function Row() {
         onPaste={paste}
       />
       <SessionChip />
-      {pinned && (
-        <button type="button" className="round pinned" aria-pressed="true" title={t.pinned} aria-label={t.pinned} onClick={pin}>
-          <Icon svg={ICONS.pin} />
-        </button>
-      )}
+      <button type="button" className="round pin" aria-pressed={pinned} title={pinned ? t.pinned : t.pinAction} aria-label={pinned ? t.pinned : t.pinAction} onClick={pin}>
+        <Icon svg={ICONS.pin} />
+      </button>
       <button
         type="button"
         className="round dictate"

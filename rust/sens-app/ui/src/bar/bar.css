@@ -12,8 +12,9 @@ body { margin: 0; overflow: hidden; }
 [data-mode="dark"] .float { border-color: var(--edge); }
 
 .bar-row { display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 10px 10px 10px 14px; }
-.float[data-pinned] .bar-row { cursor: grab; }
-.bar-mark { flex: none; margin: 0 4px 0 0; --mark-body: var(--edge); }
+.bar-row, .bar-handle { cursor: grab; }
+.bar-handle { display: grid; flex: none; margin: 0 4px 0 0; }
+.bar-mark { --mark-body: var(--edge); }
 .bar-mark path { stroke: var(--panel); stroke-width: 5.2; }
 
 .bar-field {

@@ -767,6 +767,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   },
   shortcut_pause: () => undefined,
   bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
+  bar_recenter: () => console.info("[mock-tauri] la barra volvería al centro de su pantalla"),
   bar_focus: ({ hand }) => console.info("[mock-tauri] Sens se ocultaría y la barra retomaría", hand),
   bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
   bar_fit: () => null,

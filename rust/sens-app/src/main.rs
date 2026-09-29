@@ -22,6 +22,7 @@ mod providers;
 mod served;
 mod shortcut;
 mod snapshot;
+mod spots;
 mod store;
 mod terminal;
 mod update;
@@ -911,6 +912,7 @@ fn main() {
             market_update,
             bar::bar_open,
             bar::bar_focus,
+            bar::bar_recenter,
             bar::bar_hide,
             bar::bar_fit,
             bar::bar_pin,
