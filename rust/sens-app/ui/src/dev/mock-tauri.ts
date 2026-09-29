@@ -587,7 +587,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   voice_start: () => listen(true),
   voice_test: () => listen(false),
   voice_stop: () => stopListening(),
-  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 59_707_625 }),
+  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 190_085_487 }),
   voice_prepare: () => console.info("[mock-tauri] descargaría el modelo de voz"),
   voice_microphones: () => MICROPHONES,
   voice_microphone: () => microphone,

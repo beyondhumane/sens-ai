@@ -314,7 +314,7 @@ export interface TerminalReading {
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };
 
-export type VoiceCause = "microphone" | "model" | "other";
+export type VoiceCause = "microphone" | "silent" | "model" | "other";
 
 export interface VoiceRefusal {
   cause: VoiceCause;

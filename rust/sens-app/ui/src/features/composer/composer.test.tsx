@@ -72,7 +72,7 @@ beforeEach(async () => {
   localStorage.clear();
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.listeners.clear();
-  voice.setState({ ready: true, fetching: false, done: 0, total: 59_707_625, fault: "" });
+  voice.setState({ ready: true, fetching: false, done: 0, total: 190_085_487, fault: "" });
   ipc.commands.providers.mockResolvedValue([{ id: "claude", vendor: "Anthropic", label: "Claude Code" }]);
   ipc.commands.models.mockResolvedValue([card("claude-sonnet"), card("claude-opus", { thinking: "always" }), card("claude-haiku", { latest: false, efforts: [] })]);
   ipc.commands.claudeAccount.mockResolvedValue({ billing: "subscription", plan: "max", source: "claude.ai", email: "ada@example.com" });

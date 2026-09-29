@@ -192,7 +192,7 @@ Your prompts and your code go where Claude Code sends them, and nowhere else. Se
 | `skills.sh` | When you search or install from it | The open skills index |
 | `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | When you browse or install a plugin or skill | Marketplaces and their files, at a pinned commit |
 | `icons.duckduckgo.com` | In *Capabilities › Explore* | The site icon on each card |
-| `github.com` (this repository's `whisper-base-q5_1` release) | Once, after Sens is installed or updated | The 57 MB voice model, checked against its SHA-256; dictation then works offline |
+| `github.com` (this repository's `whisper-small-q5_1` release) | Once, after Sens is installed or updated | The 181 MB voice model, checked against its SHA-256; dictation then works offline |
 
 ### Where things live
 

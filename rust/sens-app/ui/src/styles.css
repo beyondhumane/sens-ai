@@ -1129,7 +1129,11 @@
   .round:hover { background: var(--raise); color: var(--text); }
   .round:disabled { opacity: .35; pointer-events: none; }
   .round[aria-pressed="true"] { color: var(--focus); background: var(--raise); }
-  .round.dictate[aria-pressed="true"] { outline: calc(1px + var(--level, 0) * 3px) solid var(--accent-line); outline-offset: 1px; transition: outline-width 90ms linear; }
+  .round.dictate[aria-pressed="true"] {
+    color: var(--focus); background: var(--raise);
+    outline: calc(2px + var(--level, 0) * 3px) solid var(--accent-line); outline-offset: 1px;
+    transition: outline-width 90ms linear, background var(--fast) var(--curve), color var(--fast) var(--curve);
+  }
   .round.dictate[aria-busy="true"] { color: var(--focus); animation: pulse 1.2s ease-in-out infinite; }
 
   .send { background: var(--accent-fill); color: var(--accent-ink);

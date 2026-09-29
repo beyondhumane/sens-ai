@@ -248,7 +248,7 @@ describe("general settings", () => {
     act(() => ipc.heard.voice({ kind: "ended", id: 3, refusal: null }));
     expect(screen.getByRole("button", { name: "Probar" })).toBeTruthy();
 
-    act(() => voice.setState({ ready: true, fetching: false, total: 59_707_625 }));
+    act(() => voice.setState({ ready: true, fetching: false, total: 190_085_487 }));
     expect(screen.getByText("Modelo de voz en este equipo · 57 MB")).toBeTruthy();
   });
 
