@@ -170,6 +170,7 @@ export const commands = {
   stopTask: (sessionId: string, taskId: string) => invoke<void>("chat_stop_task", { sessionId, taskId }),
 
   barOpen: () => invoke<void>("bar_open"),
+  barFocus: (hand: HandOver) => invoke<void>("bar_focus", { hand }),
   barHide: () => invoke<void>("bar_hide"),
   barFit: (height: number) => invoke<void>("bar_fit", { height }),
   barPin: (on: boolean) => invoke<void>("bar_pin", { on }),

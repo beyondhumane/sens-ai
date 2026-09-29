@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { commands, events } from "../ipc/commands";
-import type { BarOpened, BarProject, Copied, Front } from "../ipc/types";
+import type { BarOpened, BarProject, Copied, Front, HandOver } from "../ipc/types";
 import { blank, hearIn, idle, keepQuiet, load } from "../features/chat/store";
 import type { Foot, Reply, Turn, You } from "../features/chat/turns";
 import { tally, type Work } from "../features/chat/work";
@@ -80,13 +80,20 @@ export function fresh(root = own.desk.getState().root, text = "") {
 
 const watch = () => void commands.barWatching(document.hidden ? null : own.desk.getState().session || null).catch(() => {});
 
-export async function opened({ look, language, front, pinned }: BarOpened) {
+async function arrive(resume: HandOver | null, projects: BarProject[]) {
+  if (!resume?.root || !resume.session) return fresh(resume?.root || projects[0]?.root || own.desk.getState().root);
+  if (own.desk.getState().session === resume.session) return;
+  fresh(resume.root);
+  await load(resume.session, own);
+}
+
+export async function opened({ look, language, front, pinned, resume }: BarOpened) {
   showLanguage(languageOf(language));
   showLook(look);
   set(({ opened }) => ({ front, pinned, clip: null, opened: opened + 1 }));
   const projects = await commands.barProjects().catch((): BarProject[] => []);
   set({ projects });
-  if (!held()) fresh(projects[0]?.root ?? own.desk.getState().root);
+  if (!held()) await arrive(resume, projects);
   watch();
   const context = await commands.barContext().catch(() => null);
   set({ clip: context?.clip ?? null });

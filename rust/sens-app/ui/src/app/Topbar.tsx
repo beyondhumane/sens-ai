@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { commands } from "../ipc/commands";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { focused, panes } from "../features/panes/store";
@@ -94,6 +95,7 @@ export function Window({ tools = true }: { tools?: boolean }) {
   const grow = wide ? t.restore : t.maximize;
   return (
     <div className="win" id="win" data-max={String(wide)}>
+      {tools && <FocusButton />}
       {tools && <ToolsButton />}
       <button id="win-min" title={t.minimize} aria-label={t.minimize} onClick={() => frame.minimize()}>
         <Icon svg={ICONS.minimize} />
@@ -110,6 +112,24 @@ export function Window({ tools = true }: { tools?: boolean }) {
         <Icon svg={ICONS.shutWindow} />
       </button>
     </div>
+  );
+}
+
+function FocusButton() {
+  const [keys, setKeys] = useState("");
+  const learn = () => void commands.shortcutState().then((shortcut) => setKeys(shortcut.named), () => {});
+
+  useEffect(learn, []);
+
+  function enter() {
+    const { root, session } = focused().desk.getState();
+    void commands.barFocus({ root, session, text: "" }).catch(() => {});
+  }
+
+  return (
+    <button id="focus-mode" title={keys ? t.focusModeKeys(keys) : t.focusMode} aria-label={t.focusMode} onPointerEnter={learn} onClick={enter}>
+      <Icon svg={ICONS.focus} />
+    </button>
   );
 }
 

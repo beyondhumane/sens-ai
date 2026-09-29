@@ -910,6 +910,7 @@ fn main() {
             market_install,
             market_update,
             bar::bar_open,
+            bar::bar_focus,
             bar::bar_hide,
             bar::bar_fit,
             bar::bar_pin,

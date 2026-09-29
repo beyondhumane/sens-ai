@@ -1,6 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, ShortcutKeys, Shot } from "../ipc/types";
+import type { BarContext, BarOpened, BarProject, Capabilities, Found, HandOver, News, Shortcut, ShortcutKeys, Shot } from "../ipc/types";
 import { languageOf } from "../shared/i18n";
 import { lookOf, tokenOf } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
@@ -480,7 +480,7 @@ const CLIP = [
 const copied = () => asking.get("clip") !== "none";
 let pinned = asking.has("pinned");
 
-const opened = (): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned });
+const opened = (resume: HandOver | null = null): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned, resume });
 
 function shot(): Shot | null {
   const [width, height] = [960, 540];
@@ -767,6 +767,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   },
   shortcut_pause: () => undefined,
   bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
+  bar_focus: ({ hand }) => console.info("[mock-tauri] Sens se ocultaría y la barra retomaría", hand),
   bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
   bar_fit: () => null,
   bar_pin: ({ on }) => void (pinned = Boolean(on)),

@@ -55,6 +55,7 @@ export interface BarOpened {
   language: Language | null;
   front: Front | null;
   pinned: boolean;
+  resume: HandOver | null;
 }
 
 export interface Watching {

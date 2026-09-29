@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use sens_agent::language::Language;
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,7 @@ const FIRST_HEIGHT: f64 = 106.0;
 const LEAST_HEIGHT: f64 = 90.0;
 const MOST_HEIGHT: f64 = 680.0;
 const FROM_TOP: f64 = 0.22;
+const MINIMIZING: Duration = Duration::from_millis(240);
 
 #[derive(Default)]
 struct Pin {
@@ -28,6 +30,7 @@ struct Opened {
     language: Option<Language>,
     front: Option<front::Front>,
     pinned: bool,
+    resume: Option<HandOver>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -86,6 +89,10 @@ pub fn open(app: &AppHandle) {
 }
 
 fn reveal(app: &AppHandle, bar: &WebviewWindow) {
+    reveal_with(app, bar, None);
+}
+
+fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>) {
     let base = data_dir(app).ok();
     let look = base.as_deref().map(look::load).unwrap_or_default();
     let pin = app.state::<Pin>();
@@ -99,6 +106,7 @@ fn reveal(app: &AppHandle, bar: &WebviewWindow) {
         language: base.as_deref().and_then(language::load),
         front: front::front(),
         pinned,
+        resume,
     };
     let _ = app.emit_to(LABEL, "bar-open", opened);
     let _ = bar.show();
@@ -150,6 +158,25 @@ pub fn heard(window: &Window, event: &WindowEvent) {
 #[tauri::command]
 pub fn bar_open(app: AppHandle) {
     open(&app);
+}
+
+#[tauri::command]
+pub fn bar_focus(app: AppHandle, hand: HandOver) {
+    let Some(main) = app.get_webview_window(HOST) else {
+        return;
+    };
+    let _ = main.minimize();
+    std::thread::spawn(move || {
+        std::thread::sleep(MINIMIZING);
+        let shown = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _ = main.hide();
+            front::note();
+            if let Some(bar) = shown.get_webview_window(LABEL) {
+                reveal_with(&shown, &bar, Some(hand));
+            }
+        });
+    });
 }
 
 #[tauri::command]
