@@ -230,8 +230,8 @@ caída de Claude Code, de Sens o del revisor deja lo cambiado sin aprobar.
 
 ### Punto de control
 
-- Un repositorio git propio en `<proyecto>/.sens/checkpoints`, con el proyecto
-  como árbol de trabajo: `git --git-dir=.sens/checkpoints --work-tree=<proyecto>`.
+- Un repositorio git propio en `<proyecto>/.sens/canon/checkpoints`, con el proyecto
+  como árbol de trabajo: `git --git-dir=.sens/canon/checkpoints --work-tree=<proyecto>`.
   Excluye `.sens/` y `.git/` en su `info/exclude` y respeta los `.gitignore` del
   proyecto. **Nunca toca el `.git` del proyecto**: ni stage, ni stash, ni ramas,
   ni objetos. Funciona igual en proyectos sin git.
@@ -316,7 +316,7 @@ persona, las excepciones y el banco de pruebas.
   `reflective.rs`, `testfile.rs`) y las consultas (`query.rs`), sin la parte de
   hook, CLI ni daemon. Lenguajes: TypeScript y JavaScript, Python, Rust, Go, Java,
   C#, C, C++, PHP, Ruby y Kotlin.
-- Se guarda en `.sens/index.bin` (formato binario ya medido: 2,3 MB y 6 ms de carga
+- Se guarda en `.sens/canon/index.bin` (formato binario ya medido: 2,3 MB y 6 ms de carga
   en 1.165 ficheros) y vive en memoria en `sens-app`, uno por proyecto abierto.
   Se construye al abrir el proyecto y en `chat_warm`, y se refresca por mtime.
 
@@ -431,7 +431,7 @@ muestra.
 
 ## Registro
 
-`.sens/canon.jsonl`, local: por cada veredicto, turno, versión del Canon, fase,
+`.sens/canon/log.jsonl`, local: por cada veredicto, turno, versión del Canon, fase,
 regla, objetivo propuesto, ronda, decisión de la persona y coste del revisor.
 Sirve para calibrar (las excepciones aceptadas por regla estiman sus falsos
 positivos), para medir el contexto por mensaje (qué fracción de los símbolos
