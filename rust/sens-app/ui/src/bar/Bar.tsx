@@ -20,6 +20,7 @@ import {
   bar,
   cycle,
   handOver,
+  hear,
   hide,
   lastQuestion,
   lastReply,
@@ -42,13 +43,24 @@ export function Bar() {
   const busy = useStore(own.chat, (s) => s.busy);
   const text = useStore(own.desk, (s) => s.text);
   const pinned = useStore(bar, (s) => s.pinned);
-  const phase = phaseOf(turns, busy, text);
+  const opened = useStore(bar, (s) => s.opened);
+  const leaving = useStore(bar, (s) => s.leaving);
+  const listening = useStore(bar, (s) => s.listening);
+  const level = useStore(bar, (s) => s.level);
+  const phase = listening ? "listening" : phaseOf(turns, busy, text);
   const reply = lastReply(turns);
   useFit(float);
   useKeys();
 
   return (
-    <div className="float" ref={float} data-state={phase} data-pinned={pinned ? "true" : undefined}>
+    <div
+      className="float"
+      ref={float}
+      data-state={phase}
+      data-motion={leaving ? "out" : opened % 2 ? "in" : "again"}
+      data-pinned={pinned ? "true" : undefined}
+      style={{ "--level": level } as CSSProperties}
+    >
       <Row />
       <Picker />
       <Chips />
@@ -59,16 +71,54 @@ export function Bar() {
   );
 }
 
+const growing = (answer: HTMLElement | null) => (answer ? Math.max(Number(answer.dataset.target ?? 0) - answer.getBoundingClientRect().height, 0) : 0);
+
 function useFit(float: RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const box = float.current;
     if (!box) return;
-    const fit = () => void commands.barFit(Math.ceil(box.getBoundingClientRect().height) + MARGIN * 2).catch(() => {});
+    let asked = 0;
+    const fit = () => {
+      const height = Math.ceil(box.getBoundingClientRect().height + growing(box.querySelector<HTMLElement>(".bar-answer"))) + MARGIN * 2;
+      if (height === asked) return;
+      asked = height;
+      void commands.barFit(height).catch(() => {});
+    };
     const watcher = new ResizeObserver(fit);
     watcher.observe(box);
     fit();
     return () => watcher.disconnect();
   }, []);
+}
+
+function useGrowth(box: RefObject<HTMLDivElement | null>, inner: RefObject<HTMLDivElement | null>, shown: boolean) {
+  useLayoutEffect(() => {
+    const outer = box.current;
+    const content = inner.current;
+    if (!outer || !content) return;
+    const style = getComputedStyle(outer);
+    const most = parseFloat(style.maxHeight) || Infinity;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    if (!outer.style.height) {
+      outer.style.height = "0px";
+      outer.getBoundingClientRect();
+    }
+    const grow = () => {
+      const target = Math.min(content.getBoundingClientRect().height + padding, most);
+      outer.dataset.target = String(target);
+      outer.dataset.growing = target > outer.getBoundingClientRect().height ? "true" : "false";
+      outer.style.height = `${target}px`;
+    };
+    const settle = () => (outer.dataset.growing = "false");
+    const watcher = new ResizeObserver(grow);
+    watcher.observe(content);
+    outer.addEventListener("transitionend", settle);
+    grow();
+    return () => {
+      watcher.disconnect();
+      outer.removeEventListener("transitionend", settle);
+    };
+  }, [shown]);
 }
 
 function useKeys() {
@@ -122,6 +172,8 @@ function Row() {
   const setText = (next: string) => writeMessage(next, own);
   const dictation = useDictation(own, text, setText, field);
   useGrow(field, text);
+
+  useEffect(() => hear(dictation.phase === "listening", dictation.level), [dictation.phase, dictation.level]);
 
   useEffect(() => {
     field.current?.focus();
@@ -223,6 +275,8 @@ function Answer({ reply }: { reply: Reply | undefined }) {
   const stick = useRef(true);
   const turns = useStore(own.chat, (s) => s.turns);
   const notices = useMemo(() => turns.slice(turns.findLastIndex((turn) => turn.kind === "you") + 1).filter((turn): turn is Notice => turn.kind === "notice"), [turns]);
+  const shown = Boolean(reply) || notices.length > 0;
+  useGrowth(box, inner, shown);
 
   useEffect(() => {
     const follow = new ResizeObserver(() => {
@@ -230,9 +284,9 @@ function Answer({ reply }: { reply: Reply | undefined }) {
     });
     if (inner.current) follow.observe(inner.current);
     return () => follow.disconnect();
-  }, [Boolean(reply) || notices.length > 0]);
+  }, [shown]);
 
-  if (!reply && !notices.length) return null;
+  if (!shown) return null;
   return (
     <div
       className="bar-answer"

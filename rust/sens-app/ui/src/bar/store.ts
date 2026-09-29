@@ -14,6 +14,7 @@ import type { Sessions } from "./choices";
 
 export const LAST = "sens.bar.last";
 const FIRST_PROVIDER = "claude";
+const LEAVING = 140;
 
 export type Offer = "offered" | "taking" | "taken" | "gone";
 
@@ -37,6 +38,9 @@ export const bar = createStore(() => ({
   pinned: false,
   choosing: false,
   opened: 0,
+  leaving: false,
+  listening: false,
+  level: 0,
 }));
 
 const set = bar.setState;
@@ -95,7 +99,7 @@ async function arrive(resume: HandOver | null, projects: BarProject[]) {
 export async function opened({ look, language, front, pinned, resume }: BarOpened) {
   showLanguage(languageOf(language));
   showLook(look);
-  set(({ opened }) => ({ front, pinned, clip: null, opened: opened + 1 }));
+  set(({ opened }) => ({ front, pinned, clip: null, opened: opened + 1, leaving: false }));
   const [projects, spaces] = await Promise.all([commands.barProjects().catch((): BarProject[] => []), commands.workspaces().catch((): Workspace[] => [])]);
   set({ projects, sessions: Object.fromEntries(spaces.map((space) => [space.root, space.sessions])) });
   if (!held()) await arrive(resume, projects);
@@ -128,11 +132,20 @@ export async function handOver() {
   fresh(root);
 }
 
+const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 export function hide() {
-  set({ choosing: false });
-  void commands.barHide().catch(() => {});
-  void commands.barWatching(null).catch(() => {});
+  set({ choosing: false, leaving: true });
+  setTimeout(
+    () => {
+      void commands.barHide().catch(() => {});
+      void commands.barWatching(null).catch(() => {});
+    },
+    calm() ? 0 : LEAVING,
+  );
 }
+
+export const hear = (listening: boolean, level: number) => set({ listening, level });
 
 export function pin() {
   const pinned = !bar.getState().pinned;
