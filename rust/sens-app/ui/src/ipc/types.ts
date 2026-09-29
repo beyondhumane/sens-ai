@@ -61,8 +61,17 @@ export interface Watching {
   session: string | null;
 }
 
+export interface ShortcutKeys {
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  win: boolean;
+  key: string;
+}
+
 export interface Shortcut {
-  keys: string;
+  keys: ShortcutKeys;
+  named: string;
   taken: boolean;
 }
 

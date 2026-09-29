@@ -575,8 +575,17 @@ describe("dictation", () => {
     expect(lastNotice()).toMatchObject({
       kind: "notice",
       tone: "warn",
-      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › General › Voz"],
+      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › Focus y voz"],
     });
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("says a muted microphone must be turned on in Windows, without sending the user to pick another", async () => {
+    const muted = "Tu micrófono está silenciado en Windows · actívalo con la tecla del micrófono o en Configuración › Sistema › Sonido › Entrada";
+    ipc.commands.voiceStart.mockRejectedValue({ cause: "silent", message: muted });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(lastNotice()).toMatchObject({ kind: "notice", tone: "warn", parts: [muted] });
     expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
   });
 

@@ -74,7 +74,7 @@ Under the window is the unmodified `claude` CLI. Sens drives it over Claude Code
 - **Prompts arrive in the thread.** Permission requests, questions and plans wait for you where you are reading.
 - **Attach anything.** Pictures in any format the window can draw, converted and resized to what Claude accepts; files; folders Claude can explore; a PDF copied in Explorer; a long paste, as an attachment of its own.
 - **Type less.** `@` mentions a file, `/` offers Claude Code's commands and your skills, `↑` and `↓` bring back what you sent.
-- **Or say it.** The microphone writes what you say into the message as you say it, with [Whisper](https://github.com/ggerganov/whisper.cpp) running on your computer: each phrase is corrected once you pause, and your voice never leaves it. Pick the microphone and test its level in *Settings › General › Voice*.
+- **Or say it.** The microphone writes what you say into the message as you say it, with [Whisper](https://github.com/ggerganov/whisper.cpp) running on your computer: each phrase is corrected once you pause, and your voice never leaves it. Pick the microphone and test its level in *Settings › Focus & voice*.
 - **Choose per session.** Model, effort, thinking, and a permission mode: *Ask*, *Accept edits*, *Auto*, *Plan* or *No checks*. The model list is the one Claude Code itself offers.
 - **Sessions name themselves** after the first reply, in your language, and Sens tells you when one finishes or needs you while you are elsewhere.
 

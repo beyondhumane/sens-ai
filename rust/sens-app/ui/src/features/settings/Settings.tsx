@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { showView } from "../../app/session";
-import { commands, events } from "../../ipc/commands";
-import type { Shortcut } from "../../ipc/types";
 import { looks } from "../../shared/copy";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
@@ -16,9 +14,9 @@ import { setNotices } from "../notify/store";
 import { profile, saveProfileName } from "../profile/store";
 import { checkUpdates, setAutomatic, updateState, updates } from "../updates/store";
 import { openUpdate } from "../updates/UpdatePanel";
-import { chooseMicrophone, loadMicrophones, percentOf, prepareVoice, voice } from "../voice/store";
 import { openWelcome, type Step } from "../welcome/store";
 import { t } from "./copy";
+import { FocusSection } from "./FocusSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { settingsSheet } from "./sheet";
 import { SECTIONS, closeSettings, enterSettings, setResident, settings, settingsClosed, showSection, type Section } from "./store";
@@ -72,6 +70,7 @@ export function Settings() {
       </header>
       <div className="settings-pane" id="settings-pane" role="tabpanel" aria-labelledby={`settings-tab-${section}`}>
         {section === "general" && <GeneralSection key={visits} />}
+        {section === "focus" && <FocusSection key={visits} />}
         {section === "look" && <LookSection key={visits} />}
         {section === "language" && <LanguageSection key={visits} />}
         {section === "providers" && <ProvidersSection key={visits} />}
@@ -216,10 +215,9 @@ function GeneralSection() {
           {said.text}
         </p>
       </div>
-      <UpdatesBlock />
-      <NoticesBlock />
       <ResidentBlock />
-      <VoiceBlock />
+      <NoticesBlock />
+      <UpdatesBlock />
       <WelcomeBlock />
     </>
   );
@@ -324,133 +322,20 @@ function NoticesBlock() {
 function ResidentBlock() {
   const tray = useStore(profile, (s) => s.person.keepInTray !== false);
   const startup = useStore(profile, (s) => s.person.startWithWindows !== false);
-  const [shortcut, setShortcut] = useState<Shortcut | null>(null);
-
-  useEffect(() => {
-    commands.shortcutState().then(setShortcut, () => {});
-  }, []);
 
   return (
     <div className="pair">
       <span className="label">{t.resident}</span>
+      <Switch id="settings-startup" on={startup} save={(on) => setResident("startWithWindows", on)}>
+        {t.startWithWindows}
+      </Switch>
       <Switch id="settings-tray" on={tray} save={(on) => setResident("keepInTray", on)}>
         {t.keepInTray}
       </Switch>
       <p className="note" hidden={!tray}>
         {t.quitFromTray}
       </p>
-      <Switch id="settings-startup" on={startup} save={(on) => setResident("startWithWindows", on)}>
-        {t.startWithWindows}
-      </Switch>
-      {shortcut && (
-        <>
-          <div className="settings-switch">
-            <span>{t.quickBar}</span>
-            <span className="settings-keys keycaps">
-              {shortcut.keys.split("+").map((key) => (
-                <kbd key={key}>{key}</kbd>
-              ))}
-            </span>
-          </div>
-          <p className="note fault" role="status" hidden={!shortcut.taken}>
-            {t.shortcutTaken}
-          </p>
-        </>
-      )}
     </div>
   );
 }
 
-const MEBIBYTE = 1024 * 1024;
-
-function VoiceBlock() {
-  const known = useStore(voice);
-  const [testing, setTesting] = useState<number | null>(null);
-  const [level, setLevel] = useState(0);
-  const [fault, setFault] = useState("");
-  const listening = useRef<number | null>(null);
-
-  useEffect(() => {
-    loadMicrophones().catch((reason) => setFault(String(reason)));
-    return () => {
-      if (listening.current !== null) void commands.voiceStop();
-    };
-  }, []);
-
-  useEffect(() => {
-    listening.current = testing;
-    if (testing === null) return;
-    const heard = events.voice((what) => {
-      if (!("id" in what) || what.id !== testing) return;
-      if (what.kind === "level") setLevel(what.level);
-      if (what.kind === "ended") {
-        setTesting(null);
-        setLevel(0);
-        if (what.refusal) setFault(what.refusal.message);
-      }
-    });
-    return () => void heard.then((unlisten) => unlisten());
-  }, [testing]);
-
-  async function test() {
-    setFault("");
-    if (testing !== null) return void commands.voiceStop();
-    try {
-      setTesting(await commands.voiceTest());
-    } catch (reason) {
-      setFault(typeof reason === "object" && reason !== null && "message" in reason ? String(reason.message) : String(reason));
-    }
-  }
-
-  async function pick(chosen: string) {
-    setFault("");
-    try {
-      await chooseMicrophone(chosen || null);
-    } catch (reason) {
-      setFault(String(reason));
-    }
-  }
-
-  const fallback = known.microphones.find((one) => one.default)?.name ?? "";
-  const missing = known.chosen !== null && !known.microphones.some((one) => one.name === known.chosen);
-  const model = known.ready
-    ? t.modelReady(Math.round(known.total / MEBIBYTE))
-    : known.fetching
-      ? t.modelFetching(percentOf(known.done, known.total))
-      : known.fault || t.modelMissing;
-
-  return (
-    <div className="pair">
-      <span className="label">{t.voice}</span>
-      <div className="settings-row">
-        <select className="field" id="settings-microphone" aria-label={t.microphone} value={known.chosen ?? ""} onChange={(event) => void pick(event.target.value)}>
-          <option value="">{t.windowsDefault(fallback)}</option>
-          {known.microphones.map((one) => (
-            <option key={one.name} value={one.name}>
-              {one.name}
-            </option>
-          ))}
-          {missing && <option value={known.chosen ?? ""}>{known.chosen}</option>}
-        </select>
-        <button className="quiet" id="settings-microphone-test" aria-pressed={testing !== null} onClick={() => void test()}>
-          {testing !== null ? t.stopTest : t.testMicrophone}
-        </button>
-      </div>
-      <div className="voice-level" role="meter" aria-label={t.level} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)} hidden={testing === null}>
-        <span style={{ width: `${Math.round(level * 100)}%` }} />
-      </div>
-      <p className="note">{t.voiceNote}</p>
-      <div className="settings-row">
-        <p className={known.fault && !known.ready ? "note fault" : "note"} role="status">
-          {model}
-        </p>
-        <button className="quiet" hidden={known.ready || known.fetching} onClick={() => void prepareVoice()}>
-          {t.modelFetch}
-        </button>
-      </div>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </div>
-  );
-}

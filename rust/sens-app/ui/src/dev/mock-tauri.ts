@@ -1,6 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, Shot } from "../ipc/types";
+import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, ShortcutKeys, Shot } from "../ipc/types";
 import { languageOf } from "../shared/i18n";
 import { lookOf, tokenOf } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
@@ -759,7 +759,13 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   set_notify: ({ on }) => void (person.notify = Boolean(on)),
   set_keep_in_tray: ({ on }) => void (person.keepInTray = Boolean(on)),
   set_start_with_windows: ({ on }) => void (person.startWithWindows = Boolean(on)),
-  shortcut_state: (): Shortcut => ({ keys: "Ctrl+Alt+Espacio", taken: asking.has("taken") }),
+  shortcut_state: (): Shortcut => ({ keys: { ctrl: false, alt: true, shift: false, win: false, key: "Space" }, named: "Alt+Espacio", taken: asking.has("taken") }),
+  shortcut_set: ({ keys }): Shortcut => {
+    const chosen = keys as ShortcutKeys;
+    const named = [chosen.ctrl && "Ctrl", chosen.alt && "Alt", chosen.shift && "Mayús", chosen.win && "Win", chosen.key === "Space" ? "Espacio" : chosen.key];
+    return { keys: chosen, named: named.filter(Boolean).join("+"), taken: false };
+  },
+  shortcut_pause: () => undefined,
   bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
   bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
   bar_fit: () => null,

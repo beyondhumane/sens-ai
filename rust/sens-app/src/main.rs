@@ -20,6 +20,7 @@ mod profile;
 mod projects;
 mod providers;
 mod served;
+mod shortcut;
 mod snapshot;
 mod store;
 mod terminal;
@@ -918,7 +919,9 @@ fn main() {
             bar::bar_clip,
             bar::bar_shot,
             bar::bar_projects,
-            bar::shortcut_state
+            shortcut::shortcut_state,
+            shortcut::shortcut_set,
+            shortcut::shortcut_pause
         ])
         .build(tauri::generate_context!())
         .expect("sens app")

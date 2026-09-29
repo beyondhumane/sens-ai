@@ -22,6 +22,8 @@ const ipc = vi.hoisted(() => ({
     setKeepInTray: vi.fn(),
     setStartWithWindows: vi.fn(),
     shortcutState: vi.fn(),
+    shortcutSet: vi.fn(),
+    shortcutPause: vi.fn(),
     voiceMicrophones: vi.fn(),
     voiceMicrophone: vi.fn(),
     voiceChoose: vi.fn(),
@@ -202,64 +204,6 @@ describe("general settings", () => {
     expect(screen.getByRole("alert").textContent).toBe("sin permiso");
   });
 
-  it("shows the quick bar's shortcut, and says when another app already has it", async () => {
-    ipc.commands.shortcutState.mockResolvedValue({ keys: "Ctrl+Alt+Espacio", taken: false });
-    await open("general");
-    const keys = () => [...screen.getByText("Barra rápida").parentElement!.querySelectorAll("kbd")].map((key) => key.textContent);
-    const taken = () => screen.getByText("Otra app ya usa este atajo; abre la barra desde la bandeja.");
-    expect(keys()).toEqual(["Ctrl", "Alt", "Espacio"]);
-    expect(taken().hidden).toBe(true);
-
-    cleanup();
-    ipc.commands.shortcutState.mockResolvedValue({ keys: "Ctrl+Alt+Espacio", taken: true });
-    await open("general");
-    expect(keys()).toEqual(["Ctrl", "Alt", "Espacio"]);
-    expect(taken().hidden).toBe(false);
-  });
-
-  it("leaves the shortcut out when Sens cannot say what it is", async () => {
-    ipc.commands.shortcutState.mockRejectedValue("sin atajo");
-    await open("general");
-    expect(screen.queryByText("Barra rápida")).toBeNull();
-    expect(screen.getByRole("switch", { name: "Iniciar con Windows" })).toBeTruthy();
-  });
-
-  it("chooses the microphone, tests it with a level bar, and says where the voice model is", async () => {
-    ipc.commands.voiceMicrophones.mockResolvedValue([
-      { name: "Voicemeeter Out B2", default: true },
-      { name: "Micrófono (USB)", default: false },
-    ]);
-    voice.setState({ ready: false, fetching: true, done: 30, total: 100 });
-    await open("general");
-    const microphone = screen.getByRole("combobox", { name: "Micrófono" }) as HTMLSelectElement;
-    expect([...microphone.options].map((one) => one.textContent)).toEqual(["El predeterminado de Windows · Voicemeeter Out B2", "Voicemeeter Out B2", "Micrófono (USB)"]);
-    expect(screen.getByText("Descargando el modelo de voz, una sola vez · 30 %")).toBeTruthy();
-
-    await act(async () => fireEvent.change(microphone, { target: { value: "Micrófono (USB)" } }));
-    expect(ipc.commands.voiceChoose).toHaveBeenCalledWith("Micrófono (USB)");
-    expect(voice.getState().chosen).toBe("Micrófono (USB)");
-
-    ipc.commands.voiceTest.mockResolvedValue(3);
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Probar" })));
-    act(() => ipc.heard.voice({ kind: "level", id: 3, level: 0.42 }));
-    expect(screen.getByRole("meter", { name: "Nivel del micrófono" }).getAttribute("aria-valuenow")).toBe("42");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Parar" })));
-    expect(ipc.commands.voiceStop).toHaveBeenCalled();
-    act(() => ipc.heard.voice({ kind: "ended", id: 3, refusal: null }));
-    expect(screen.getByRole("button", { name: "Probar" })).toBeTruthy();
-
-    act(() => voice.setState({ ready: true, fetching: false, total: 190_085_487 }));
-    expect(screen.getByText("Modelo de voz en este equipo · 57 MB")).toBeTruthy();
-  });
-
-  it("offers to download the voice model again when it could not come", async () => {
-    voice.setState({ ready: false, fetching: false, fault: "no pude descargar el modelo" });
-    await open("general");
-    expect(screen.getByText("no pude descargar el modelo")).toBeTruthy();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Descargar" })));
-    expect(ipc.commands.voicePrepare).toHaveBeenCalled();
-  });
-
   it("opens the update panel", async () => {
     updates.setState({ latest: { version: "9.9.9", notes: "", page: "", size: 0 } });
     await open("general");
@@ -278,6 +222,137 @@ describe("general settings", () => {
     expect(settingsSheet.getState().open).toBe(false);
     expect(ipc.commands.news).toHaveBeenCalledTimes(1);
     project.setState({ view: "" });
+  });
+  it("puts the profile first and the welcome last, and leaves the shortcut and the voice to their own tab", async () => {
+    await open("general");
+    const labels = [...document.querySelectorAll("#settings-pane .pair > .label")].map((label) => label.textContent);
+    expect(labels).toEqual(["Nombre", "Inicio y bandeja", "Avisos", "Actualizaciones", "Bienvenida"]);
+    expect(screen.queryByText("Atajo")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Micrófono" })).toBeNull();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["General", "Focus y voz", "Apariencia", "Idioma", "Proveedores"]);
+  });
+});
+
+const ALT_SPACE = { ctrl: false, alt: true, shift: false, win: false, key: "Space" };
+const CTRL_SHIFT_K = { ctrl: true, alt: false, shift: true, win: false, key: "K" };
+
+describe("focus and voice settings", () => {
+  const keycaps = () => [...screen.getByText("Atajo").parentElement!.querySelectorAll("kbd")].map((key) => key.textContent);
+  const taken = () => screen.getByText("Otra app ya usa este atajo: cámbialo o abre el modo focus desde la bandeja.");
+
+  it("shows the focus mode's shortcut, and says when another app already has it", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: false });
+    await open("focus");
+    expect(keycaps()).toEqual(["Alt", "Espacio"]);
+    expect(taken().hidden).toBe(true);
+    expect(screen.getByText("Volver a Alt+Espacio").hidden).toBe(true);
+
+    cleanup();
+    ipc.commands.shortcutState.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: true });
+    await open("focus");
+    expect(taken().hidden).toBe(false);
+  });
+
+  it("leaves the shortcut out when Sens cannot say what it is", async () => {
+    ipc.commands.shortcutState.mockRejectedValue("sin atajo");
+    await open("focus");
+    expect(screen.queryByText("Atajo")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Micrófono" })).toBeTruthy();
+  });
+
+  it("listens for the next keys with the shortcut paused, and keeps them", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: false });
+    ipc.commands.shortcutSet.mockResolvedValue({ keys: CTRL_SHIFT_K, named: "Ctrl+Mayús+K", taken: false });
+    await open("focus");
+    const change = screen.getByRole("button", { name: "Cambiar" });
+
+    await act(async () => fireEvent.click(change));
+    expect(ipc.commands.shortcutPause).toHaveBeenCalledWith(true);
+    expect(change.textContent).toBe("Pulsa la combinación · Esc cancela");
+
+    await act(async () => fireEvent.keyDown(change, { key: "Control", code: "ControlLeft", ctrlKey: true }));
+    expect(ipc.commands.shortcutSet).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(change, { key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }));
+
+    expect(ipc.commands.shortcutSet).toHaveBeenCalledWith(CTRL_SHIFT_K);
+    expect(keycaps()).toEqual(["Ctrl", "Mayús", "K"]);
+    expect(change.textContent).toBe("Cambiar");
+    expect(screen.getByRole("button", { name: "Volver a Alt+Espacio" }).hidden).toBe(false);
+  });
+
+  it("says why keys without Ctrl, Alt or Win cannot open Sens, and Esc gives the old shortcut back", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: false });
+    await open("focus");
+    const change = screen.getByRole("button", { name: "Cambiar" });
+    await act(async () => fireEvent.click(change));
+
+    await act(async () => fireEvent.keyDown(change, { key: "k", code: "KeyK", shiftKey: true }));
+    expect(ipc.commands.shortcutSet).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toBe("Usa Ctrl, Alt o Win con una letra, un número, F1–F24 o Espacio");
+
+    await act(async () => fireEvent.keyDown(change, { key: "Escape", code: "Escape" }));
+    expect(ipc.commands.shortcutPause).toHaveBeenLastCalledWith(false);
+    expect(change.textContent).toBe("Cambiar");
+  });
+
+  it("keeps the old shortcut and says so when another app has the new one, and goes back to Alt+Space", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: CTRL_SHIFT_K, named: "Ctrl+Mayús+K", taken: false });
+    ipc.commands.shortcutSet.mockRejectedValueOnce("Otra app ya usa Ctrl+F9; Sens se queda con el que tenía");
+    await open("focus");
+    const change = screen.getByRole("button", { name: "Cambiar" });
+    await act(async () => fireEvent.click(change));
+    await act(async () => fireEvent.keyDown(change, { key: "F9", code: "F9", ctrlKey: true }));
+    expect(screen.getByRole("alert").textContent).toBe("Otra app ya usa Ctrl+F9; Sens se queda con el que tenía");
+    expect(keycaps()).toEqual(["Ctrl", "Mayús", "K"]);
+
+    ipc.commands.shortcutSet.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: false });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Volver a Alt+Espacio" })));
+    expect(ipc.commands.shortcutSet).toHaveBeenLastCalledWith(ALT_SPACE);
+    expect(keycaps()).toEqual(["Alt", "Espacio"]);
+  });
+
+  it("gives the shortcut back when the tab closes while it listens", async () => {
+    ipc.commands.shortcutState.mockResolvedValue({ keys: ALT_SPACE, named: "Alt+Espacio", taken: false });
+    await open("focus");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cambiar" })));
+    cleanup();
+    expect(ipc.commands.shortcutPause).toHaveBeenLastCalledWith(false);
+  });
+
+  it("chooses the microphone, tests it with a level bar, and says where the voice model is", async () => {
+    ipc.commands.voiceMicrophones.mockResolvedValue([
+      { name: "Voicemeeter Out B2", default: true },
+      { name: "Micrófono (USB)", default: false },
+    ]);
+    voice.setState({ ready: false, fetching: true, done: 30, total: 100 });
+    await open("focus");
+    const microphone = screen.getByRole("combobox", { name: "Micrófono" }) as HTMLSelectElement;
+    expect([...microphone.options].map((one) => one.textContent)).toEqual(["El predeterminado de Windows · Voicemeeter Out B2", "Voicemeeter Out B2", "Micrófono (USB)"]);
+    expect(screen.getByText("Descargando el modelo de voz, una sola vez · 30 %")).toBeTruthy();
+
+    await act(async () => fireEvent.change(microphone, { target: { value: "Micrófono (USB)" } }));
+    expect(ipc.commands.voiceChoose).toHaveBeenCalledWith("Micrófono (USB)");
+    expect(voice.getState().chosen).toBe("Micrófono (USB)");
+
+    ipc.commands.voiceTest.mockResolvedValue(3);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Probar" })));
+    act(() => ipc.heard.voice({ kind: "level", id: 3, level: 0.42 }));
+    expect(screen.getByRole("meter", { name: "Nivel del micrófono" }).getAttribute("aria-valuenow")).toBe("42");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Parar" })));
+    expect(ipc.commands.voiceStop).toHaveBeenCalled();
+    act(() => ipc.heard.voice({ kind: "ended", id: 3, refusal: null }));
+    expect(screen.getByRole("button", { name: "Probar" })).toBeTruthy();
+
+    act(() => voice.setState({ ready: true, fetching: false, total: 190_085_487 }));
+    expect(screen.getByText("Modelo de voz en este equipo · 181 MB")).toBeTruthy();
+  });
+
+  it("offers to download the voice model again when it could not come", async () => {
+    voice.setState({ ready: false, fetching: false, fault: "no pude descargar el modelo" });
+    await open("focus");
+    expect(screen.getByText("no pude descargar el modelo")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Descargar" })));
+    expect(ipc.commands.voicePrepare).toHaveBeenCalled();
   });
 });
 

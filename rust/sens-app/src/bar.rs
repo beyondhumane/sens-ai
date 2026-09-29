@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sens_agent::language::Language;
-use sens_agent::said;
 use serde::{Deserialize, Serialize};
 use tauri::{
     App, AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalRect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
@@ -45,12 +44,6 @@ pub struct Context {
     clip: Option<front::Clip>,
 }
 
-#[derive(Serialize)]
-pub struct Shortcut {
-    keys: String,
-    taken: bool,
-}
-
 pub fn build(app: &App) -> tauri::Result<()> {
     app.manage(Pin::default());
     let base = data_dir(app.handle()).ok();
@@ -72,17 +65,6 @@ pub fn build(app: &App) -> tauri::Result<()> {
         .build()?;
     tool::keep(&bar);
     Ok(())
-}
-
-pub fn keys() -> String {
-    said!(
-        en: "Ctrl+Alt+Space",
-        es: "Ctrl+Alt+Espacio",
-        fr: "Ctrl+Alt+Espace",
-        de: "Strg+Alt+Leertaste",
-        ja: "Ctrl+Alt+Space",
-        zh: "Ctrl+Alt+空格",
-    )
 }
 
 pub fn toggle(app: &AppHandle) {
@@ -245,14 +227,6 @@ pub fn bar_projects(app: AppHandle) -> Result<Vec<projects::Recent>, String> {
     Ok(projects::recent(&projects::load(&data_dir(&app)?)))
 }
 
-#[tauri::command]
-pub fn shortcut_state() -> Shortcut {
-    Shortcut {
-        keys: keys(),
-        taken: life::shortcut_taken(),
-    }
-}
-
 #[cfg(windows)]
 mod tool {
     use tauri::WebviewWindow;
@@ -296,7 +270,6 @@ mod tool {
 
 #[cfg(test)]
 mod tests {
-    use sens_agent::language::speaking;
     use tauri::PhysicalSize;
 
     use super::*;
@@ -332,13 +305,6 @@ mod tests {
         assert_eq!(lifted(222, 1008.0, &work), 0);
         assert_eq!(lifted(700, 450.0, &work), 558);
         assert_eq!(lifted(-20, 100.0, &area(0, 40, 1920, 1000)), 40);
-    }
-
-    #[test]
-    fn the_shortcut_is_named_in_the_language_spoken() {
-        assert_eq!(speaking(Language::Es, keys), "Ctrl+Alt+Espacio");
-        assert_eq!(speaking(Language::En, keys), "Ctrl+Alt+Space");
-        assert_eq!(speaking(Language::Fr, keys), "Ctrl+Alt+Espace");
     }
 
     #[test]
