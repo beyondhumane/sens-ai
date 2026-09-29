@@ -145,7 +145,7 @@ export const commands = {
   terminalResize: (id: number, cols: number, rows: number) => invoke<void>("terminal_resize", { id, cols, rows }),
   terminalClose: (id: number) => invoke<void>("terminal_close", { id }),
   terminalScreen: (ask: number, text: string) => invoke<void>("terminal_screen", { ask, text }),
-  voiceStart: (language: string) => invoke<number>("voice_start", { language }),
+  voiceStart: (language: string, handsFree = false) => invoke<number>("voice_start", { language, handsFree }),
   voiceTest: () => invoke<number>("voice_test"),
   voiceStop: () => invoke<void>("voice_stop"),
   voiceModel: () => invoke<VoiceModel>("voice_model"),
@@ -153,6 +153,7 @@ export const commands = {
   voiceMicrophones: () => invoke<Microphone[]>("voice_microphones"),
   voiceMicrophone: () => invoke<string | null>("voice_microphone"),
   voiceChoose: (microphone: string | null) => invoke<void>("voice_choose", { microphone }),
+  setWake: (on: boolean) => invoke<string | null>("set_wake", { on }),
 
   folder: (root: string, path: string) => invoke<Entry[]>("folder", { root, path }),
   findFiles: (root: string, needle: string) => invoke<Entry[]>("find_files", { root, needle }),

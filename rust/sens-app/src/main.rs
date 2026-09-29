@@ -361,13 +361,13 @@ fn terminal_close(consoles: State<terminal::Consoles>, id: u32) -> Result<(), St
 }
 
 #[tauri::command(async)]
-fn voice_start(voice: State<voice::Voice>, language: String) -> Result<u32, voice::Refusal> {
-    voice.start(&language, true)
+fn voice_start(voice: State<voice::Voice>, language: String, hands_free: bool) -> Result<u32, voice::Refusal> {
+    voice.start(&language, true, hands_free)
 }
 
 #[tauri::command(async)]
 fn voice_test(voice: State<voice::Voice>) -> Result<u32, voice::Refusal> {
-    voice.start("", false)
+    voice.start("", false, false)
 }
 
 #[tauri::command]
@@ -395,9 +395,42 @@ fn voice_microphone(app: AppHandle) -> Result<Option<String>, String> {
     Ok(voice::chosen(&data_dir(&app)?))
 }
 
-#[tauri::command]
-fn voice_choose(app: AppHandle, microphone: Option<String>) -> Result<(), String> {
-    voice::choose(&data_dir(&app)?, microphone)
+#[tauri::command(async)]
+fn voice_choose(app: AppHandle, voice: State<voice::Voice>, microphone: Option<String>) -> Result<(), String> {
+    voice::choose(&data_dir(&app)?, microphone)?;
+    if voice.waking() {
+        let _ = voice.wake(true);
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn set_wake(app: AppHandle, voice: State<voice::Voice>, on: bool) -> Result<Option<String>, String> {
+    profile::set_wake(&data_dir(&app)?, on)?;
+    Ok(voice.wake(on).err().map(|refusal| refusal.message))
+}
+
+fn hearing(app: AppHandle) -> impl Fn(voice::Heard) + Send + Sync + 'static {
+    move |heard| {
+        match heard {
+            voice::Heard::Woke => {
+                let _ = app.run_on_main_thread({
+                    let app = app.clone();
+                    move || bar::wake(&app)
+                });
+            }
+            voice::Heard::Ready => {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    if let Some(voice) = app.try_state::<voice::Voice>() {
+                        let _ = voice.rouse();
+                    }
+                });
+            }
+            _ => {}
+        }
+        let _ = app.emit("voice", heard);
+    }
 }
 
 #[tauri::command]
@@ -786,11 +819,8 @@ fn main() {
         .manage(terminal::Consoles::default())
         .manage(mcp::Bridge::default())
         .setup(move |app| {
-            let heard = app.handle().clone();
             let voice_base = data_dir(app.handle()).unwrap_or_else(|_| std::env::temp_dir().join("sens"));
-            app.manage(voice::Voice::new(voice_base, move |said| {
-                let _ = heard.emit("voice", said);
-            }));
+            app.manage(voice::Voice::new(voice_base, hearing(app.handle().clone())));
             let base = data_dir(app.handle());
             language::speak(base.as_deref().ok());
             open_window(app, hidden)?;
@@ -802,8 +832,15 @@ fn main() {
                 share_environment(&base);
                 update::sweep(&base);
                 claude_code::sweep(&base);
+                let profile = profile::load(&base);
                 app.state::<voice::Voice>().prepare();
-                life::start_with_windows(profile::load(&base).start_with_windows);
+                if profile.wake {
+                    let voice = app.handle().clone();
+                    std::thread::spawn(move || {
+                        let _ = voice.state::<voice::Voice>().wake(true);
+                    });
+                }
+                life::start_with_windows(profile.start_with_windows);
             }
             Ok(())
         })
@@ -893,6 +930,7 @@ fn main() {
             voice_microphones,
             voice_microphone,
             voice_choose,
+            set_wake,
             capabilities,
             skill_text,
             create_skill,

@@ -41,6 +41,7 @@ export const bar = createStore(() => ({
   leaving: false,
   listening: false,
   level: 0,
+  called: 0,
 }));
 
 const set = bar.setState;
@@ -96,13 +97,14 @@ async function arrive(resume: HandOver | null, projects: BarProject[]) {
   await load(resume.session, own);
 }
 
-export async function opened({ look, language, front, pinned, resume }: BarOpened) {
+export async function opened({ look, language, front, pinned, resume, listen }: BarOpened) {
   showLanguage(languageOf(language));
   showLook(look);
   set(({ opened }) => ({ front, pinned, clip: null, opened: opened + 1, leaving: false }));
   const [projects, spaces] = await Promise.all([commands.barProjects().catch((): BarProject[] => []), commands.workspaces().catch((): Workspace[] => [])]);
   set({ projects, sessions: Object.fromEntries(spaces.map((space) => [space.root, space.sessions])) });
   if (!held()) await arrive(resume, projects);
+  if (listen) set(({ called }) => ({ called: called + 1 }));
   watch();
   const context = await commands.barContext().catch(() => null);
   set({ clip: context?.clip ?? null });

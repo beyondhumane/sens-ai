@@ -198,9 +198,17 @@ function Row() {
   const asked = useStore(own.chat, (s) => lastQuestion(s.turns));
   const opened = useStore(bar, (s) => s.opened);
   const pinned = useStore(bar, (s) => s.pinned);
+  const called = useStore(bar, (s) => s.called);
+  const answered = useRef(called);
   const setText = (next: string) => writeMessage(next, own);
   const dictation = useDictation(own, text, setText, field);
   useGrow(field, text);
+
+  useEffect(() => {
+    if (called === answered.current) return;
+    answered.current = called;
+    if (root) dictation.listen();
+  }, [called]);
 
   useEffect(() => hear(dictation.phase === "listening", dictation.level), [dictation.phase, dictation.level]);
 
