@@ -175,6 +175,7 @@ export const commands = {
   barFit: (height: number) => invoke<void>("bar_fit", { height }),
   barPin: (on: boolean) => invoke<void>("bar_pin", { on }),
   barDrag: () => invoke<void>("bar_drag"),
+  barRecenter: () => invoke<void>("bar_recenter"),
   barHandOver: (hand: HandOver) => invoke<void>("bar_hand_over", { hand }),
   barContext: () => invoke<BarContext>("bar_context"),
   barClip: () => invoke<string | null>("bar_clip"),

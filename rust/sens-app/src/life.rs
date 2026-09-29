@@ -214,10 +214,12 @@ mod native {
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW};
     use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
+    use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
     use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, RegisterHotKey, UnregisterHotKey};
     use windows::Win32::UI::WindowsAndMessaging::{
         AllowSetForegroundWindow, CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowExW, GetMessageW, GetWindowThreadProcessId, HWND_MESSAGE, MSG,
-        PostMessageW, PostThreadMessageW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLIPBOARDUPDATE, WM_HOTKEY, WNDCLASSW,
+        EVENT_SYSTEM_FOREGROUND, PostMessageW, PostThreadMessageW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WINEVENT_OUTOFCONTEXT,
+        WINEVENT_SKIPOWNPROCESS, WM_APP, WM_CLIPBOARDUPDATE, WM_HOTKEY, WNDCLASSW,
     };
     use windows::core::{PCWSTR, w};
 
@@ -319,6 +321,7 @@ mod native {
         let chosen = APP.get().and_then(|app| data_dir(app).ok()).map(|base| profile::load(&base).shortcut).unwrap_or_default();
         TAKEN.store(!bind(&chosen), Ordering::Relaxed);
         *bound() = chosen;
+        let _ = unsafe { SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, None, Some(fronted), 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS) };
         let mut message = MSG::default();
         while unsafe { GetMessageW(&mut message, None, 0, 0) }.0 > 0 {
             if message.hwnd.0.is_null() {
@@ -326,6 +329,12 @@ mod native {
             } else {
                 unsafe { DispatchMessageW(&message) };
             }
+        }
+    }
+
+    unsafe extern "system" fn fronted(_hook: HWINEVENTHOOK, _event: u32, _window: HWND, _object: i32, _child: i32, _thread: u32, _time: u32) {
+        if let Some(app) = APP.get() {
+            on_main(app, bar::keep_on_top);
         }
     }
 

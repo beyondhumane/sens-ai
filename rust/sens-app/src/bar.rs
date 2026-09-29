@@ -1,13 +1,14 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use sens_agent::language::Language;
 use serde::{Deserialize, Serialize};
 use tauri::{
-    App, AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalRect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
+    App, AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalRect, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window,
+    WindowEvent,
 };
 
-use crate::{data_dir, front, language, life, look, projects};
+use crate::{data_dir, front, language, life, look, projects, spots};
 
 pub const LABEL: &str = "bar";
 const HOST: &str = "main";
@@ -17,11 +18,13 @@ const LEAST_HEIGHT: f64 = 90.0;
 const MOST_HEIGHT: f64 = 680.0;
 const FROM_TOP: f64 = 0.22;
 const MINIMIZING: Duration = Duration::from_millis(240);
+const SETTLING: Duration = Duration::from_millis(400);
 
 #[derive(Default)]
 struct Pin {
     on: AtomicBool,
-    moved: AtomicBool,
+    dragging: AtomicBool,
+    moves: AtomicU64,
 }
 
 #[derive(Serialize, Clone)]
@@ -98,7 +101,8 @@ fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>) {
     let pin = app.state::<Pin>();
     let pinned = pin.on.load(Ordering::Relaxed);
     let _ = bar.set_theme(look.theme());
-    if !(pinned && pin.moved.load(Ordering::Relaxed)) {
+    pin.dragging.store(false, Ordering::Relaxed);
+    if !pinned {
         place(app, bar);
     }
     let opened = Opened {
@@ -119,8 +123,40 @@ fn place(app: &AppHandle, bar: &WebviewWindow) {
         .ok()
         .and_then(|at| app.monitor_from_point(at.x, at.y).ok().flatten())
         .or_else(|| app.primary_monitor().ok().flatten());
-    if let Some(monitor) = monitor {
-        let _ = bar.set_position(spot(monitor.work_area(), monitor.scale_factor()));
+    let Some(monitor) = monitor else {
+        return;
+    };
+    let (area, scale) = (monitor.work_area(), monitor.scale_factor());
+    let saved = data_dir(app).ok().zip(monitor.name()).and_then(|(base, screen)| spots::spot_of(&base, screen));
+    let size = bar.outer_size().unwrap_or_else(|_| PhysicalSize::new((WIDTH * scale) as u32, (FIRST_HEIGHT * scale) as u32));
+    let at = saved.map(|kept| spots::settled(area, scale, kept, size)).unwrap_or_else(|| spot(area, scale));
+    let _ = bar.set_position(at);
+}
+
+fn remember(app: &AppHandle, monitor: &Monitor, at: Option<PhysicalPosition<i32>>) {
+    let (Ok(base), Some(screen)) = (data_dir(app), monitor.name()) else {
+        return;
+    };
+    let _ = spots::keep(&base, screen, at.map(|at| spots::offset(monitor.work_area(), monitor.scale_factor(), at)));
+}
+
+fn settle(window: Window, round: u64) {
+    std::thread::sleep(SETTLING);
+    let pin = window.state::<Pin>();
+    if pin.moves.load(Ordering::Relaxed) != round || !pin.dragging.swap(false, Ordering::Relaxed) {
+        return;
+    }
+    if let (Ok(Some(monitor)), Ok(at)) = (window.current_monitor(), window.outer_position()) {
+        remember(window.app_handle(), &monitor, Some(at));
+    }
+}
+
+pub fn keep_on_top(app: &AppHandle) {
+    let Some(bar) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    if app.state::<Pin>().on.load(Ordering::Relaxed) && bar.is_visible().unwrap_or(false) {
+        tool::raise(&bar);
     }
 }
 
@@ -146,6 +182,11 @@ pub fn heard(window: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(false) if !window.state::<Pin>().on.load(Ordering::Relaxed) => {
             let _ = window.hide();
+        }
+        WindowEvent::Moved(_) if window.state::<Pin>().dragging.load(Ordering::Relaxed) => {
+            let round = window.state::<Pin>().moves.fetch_add(1, Ordering::Relaxed) + 1;
+            let moved = window.clone();
+            std::thread::spawn(move || settle(moved, round));
         }
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
@@ -208,11 +249,8 @@ pub fn bar_fit(app: AppHandle, height: f64) {
 
 #[tauri::command]
 pub fn bar_pin(app: AppHandle, on: bool) {
-    let pin = app.state::<Pin>();
-    pin.on.store(on, Ordering::Relaxed);
-    if !on {
-        pin.moved.store(false, Ordering::Relaxed);
-    }
+    app.state::<Pin>().on.store(on, Ordering::Relaxed);
+    keep_on_top(&app);
 }
 
 #[tauri::command]
@@ -220,8 +258,20 @@ pub fn bar_drag(app: AppHandle) {
     let Some(bar) = app.get_webview_window(LABEL) else {
         return;
     };
-    app.state::<Pin>().moved.store(true, Ordering::Relaxed);
+    app.state::<Pin>().dragging.store(true, Ordering::Relaxed);
     let _ = bar.start_dragging();
+}
+
+#[tauri::command]
+pub fn bar_recenter(app: AppHandle) {
+    let Some(bar) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let Ok(Some(monitor)) = bar.current_monitor() else {
+        return;
+    };
+    remember(&app, &monitor, None);
+    let _ = bar.set_position(spot(monitor.work_area(), monitor.scale_factor()));
 }
 
 #[tauri::command]
@@ -260,7 +310,8 @@ mod tool {
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GWL_EXSTYLE, GetWindowLongPtrW, STYLESTRUCT, SetWindowLongPtrW, WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+        GWL_EXSTYLE, GetWindowLongPtrW, HWND_TOPMOST, STYLESTRUCT, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowLongPtrW, SetWindowPos, WM_STYLECHANGING,
+        WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
     };
 
     const SUBCLASS: usize = 0x5345_4e53;
@@ -272,6 +323,12 @@ mod tool {
         unsafe {
             let _ = SetWindowSubclass(window, Some(stays), SUBCLASS, 0);
             SetWindowLongPtrW(window, GWL_EXSTYLE, style(GetWindowLongPtrW(window, GWL_EXSTYLE) as u32) as isize);
+        }
+    }
+
+    pub fn raise(bar: &WebviewWindow) {
+        if let Ok(window) = bar.hwnd() {
+            let _ = unsafe { SetWindowPos(window, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
         }
     }
 
@@ -293,6 +350,8 @@ mod tool {
     use tauri::WebviewWindow;
 
     pub fn keep(_bar: &WebviewWindow) {}
+
+    pub fn raise(_bar: &WebviewWindow) {}
 }
 
 #[cfg(test)]
