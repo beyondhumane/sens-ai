@@ -19,9 +19,6 @@ import { useSheet, type Sheet } from "../shared/useSheet";
 import { t } from "./copy";
 import { panelShows, railFolded, shell, showTool, toggleRail, type Tool } from "./shell";
 
-// The title bar Sens draws instead of the system's: the rail switch, the
-// brand, an update when there is one, the tools, and the window's controls.
-// It drags the window.
 export function Topbar() {
   const closed = useStore(shell, railFolded);
   const label = closed ? t.showSidebar : t.hideSidebar;
@@ -141,7 +138,6 @@ const TOOLS: { tool: Tool; icon: string }[] = [
   { tool: "tasks", icon: ICONS.activity },
 ];
 
-// The tools of the right panel; a dot while background work runs.
 function ToolsButton() {
   const sheet = useSheet();
   const running = useStore(tasks, () => runningTasks());

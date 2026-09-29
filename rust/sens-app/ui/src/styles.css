@@ -137,9 +137,6 @@
   .icon-btn[hidden] { display: none; }
   .icon-btn:disabled { opacity: .4; pointer-events: none; }
 
-  /* The rail leaves --rest beside it: the chat's least 360px, and a tool's
-     320px when one is open. With a tool open it yields first, down to 180px;
-     narrower than that (shell.ts's ROOMY) it folds. */
   .body {
     --rest: 360px;
     --rail: clamp(180px, var(--rail-width, 232px), min(420px, 100% - var(--rest)));
@@ -408,8 +405,6 @@
     background: var(--ground); border-bottom: 1px solid var(--hair);
   }
   .view-add { position: relative; margin-left: auto; }
-  /* Tabs that do not fit scroll sideways; the chosen one's line sits on the
-     head's rule. */
   .tabs { display: flex; gap: 20px; min-width: 0; margin-bottom: -1px; overflow-x: auto; scrollbar-width: none; }
   .tab {
     height: 36px; display: flex; flex: none; align-items: center; gap: 6px; padding: 0 2px; white-space: nowrap;
@@ -1410,7 +1405,6 @@
   .task-actions .quiet { border: 1px solid var(--hair-strong); font-size: 12px; }
   .task-actions .fault { font-size: 12px; }
 
-  /* The tree leaves the file it opens at least 180px. */
   .code-body {
     --tree: clamp(150px, var(--tree-width, 232px), min(60%, 100% - 180px));
     position: relative; display: grid; grid-template-columns: var(--tree) minmax(0, 1fr); min-height: 0;
