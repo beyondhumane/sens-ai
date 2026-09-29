@@ -114,7 +114,7 @@ export function Window({ tools = true }: { tools?: boolean }) {
 
 function FocusButton() {
   const [keys, setKeys] = useState("");
-  const learn = () => void commands.shortcutState().then((shortcut) => setKeys(shortcut.named), () => {});
+  const learn = () => void commands.shortcutState().then((shortcut) => setKeys(shortcut.named)).catch(() => {});
 
   useEffect(learn, []);
 
