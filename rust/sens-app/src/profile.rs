@@ -2,6 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::shortcut::Keys;
 use crate::update;
 
 const FILE: &str = "profile.json";
@@ -16,6 +17,7 @@ pub struct Profile {
     pub notify: bool,
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
+    pub shortcut: Keys,
 }
 
 impl Default for Profile {
@@ -28,6 +30,7 @@ impl Default for Profile {
             notify: true,
             keep_in_tray: true,
             start_with_windows: true,
+            shortcut: Keys::default(),
         }
     }
 }
@@ -64,6 +67,10 @@ pub fn set_keep_in_tray(base: &Path, on: bool) -> Result<(), String> {
 
 pub fn set_start_with_windows(base: &Path, on: bool) -> Result<(), String> {
     change(base, |profile| profile.start_with_windows = on)
+}
+
+pub fn set_shortcut(base: &Path, keys: Keys) -> Result<(), String> {
+    change(base, |profile| profile.shortcut = keys)
 }
 
 pub fn set_welcomed(base: &Path, on: bool) -> Result<(), String> {
@@ -160,6 +167,22 @@ mod tests {
         let written: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(base.join(FILE)).unwrap()).unwrap();
         assert_eq!(written["keepInTray"], false);
         assert_eq!(written["startWithWindows"], false);
+    }
+
+    #[test]
+    fn a_profile_from_before_the_shortcut_could_change_opens_with_alt_and_space_and_keeps_the_one_chosen() {
+        let base = temp_root("shortcut");
+        std::fs::write(base.join(FILE), r#"{ "name": "Sofía" }"#).unwrap();
+        assert_eq!(load(&base).shortcut, Keys::default());
+
+        let chosen = Keys { ctrl: true, alt: false, shift: true, win: false, key: "K".into() };
+        set_shortcut(&base, chosen.clone()).unwrap();
+
+        let saved = load(&base);
+        assert_eq!(saved.shortcut, chosen);
+        assert_eq!(saved.name, "Sofía");
+        let written: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(base.join(FILE)).unwrap()).unwrap();
+        assert_eq!(written["shortcut"], serde_json::json!({ "ctrl": true, "alt": false, "shift": true, "win": false, "key": "K" }));
     }
 
     #[test]

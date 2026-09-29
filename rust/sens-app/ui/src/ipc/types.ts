@@ -55,14 +55,24 @@ export interface BarOpened {
   language: Language | null;
   front: Front | null;
   pinned: boolean;
+  resume: HandOver | null;
 }
 
 export interface Watching {
   session: string | null;
 }
 
+export interface ShortcutKeys {
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  win: boolean;
+  key: string;
+}
+
 export interface Shortcut {
-  keys: string;
+  keys: ShortcutKeys;
+  named: string;
   taken: boolean;
 }
 
@@ -314,7 +324,7 @@ export interface TerminalReading {
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };
 
-export type VoiceCause = "microphone" | "model" | "other";
+export type VoiceCause = "microphone" | "silent" | "model" | "other";
 
 export interface VoiceRefusal {
   cause: VoiceCause;

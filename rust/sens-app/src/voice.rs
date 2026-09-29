@@ -11,16 +11,17 @@ use serde::{Deserialize, Serialize};
 use crate::{claude_code, files, store, web};
 
 const FOLDER: &str = "voice";
-const MODEL: &str = "ggml-base-q5_1.bin";
-const MODEL_URL: &str = "https://github.com/iiTzSenn/Sens/releases/download/whisper-base-q5_1/ggml-base-q5_1.bin";
-const MODEL_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898";
-const MODEL_BYTES: u64 = 59_707_625;
+const MODEL: &str = "ggml-small-q5_1.bin";
+const MODEL_URL: &str = "https://github.com/iiTzSenn/Sens/releases/download/whisper-small-q5_1/ggml-small-q5_1.bin";
+const MODEL_SHA256: &str = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb";
+const MODEL_BYTES: u64 = 190_085_487;
+const RETIRED: [&str; 1] = ["ggml-base-q5_1.bin"];
 const CHOSEN: &str = "voice.json";
 
 const RATE: usize = 16_000;
 const FRAME: usize = RATE / 10;
 const LEAD: usize = 3;
-const PAUSE: usize = 7;
+const PAUSE: usize = 12;
 const TAIL_KEPT: usize = 2;
 const TOKENS_PER_SECOND: usize = 10;
 const TOKENS_SPARE: usize = 16;
@@ -29,17 +30,21 @@ const LONGEST: usize = 250;
 const IDLE: usize = 600;
 const QUIETEST: f32 = 0.0015;
 const OVER_FLOOR: f32 = 2.5;
-const LOUDEST_GAIN: f32 = 30.0;
+const LOUDEST_GAIN: f32 = 8.0;
 const PEAK: f32 = 0.9;
-const PROMPT_TAIL: usize = 200;
+const PROMPT_TAIL: usize = 400;
 const TICK: Duration = Duration::from_millis(100);
 const GUESS_EVERY: usize = 4;
-const GUESS_FROM: usize = 10 * FRAME;
+const GUESS_FROM: usize = 15 * FRAME;
 const GUESS_TOKENS: i32 = 64;
 const LEAST_CONTEXT: usize = 160;
 const SAMPLES_PER_CONTEXT: usize = 320;
 const CONTEXT_MARGIN: usize = 64;
 const FULL_CONTEXT: usize = 1500;
+const PASSBAND: f64 = 6_800.0;
+const TAPS: usize = 95;
+const DEAF: usize = 15;
+const LOOPED: usize = 3;
 
 const HALLUCINATIONS: [&str; 10] = [
     "subtitulos realizados por la comunidad de amaraorg",
@@ -58,6 +63,7 @@ const HALLUCINATIONS: [&str; 10] = [
 #[serde(rename_all = "camelCase")]
 pub enum Cause {
     Microphone,
+    Silent,
     Model,
     Other,
 }
@@ -115,6 +121,34 @@ fn no_microphone(error: &str) -> Refusal {
             de: "Sens kann das Mikrofon nicht hören: {error}",
             ja: "Sens がマイクの音を取得できません: {error}",
             zh: "Sens 无法使用麦克风：{error}",
+        ),
+    )
+}
+
+fn muted() -> Refusal {
+    refusal(
+        Cause::Silent,
+        said!(
+            en: "Your microphone is muted in Windows · turn it on with the microphone key or in Settings › System › Sound › Input",
+            es: "Tu micrófono está silenciado en Windows · actívalo con la tecla del micrófono o en Configuración › Sistema › Sonido › Entrada",
+            fr: "Votre microphone est coupé dans Windows · activez-le avec la touche du microphone ou dans Paramètres › Système › Son › Entrée",
+            de: "Dein Mikrofon ist in Windows stummgeschaltet · schalte es mit der Mikrofontaste oder unter Einstellungen › System › Sound › Eingabe ein",
+            ja: "Windows でマイクがミュートになっています · マイクキーか、設定 › システム › サウンド › 入力 でオンにしてください",
+            zh: "麦克风在 Windows 中已静音 · 请按麦克风键，或在 设置 › 系统 › 声音 › 输入 中打开",
+        ),
+    )
+}
+
+fn deaf() -> Refusal {
+    refusal(
+        Cause::Silent,
+        said!(
+            en: "No sound reaches Sens from the microphone · check it isn’t muted, and that Settings › Privacy › Microphone lets desktop apps use it",
+            es: "No llega ningún sonido del micrófono · comprueba que no esté silenciado y que Configuración › Privacidad › Micrófono permita usarlo a las aplicaciones de escritorio",
+            fr: "Aucun son n’arrive du microphone · vérifiez qu’il n’est pas coupé et que Paramètres › Confidentialité › Microphone autorise les applications de bureau",
+            de: "Vom Mikrofon kommt kein Ton an · prüfe, dass es nicht stummgeschaltet ist und Einstellungen › Datenschutz › Mikrofon Desktop-Apps den Zugriff erlaubt",
+            ja: "マイクから音が届いていません · ミュートになっていないか、設定 › プライバシー › マイク でデスクトップアプリに許可しているか確認してください",
+            zh: "麦克风没有传来任何声音 · 请确认它没有静音，并在 设置 › 隐私 › 麦克风 中允许桌面应用使用",
         ),
     )
 }
@@ -249,6 +283,20 @@ pub fn unrepeated(text: &str) -> String {
     kept.join(" ")
 }
 
+pub fn looping(text: &str) -> bool {
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(|word| word.trim_matches(|letter: char| !letter.is_alphanumeric()).to_lowercase())
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut seen = std::collections::HashMap::new();
+    words.windows(3).any(|three| {
+        let count = seen.entry(three).or_insert(0);
+        *count += 1;
+        *count >= LOOPED
+    })
+}
+
 pub fn joined(before: &str, said: &str) -> String {
     match (before.trim(), said.trim()) {
         ("", said) => said.to_string(),
@@ -257,18 +305,57 @@ pub fn joined(before: &str, said: &str) -> String {
     }
 }
 
+pub fn low_pass(rate: usize) -> Vec<f32> {
+    if rate <= RATE {
+        return vec![1.0];
+    }
+    let cutoff = PASSBAND / rate as f64;
+    let middle = (TAPS - 1) as f64 / 2.0;
+    let taps: Vec<f64> = (0..TAPS)
+        .map(|at| {
+            let from_middle = at as f64 - middle;
+            let sinc = match from_middle == 0.0 {
+                true => 2.0 * cutoff,
+                false => (2.0 * std::f64::consts::PI * cutoff * from_middle).sin() / (std::f64::consts::PI * from_middle),
+            };
+            let phase = 2.0 * std::f64::consts::PI * at as f64 / (TAPS - 1) as f64;
+            sinc * (0.42 - 0.5 * phase.cos() + 0.08 * (2.0 * phase).cos())
+        })
+        .collect();
+    let gain: f64 = taps.iter().sum();
+    taps.iter().map(|tap| (tap / gain) as f32).collect()
+}
+
 pub struct Resampler {
     step: f64,
     position: f64,
     previous: f32,
+    taps: Vec<f32>,
+    history: Vec<f32>,
 }
 
 impl Resampler {
     pub fn new(rate: usize) -> Self {
-        Self { step: rate as f64 / RATE as f64, position: 0.0, previous: 0.0 }
+        Self { step: rate as f64 / RATE as f64, position: 0.0, previous: 0.0, taps: low_pass(rate), history: Vec::new() }
+    }
+
+    fn filtered(&mut self, input: &[f32]) -> Vec<f32> {
+        let reach = self.taps.len() - 1;
+        if reach == 0 || input.is_empty() {
+            return input.to_vec();
+        }
+        if self.history.is_empty() {
+            self.history = vec![input[0]; reach];
+        }
+        let mut span = std::mem::take(&mut self.history);
+        span.extend_from_slice(input);
+        let out = span.windows(self.taps.len()).map(|window| window.iter().zip(&self.taps).map(|(sample, tap)| sample * tap).sum()).collect();
+        self.history = span[span.len() - reach..].to_vec();
+        out
     }
 
     pub fn push(&mut self, input: &[f32], out: &mut Vec<f32>) {
+        let input = &self.filtered(input);
         let mut at = self.position;
         while at < input.len() as f64 {
             let low = at.floor();
@@ -428,6 +515,12 @@ pub fn model(base: &Path, fetching: bool) -> Model {
     Model { ready: bytes == MODEL_BYTES, fetching, bytes: MODEL_BYTES }
 }
 
+fn retire(base: &Path) {
+    for old in RETIRED {
+        let _ = std::fs::remove_file(base.join(FOLDER).join(old));
+    }
+}
+
 pub fn chosen(base: &Path) -> Option<String> {
     store::stored::<Chosen>(&base.join(CHOSEN)).microphone
 }
@@ -485,7 +578,10 @@ impl Voice {
     }
 
     pub fn prepare(&self) {
-        if self.model().ready || self.fetching.swap(true, Ordering::SeqCst) {
+        if self.model().ready {
+            return retire(&self.base);
+        }
+        if self.fetching.swap(true, Ordering::SeqCst) {
             return;
         }
         let base = self.base.clone();
@@ -495,7 +591,10 @@ impl Voice {
             let fetched = fetch(&base, tell.as_ref());
             fetching.store(false, Ordering::SeqCst);
             match fetched {
-                Ok(()) => tell(Heard::Ready),
+                Ok(()) => {
+                    retire(&base);
+                    tell(Heard::Ready)
+                }
                 Err(message) => tell(Heard::Unfetched { message }),
             }
         });
@@ -555,8 +654,8 @@ mod engine {
     use std::collections::VecDeque;
 
     use super::{
-        Cut, GUESS_EVERY, GUESS_FROM, GUESS_TOKENS, Heard, Job, Microphone, PROMPT_TAIL, Refusal, Resampler, Segmenter, TICK, Tell, cleaned, context, held, joined, level,
-        louder, most_tokens, next, no_microphone, pick, unloaded, unrepeated, untranscribed,
+        Cut, DEAF, GUESS_EVERY, GUESS_FROM, GUESS_TOKENS, Heard, Job, Microphone, PROMPT_TAIL, Refusal, Resampler, Segmenter, TICK, Tell, cleaned, context, deaf, held, joined,
+        level, looping, louder, most_tokens, muted, next, no_microphone, pick, unloaded, unrepeated, untranscribed,
     };
 
     fn name_of(device: &cpal::Device) -> String {
@@ -611,17 +710,49 @@ mod engine {
             .map_err(|error| error.to_string())
     }
 
-    fn open(chosen: Option<&str>, sink: Arc<Mutex<Vec<f32>>>, fault: Arc<Mutex<Option<String>>>) -> Result<(cpal::Stream, usize), String> {
-        let device = device(chosen).ok_or_else(|| "—".to_string())?;
+    fn silenced(device: &cpal::Device) -> bool {
+        use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+        use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator};
+        use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx};
+        use windows::core::PCWSTR;
+
+        let Ok(id) = device.id() else {
+            return false;
+        };
+        let wide: Vec<u16> = id.id().encode_utf16().chain(Some(0)).collect();
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let Ok(endpoints) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else {
+                return false;
+            };
+            let Ok(endpoint) = endpoints.GetDevice(PCWSTR(wide.as_ptr())) else {
+                return false;
+            };
+            let Ok(volume) = endpoint.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None) else {
+                return false;
+            };
+            volume.GetMute().is_ok_and(|mute| mute.as_bool())
+        }
+    }
+
+    fn open(chosen: Option<&str>, sink: Arc<Mutex<Vec<f32>>>, fault: Arc<Mutex<Option<String>>>) -> Result<(cpal::Stream, usize), Refusal> {
+        let device = device(chosen).ok_or_else(|| no_microphone("—"))?;
+        if silenced(&device) {
+            return Err(muted());
+        }
+        opened(&device, sink, fault).map_err(|error| no_microphone(&error))
+    }
+
+    fn opened(device: &cpal::Device, sink: Arc<Mutex<Vec<f32>>>, fault: Arc<Mutex<Option<String>>>) -> Result<(cpal::Stream, usize), String> {
         let supported = device.default_input_config().map_err(|error| error.to_string())?;
         let rate = supported.sample_rate() as usize;
         let format = supported.sample_format();
         let config: cpal::StreamConfig = supported.into();
         let stream = match format {
-            cpal::SampleFormat::F32 => listen::<f32>(&device, config, sink, fault),
-            cpal::SampleFormat::I16 => listen::<i16>(&device, config, sink, fault),
-            cpal::SampleFormat::I32 => listen::<i32>(&device, config, sink, fault),
-            cpal::SampleFormat::U16 => listen::<u16>(&device, config, sink, fault),
+            cpal::SampleFormat::F32 => listen::<f32>(device, config, sink, fault),
+            cpal::SampleFormat::I16 => listen::<i16>(device, config, sink, fault),
+            cpal::SampleFormat::I32 => listen::<i32>(device, config, sink, fault),
+            cpal::SampleFormat::U16 => listen::<u16>(device, config, sink, fault),
             other => Err(format!("{other:?}")),
         }?;
         stream.play().map_err(|error| error.to_string())?;
@@ -636,8 +767,8 @@ mod engine {
         params.set_n_threads(threads);
         params.set_temperature_inc(0.0);
         params.set_max_tokens(most_tokens(audio.len()));
+        params.set_audio_ctx(context(audio.len()));
         if guess {
-            params.set_audio_ctx(context(audio.len()));
             params.set_max_tokens(most_tokens(audio.len()).min(GUESS_TOKENS));
         }
         params.set_translate(false);
@@ -656,7 +787,7 @@ mod engine {
     pub fn transcriber(id: u32, model: PathBuf, language: String, jobs: Receiver<Job>, tell: Tell) -> Result<(), Refusal> {
         whisper_rs::install_logging_hooks();
         let path = model.to_string_lossy().into_owned();
-        let whisper = WhisperContext::new_with_params(&path, WhisperContextParameters::default()).map_err(|error| unloaded(&error.to_string()))?;
+        let whisper = WhisperContext::new_with_params(&path, WhisperContextParameters { flash_attn: true, ..WhisperContextParameters::default() }).map_err(|error| unloaded(&error.to_string()))?;
         let mut state = whisper.create_state().map_err(|error| unloaded(&error.to_string()))?;
         let threads = std::thread::available_parallelism().map(|count| count.get().clamp(1, 8)).unwrap_or(4) as i32;
         let mut said = String::new();
@@ -672,7 +803,7 @@ mod engine {
             match next(&mut queue) {
                 Some(Job::Guess(phrase)) => {
                     let text = transcribe(&mut state, &phrase, &language, threads, &said, true)?;
-                    if !text.is_empty() {
+                    if !text.is_empty() && !looping(&text) {
                         tell(Heard::Guess { id, text });
                     }
                 }
@@ -694,8 +825,8 @@ mod engine {
         let fault = Arc::new(Mutex::new(None));
         let (stream, rate) = match open(chosen.as_deref(), sink.clone(), fault.clone()) {
             Ok(open) => open,
-            Err(error) => {
-                let _ = ready.send(Err(no_microphone(&error)));
+            Err(refused) => {
+                let _ = ready.send(Err(refused));
                 return;
             }
         };
@@ -709,9 +840,17 @@ mod engine {
         let mut segmenter = Segmenter::default();
         let mut refusal = None;
         let mut since_guess = 0;
+        let mut silent_ticks = 0;
+        let mut heard_sound = false;
         loop {
             std::thread::sleep(TICK);
             let raw = std::mem::take(&mut *held(&sink));
+            heard_sound = heard_sound || raw.iter().any(|sample| *sample != 0.0);
+            silent_ticks += 1;
+            if !heard_sound && silent_ticks >= DEAF {
+                refusal = Some(deaf());
+                break;
+            }
             let mut audio = Vec::with_capacity(raw.len() / 2);
             resampler.push(&raw, &mut audio);
             let mut idle = false;
@@ -828,14 +967,34 @@ mod tests {
                 resampler.push(&vec![0.5; rate / 10], &mut out);
             }
             assert!((out.len() as i64 - RATE as i64).abs() <= 2, "{rate}: {}", out.len());
-            assert!(out.iter().skip(1).all(|sample| (sample - 0.5).abs() < 1e-6));
+            assert!(out.iter().skip(1).all(|sample| (sample - 0.5).abs() < 1e-5));
         }
+    }
+
+    fn heard_at_sixteen_kilohertz(hertz: f32) -> f32 {
+        let rate = 48_000;
+        let mut resampler = Resampler::new(rate);
+        let mut out = Vec::new();
+        for chunk in (0..rate).map(|at| (2.0 * std::f32::consts::PI * hertz * at as f32 / rate as f32).sin()).collect::<Vec<_>>().chunks(rate / 10) {
+            resampler.push(chunk, &mut out);
+        }
+        rms(&out[RATE / 10..])
+    }
+
+    #[test]
+    fn the_voice_band_passes_and_what_would_fold_into_it_does_not() {
+        assert!(heard_at_sixteen_kilohertz(1_000.0) > 0.65);
+        assert!(heard_at_sixteen_kilohertz(4_000.0) > 0.65);
+        assert!(heard_at_sixteen_kilohertz(10_000.0) < 0.01);
+        assert!(heard_at_sixteen_kilohertz(14_000.0) < 0.01);
     }
 
     #[test]
     fn a_quiet_voice_is_raised_but_noise_is_not_blown_up_without_end() {
         let loud = louder(&[0.01, -0.02]);
-        assert!((loud[1] + 0.6).abs() < 1e-6, "{loud:?}");
+        assert!((loud[1] + 0.16).abs() < 1e-6, "{loud:?}");
+        let raised = louder(&[0.05, -0.1]);
+        assert!((raised[1] + 0.8).abs() < 1e-6, "{raised:?}");
         assert!((louder(&[0.5, -0.9])[1] + 0.9).abs() < 1e-6);
         assert_eq!(louder(&[0.0, 0.0]), vec![0.0, 0.0]);
     }
@@ -856,6 +1015,13 @@ mod tests {
         assert_eq!(unrepeated("Hola. Revisa el botón"), "Hola. Revisa el botón");
         assert_eq!(unrepeated("¿Qué hora es? Son las tres."), "¿Qué hora es? Son las tres.");
         assert_eq!(unrepeated(""), "");
+    }
+
+    #[test]
+    fn a_guess_that_goes_round_in_circles_is_not_shown() {
+        assert!(looping("Y si se ha ha dicho, se ha ha dicho, se ha ha dicho, se ha ha dicho,"));
+        assert!(!looping("Después añade un test para el componente del botón."));
+        assert!(!looping("que sí, que sí, que no"));
     }
 
     #[test]
@@ -893,6 +1059,19 @@ mod tests {
         assert_eq!(chosen(&base).as_deref(), Some("Micrófono (USB)"));
         choose(&base, None).unwrap();
         assert_eq!(chosen(&base), None);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_old_voice_model_goes_away_and_the_current_one_stays() {
+        let base = std::env::temp_dir().join(format!("sens-voice-retire-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(FOLDER)).unwrap();
+        std::fs::write(base.join(FOLDER).join(RETIRED[0]), b"old").unwrap();
+        std::fs::write(model_path(&base), b"new").unwrap();
+        retire(&base);
+        assert!(!base.join(FOLDER).join(RETIRED[0]).exists());
+        assert!(model_path(&base).exists());
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -1048,6 +1227,8 @@ mod tests {
         assert_eq!(phrase, serde_json::json!({ "kind": "phrase", "id": 2, "text": "Hola." }));
         let ended = serde_json::to_value(Heard::Ended { id: 2, refusal: Some(no_model()) }).unwrap();
         assert_eq!(ended["refusal"]["cause"], "model");
+        assert_eq!(serde_json::to_value(muted()).unwrap()["cause"], "silent");
+        assert_eq!(serde_json::to_value(deaf()).unwrap()["cause"], "silent");
         assert_eq!(serde_json::to_value(Heard::Ready).unwrap(), serde_json::json!({ "kind": "ready" }));
     }
 }

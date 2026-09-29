@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use sens_agent::chat::Engine;
 use sens_agent::said;
@@ -8,6 +8,7 @@ use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Window, WindowEvent, Wry};
 
+use crate::shortcut::Keys;
 use crate::{bar, data_dir, profile, terminal, voice};
 
 const HOST: &str = "main";
@@ -18,6 +19,13 @@ const BAR: &str = "bar";
 const QUIT: &str = "quit";
 
 static TAKEN: AtomicBool = AtomicBool::new(false);
+static BOUND: LazyLock<Mutex<Keys>> = LazyLock::new(Default::default);
+
+pub enum Wish {
+    Bind(Keys),
+    Pause,
+    Resume,
+}
 
 struct Tray {
     open: MenuItem<Wry>,
@@ -43,6 +51,18 @@ pub fn listen(app: &AppHandle) {
 
 pub fn shortcut_taken() -> bool {
     TAKEN.load(Ordering::Relaxed)
+}
+
+fn bound() -> MutexGuard<'static, Keys> {
+    BOUND.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+pub fn shortcut() -> Keys {
+    bound().clone()
+}
+
+pub fn rebind(wish: Wish) -> bool {
+    native::rebind(wish)
 }
 
 pub fn show(app: &AppHandle) {
@@ -163,13 +183,13 @@ fn labels() -> [String; 3] {
             zh: "打开 Sens",
         ),
         said!(
-            en: "Quick bar ({keys})",
-            es: "Barra rápida ({keys})",
-            fr: "Barre rapide ({keys})",
-            de: "Schnellleiste ({keys})",
-            ja: "クイックバー（{keys}）",
-            zh: "快捷栏（{keys}）",
-            keys = bar::keys(),
+            en: "Focus mode ({keys})",
+            es: "Modo focus ({keys})",
+            fr: "Mode focus ({keys})",
+            de: "Fokusmodus ({keys})",
+            ja: "フォーカスモード（{keys}）",
+            zh: "专注模式（{keys}）",
+            keys = shortcut().named(),
         ),
         said!(
             en: "Quit",
@@ -184,8 +204,8 @@ fn labels() -> [String; 3] {
 
 #[cfg(windows)]
 mod native {
-    use std::sync::OnceLock;
-    use std::sync::atomic::Ordering;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Mutex, OnceLock, mpsc};
     use std::time::Duration;
 
     use tauri::AppHandle;
@@ -193,18 +213,24 @@ mod native {
     use windows::Win32::System::DataExchange::AddClipboardFormatListener;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW};
-    use windows::Win32::System::Threading::CreateMutexW;
-    use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, RegisterHotKey, VK_SPACE};
+    use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, RegisterHotKey, UnregisterHotKey};
     use windows::Win32::UI::WindowsAndMessaging::{
         AllowSetForegroundWindow, CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowExW, GetMessageW, GetWindowThreadProcessId, HWND_MESSAGE, MSG,
-        PostMessageW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE, WM_HOTKEY, WNDCLASSW,
+        PostMessageW, PostThreadMessageW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLIPBOARDUPDATE, WM_HOTKEY, WNDCLASSW,
     };
     use windows::core::{PCWSTR, w};
 
-    use super::{TAKEN, quit, show};
-    use crate::{bar, front};
+    use super::{TAKEN, Wish, bound, quit, show};
+    use crate::shortcut::Keys;
+    use crate::{bar, data_dir, front, profile};
 
     const SHORTCUT: i32 = 1;
+    const REBIND: u32 = WM_APP + 1;
+    const ANSWER_WAIT: Duration = Duration::from_secs(2);
+
+    static THREAD: AtomicU32 = AtomicU32::new(0);
+    static WISH: Mutex<Option<(Wish, mpsc::Sender<bool>)>> = Mutex::new(None);
     const WAKE_TRIES: u32 = 30;
     const WAKE_PAUSE: Duration = Duration::from_millis(100);
 
@@ -289,8 +315,10 @@ mod native {
         if let Some(window) = window {
             let _ = unsafe { AddClipboardFormatListener(window) };
         }
-        let registered = unsafe { RegisterHotKey(window, SHORTCUT, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, u32::from(VK_SPACE.0)) };
-        TAKEN.store(registered.is_err(), Ordering::Relaxed);
+        THREAD.store(unsafe { GetCurrentThreadId() }, Ordering::SeqCst);
+        let chosen = APP.get().and_then(|app| data_dir(app).ok()).map(|base| profile::load(&base).shortcut).unwrap_or_default();
+        TAKEN.store(!bind(&chosen), Ordering::Relaxed);
+        *bound() = chosen;
         let mut message = MSG::default();
         while unsafe { GetMessageW(&mut message, None, 0, 0) }.0 > 0 {
             if message.hwnd.0.is_null() {
@@ -299,6 +327,55 @@ mod native {
                 unsafe { DispatchMessageW(&message) };
             }
         }
+    }
+
+    fn bind(keys: &Keys) -> bool {
+        let Some(key) = keys.virtual_key() else {
+            return false;
+        };
+        let modifiers = [(keys.ctrl, MOD_CONTROL), (keys.alt, MOD_ALT), (keys.shift, MOD_SHIFT), (keys.win, MOD_WIN)]
+            .into_iter()
+            .filter(|(held, _)| *held)
+            .fold(MOD_NOREPEAT, |all, (_, modifier)| all | modifier);
+        unsafe { RegisterHotKey(None, SHORTCUT, modifiers, key) }.is_ok()
+    }
+
+    pub fn rebind(wish: Wish) -> bool {
+        let thread = THREAD.load(Ordering::SeqCst);
+        if thread == 0 {
+            return false;
+        }
+        let (answer, answered) = mpsc::channel();
+        *WISH.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((wish, answer));
+        if unsafe { PostThreadMessageW(thread, REBIND, WPARAM(0), LPARAM(0)) }.is_err() {
+            return false;
+        }
+        answered.recv_timeout(ANSWER_WAIT).unwrap_or(false)
+    }
+
+    fn rebound() {
+        let Some((wish, answer)) = WISH.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() else {
+            return;
+        };
+        let _ = unsafe { UnregisterHotKey(None, SHORTCUT) };
+        let done = match wish {
+            Wish::Pause => true,
+            Wish::Resume => {
+                let on = bind(&bound());
+                TAKEN.store(!on, Ordering::Relaxed);
+                on
+            }
+            Wish::Bind(keys) if bind(&keys) => {
+                TAKEN.store(false, Ordering::Relaxed);
+                *bound() = keys;
+                true
+            }
+            Wish::Bind(_) => {
+                TAKEN.store(!bind(&bound()), Ordering::Relaxed);
+                false
+            }
+        };
+        let _ = answer.send(done);
     }
 
     unsafe extern "system" fn heard(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -316,6 +393,7 @@ mod native {
         match message {
             0 => return false,
             WM_CLIPBOARDUPDATE => front::copied(),
+            REBIND => rebound(),
             WM_HOTKEY => {
                 front::note();
                 on_main(app, bar::toggle);
@@ -364,6 +442,10 @@ mod native {
 
     pub fn listen(_app: &AppHandle) {}
 
+    pub fn rebind(_wish: super::Wish) -> bool {
+        false
+    }
+
     pub fn run_entry() -> Option<String> {
         None
     }
@@ -404,8 +486,8 @@ mod tests {
 
     #[test]
     fn the_tray_menu_speaks_the_language_chosen() {
-        assert_eq!(speaking(Language::Es, labels), ["Abrir Sens", "Barra rápida (Ctrl+Alt+Espacio)", "Salir"]);
-        assert_eq!(speaking(Language::En, labels), ["Open Sens", "Quick bar (Ctrl+Alt+Space)", "Quit"]);
-        assert_eq!(speaking(Language::De, labels)[1], "Schnellleiste (Strg+Alt+Leertaste)");
+        assert_eq!(speaking(Language::Es, labels), ["Abrir Sens", "Modo focus (Alt+Espacio)", "Salir"]);
+        assert_eq!(speaking(Language::En, labels), ["Open Sens", "Focus mode (Alt+Space)", "Quit"]);
+        assert_eq!(speaking(Language::De, labels)[1], "Fokusmodus (Alt+Leertaste)");
     }
 }

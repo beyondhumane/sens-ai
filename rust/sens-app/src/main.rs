@@ -20,6 +20,7 @@ mod profile;
 mod projects;
 mod providers;
 mod served;
+mod shortcut;
 mod snapshot;
 mod store;
 mod terminal;
@@ -909,6 +910,7 @@ fn main() {
             market_install,
             market_update,
             bar::bar_open,
+            bar::bar_focus,
             bar::bar_hide,
             bar::bar_fit,
             bar::bar_pin,
@@ -918,7 +920,9 @@ fn main() {
             bar::bar_clip,
             bar::bar_shot,
             bar::bar_projects,
-            bar::shortcut_state
+            shortcut::shortcut_state,
+            shortcut::shortcut_set,
+            shortcut::shortcut_pause
         ])
         .build(tauri::generate_context!())
         .expect("sens app")

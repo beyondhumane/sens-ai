@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use sens_agent::language::Language;
-use sens_agent::said;
 use serde::{Deserialize, Serialize};
 use tauri::{
     App, AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalRect, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
@@ -16,6 +16,7 @@ const FIRST_HEIGHT: f64 = 106.0;
 const LEAST_HEIGHT: f64 = 90.0;
 const MOST_HEIGHT: f64 = 680.0;
 const FROM_TOP: f64 = 0.22;
+const MINIMIZING: Duration = Duration::from_millis(240);
 
 #[derive(Default)]
 struct Pin {
@@ -29,6 +30,7 @@ struct Opened {
     language: Option<Language>,
     front: Option<front::Front>,
     pinned: bool,
+    resume: Option<HandOver>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -43,12 +45,6 @@ pub struct HandOver {
 pub struct Context {
     front: Option<front::Front>,
     clip: Option<front::Clip>,
-}
-
-#[derive(Serialize)]
-pub struct Shortcut {
-    keys: String,
-    taken: bool,
 }
 
 pub fn build(app: &App) -> tauri::Result<()> {
@@ -74,17 +70,6 @@ pub fn build(app: &App) -> tauri::Result<()> {
     Ok(())
 }
 
-pub fn keys() -> String {
-    said!(
-        en: "Ctrl+Alt+Space",
-        es: "Ctrl+Alt+Espacio",
-        fr: "Ctrl+Alt+Espace",
-        de: "Strg+Alt+Leertaste",
-        ja: "Ctrl+Alt+Space",
-        zh: "Ctrl+Alt+空格",
-    )
-}
-
 pub fn toggle(app: &AppHandle) {
     let Some(bar) = app.get_webview_window(LABEL) else {
         return;
@@ -104,6 +89,10 @@ pub fn open(app: &AppHandle) {
 }
 
 fn reveal(app: &AppHandle, bar: &WebviewWindow) {
+    reveal_with(app, bar, None);
+}
+
+fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>) {
     let base = data_dir(app).ok();
     let look = base.as_deref().map(look::load).unwrap_or_default();
     let pin = app.state::<Pin>();
@@ -117,6 +106,7 @@ fn reveal(app: &AppHandle, bar: &WebviewWindow) {
         language: base.as_deref().and_then(language::load),
         front: front::front(),
         pinned,
+        resume,
     };
     let _ = app.emit_to(LABEL, "bar-open", opened);
     let _ = bar.show();
@@ -168,6 +158,25 @@ pub fn heard(window: &Window, event: &WindowEvent) {
 #[tauri::command]
 pub fn bar_open(app: AppHandle) {
     open(&app);
+}
+
+#[tauri::command]
+pub fn bar_focus(app: AppHandle, hand: HandOver) {
+    let Some(main) = app.get_webview_window(HOST) else {
+        return;
+    };
+    let _ = main.minimize();
+    std::thread::spawn(move || {
+        std::thread::sleep(MINIMIZING);
+        let shown = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _ = main.hide();
+            front::note();
+            if let Some(bar) = shown.get_webview_window(LABEL) {
+                reveal_with(&shown, &bar, Some(hand));
+            }
+        });
+    });
 }
 
 #[tauri::command]
@@ -245,14 +254,6 @@ pub fn bar_projects(app: AppHandle) -> Result<Vec<projects::Recent>, String> {
     Ok(projects::recent(&projects::load(&data_dir(&app)?)))
 }
 
-#[tauri::command]
-pub fn shortcut_state() -> Shortcut {
-    Shortcut {
-        keys: keys(),
-        taken: life::shortcut_taken(),
-    }
-}
-
 #[cfg(windows)]
 mod tool {
     use tauri::WebviewWindow;
@@ -296,7 +297,6 @@ mod tool {
 
 #[cfg(test)]
 mod tests {
-    use sens_agent::language::speaking;
     use tauri::PhysicalSize;
 
     use super::*;
@@ -332,13 +332,6 @@ mod tests {
         assert_eq!(lifted(222, 1008.0, &work), 0);
         assert_eq!(lifted(700, 450.0, &work), 558);
         assert_eq!(lifted(-20, 100.0, &area(0, 40, 1920, 1000)), 40);
-    }
-
-    #[test]
-    fn the_shortcut_is_named_in_the_language_spoken() {
-        assert_eq!(speaking(Language::Es, keys), "Ctrl+Alt+Espacio");
-        assert_eq!(speaking(Language::En, keys), "Ctrl+Alt+Space");
-        assert_eq!(speaking(Language::Fr, keys), "Ctrl+Alt+Espace");
     }
 
     #[test]

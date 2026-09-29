@@ -6,10 +6,10 @@ import { profile } from "../profile/store";
 import { store, stored } from "../../shared/storage.js";
 import { settingsSheet } from "./sheet";
 
-export type Section = "general" | "look" | "language" | "providers";
+export type Section = "general" | "focus" | "look" | "language" | "providers";
 
 const SECTION = "sens.settings.section";
-export const SECTIONS: Section[] = ["general", "look", "language", "providers"];
+export const SECTIONS: Section[] = ["general", "focus", "look", "language", "providers"];
 const kept = stored(SECTION, "");
 
 export const settings = createStore(() => ({

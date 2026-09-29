@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card, VoiceHeard } from "../../ipc/types";
@@ -72,7 +71,7 @@ beforeEach(async () => {
   localStorage.clear();
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.listeners.clear();
-  voice.setState({ ready: true, fetching: false, done: 0, total: 59_707_625, fault: "" });
+  voice.setState({ ready: true, fetching: false, done: 0, total: 190_085_487, fault: "" });
   ipc.commands.providers.mockResolvedValue([{ id: "claude", vendor: "Anthropic", label: "Claude Code" }]);
   ipc.commands.models.mockResolvedValue([card("claude-sonnet"), card("claude-opus", { thinking: "always" }), card("claude-haiku", { latest: false, efforts: [] })]);
   ipc.commands.claudeAccount.mockResolvedValue({ billing: "subscription", plan: "max", source: "claude.ai", email: "ada@example.com" });
@@ -575,8 +574,17 @@ describe("dictation", () => {
     expect(lastNotice()).toMatchObject({
       kind: "notice",
       tone: "warn",
-      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › General › Voz"],
+      parts: ["Sens no puede escuchar el micrófono: dispositivo no disponible · elige el micrófono en Ajustes › Focus y voz"],
     });
+    expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("says a muted microphone must be turned on in Windows, without sending the user to pick another", async () => {
+    const muted = "Tu micrófono está silenciado en Windows · actívalo con la tecla del micrófono o en Configuración › Sistema › Sonido › Entrada";
+    ipc.commands.voiceStart.mockRejectedValue({ cause: "silent", message: muted });
+    render(<Composer />);
+    await act(async () => fireEvent.click(button("Dictar")));
+    expect(lastNotice()).toMatchObject({ kind: "notice", tone: "warn", parts: [muted] });
     expect(button("Dictar").getAttribute("aria-pressed")).toBe("false");
   });
 

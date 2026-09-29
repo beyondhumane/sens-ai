@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { commands } from "../ipc/commands";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { focused, panes } from "../features/panes/store";
@@ -18,9 +19,6 @@ import { useSheet, type Sheet } from "../shared/useSheet";
 import { t } from "./copy";
 import { panelShows, railFolded, shell, showTool, toggleRail, type Tool } from "./shell";
 
-// The title bar Sens draws instead of the system's: the rail switch, the
-// brand, an update when there is one, the tools, and the window's controls.
-// It drags the window.
 export function Topbar() {
   const closed = useStore(shell, railFolded);
   const label = closed ? t.showSidebar : t.hideSidebar;
@@ -94,6 +92,7 @@ export function Window({ tools = true }: { tools?: boolean }) {
   const grow = wide ? t.restore : t.maximize;
   return (
     <div className="win" id="win" data-max={String(wide)}>
+      {tools && <FocusButton />}
       {tools && <ToolsButton />}
       <button id="win-min" title={t.minimize} aria-label={t.minimize} onClick={() => frame.minimize()}>
         <Icon svg={ICONS.minimize} />
@@ -113,6 +112,24 @@ export function Window({ tools = true }: { tools?: boolean }) {
   );
 }
 
+function FocusButton() {
+  const [keys, setKeys] = useState("");
+  const learn = () => void commands.shortcutState().then((shortcut) => setKeys(shortcut.named)).catch(() => {});
+
+  useEffect(learn, []);
+
+  function enter() {
+    const { root, session } = focused().desk.getState();
+    void commands.barFocus({ root, session, text: "" }).catch(() => {});
+  }
+
+  return (
+    <button id="focus-mode" title={keys ? t.focusModeKeys(keys) : t.focusMode} aria-label={t.focusMode} onPointerEnter={learn} onClick={enter}>
+      <Icon svg={ICONS.focus} />
+    </button>
+  );
+}
+
 const TOOLS: { tool: Tool; icon: string }[] = [
   { tool: "files", icon: ICONS.files },
   { tool: "changes", icon: ICONS.compare },
@@ -121,7 +138,6 @@ const TOOLS: { tool: Tool; icon: string }[] = [
   { tool: "tasks", icon: ICONS.activity },
 ];
 
-// The tools of the right panel; a dot while background work runs.
 function ToolsButton() {
   const sheet = useSheet();
   const running = useStore(tasks, () => runningTasks());

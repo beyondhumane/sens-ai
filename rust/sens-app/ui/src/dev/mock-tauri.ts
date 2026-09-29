@@ -1,6 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import type { BarContext, BarOpened, BarProject, Capabilities, Found, News, Shortcut, Shot } from "../ipc/types";
+import type { BarContext, BarOpened, BarProject, Capabilities, Found, HandOver, News, Shortcut, ShortcutKeys, Shot } from "../ipc/types";
 import { languageOf } from "../shared/i18n";
 import { lookOf, tokenOf } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
@@ -480,7 +480,7 @@ const CLIP = [
 const copied = () => asking.get("clip") !== "none";
 let pinned = asking.has("pinned");
 
-const opened = (): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned });
+const opened = (resume: HandOver | null = null): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned, resume });
 
 function shot(): Shot | null {
   const [width, height] = [960, 540];
@@ -587,7 +587,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   voice_start: () => listen(true),
   voice_test: () => listen(false),
   voice_stop: () => stopListening(),
-  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 59_707_625 }),
+  voice_model: () => ({ ready: asking.get("voice") !== "fetching", fetching: asking.get("voice") === "fetching", bytes: 190_085_487 }),
   voice_prepare: () => console.info("[mock-tauri] descargaría el modelo de voz"),
   voice_microphones: () => MICROPHONES,
   voice_microphone: () => microphone,
@@ -759,8 +759,15 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   set_notify: ({ on }) => void (person.notify = Boolean(on)),
   set_keep_in_tray: ({ on }) => void (person.keepInTray = Boolean(on)),
   set_start_with_windows: ({ on }) => void (person.startWithWindows = Boolean(on)),
-  shortcut_state: (): Shortcut => ({ keys: "Ctrl+Alt+Espacio", taken: asking.has("taken") }),
+  shortcut_state: (): Shortcut => ({ keys: { ctrl: false, alt: true, shift: false, win: false, key: "Space" }, named: "Alt+Espacio", taken: asking.has("taken") }),
+  shortcut_set: ({ keys }): Shortcut => {
+    const chosen = keys as ShortcutKeys;
+    const named = [chosen.ctrl && "Ctrl", chosen.alt && "Alt", chosen.shift && "Mayús", chosen.win && "Win", chosen.key === "Space" ? "Espacio" : chosen.key];
+    return { keys: chosen, named: named.filter(Boolean).join("+"), taken: false };
+  },
+  shortcut_pause: () => undefined,
   bar_open: () => (onBar ? emit("bar-open", opened()) : console.info("[mock-tauri] la barra se abriría")),
+  bar_focus: ({ hand }) => console.info("[mock-tauri] Sens se ocultaría y la barra retomaría", hand),
   bar_hide: () => console.info("[mock-tauri] la barra se ocultaría"),
   bar_fit: () => null,
   bar_pin: ({ on }) => void (pinned = Boolean(on)),
