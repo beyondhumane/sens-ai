@@ -45,6 +45,18 @@ const PASSBAND: f64 = 6_800.0;
 const TAPS: usize = 95;
 const DEAF: usize = 15;
 const LOOPED: usize = 3;
+const HANDS_FREE_IDLE: usize = 40;
+const WAKE_PAUSE: usize = 5;
+const WAKE_HEARD: usize = 25 * FRAME;
+const WAKE_TOKENS: i32 = 12;
+const WAKE_THREADS: i32 = 2;
+const REOPEN: usize = 30;
+const WAKE_PROMPT: &str = "Hey Sens.";
+const NAMED_WITHIN: usize = 3;
+
+const GREETINGS: [&str; 12] = ["hey", "hei", "hay", "ey", "ei", "eh", "ehi", "oye", "oie", "hola", "hi", "hello"];
+const NAME_SOUNDS: [&str; 5] = ["sen", "cen", "san", "zen", "sin"];
+const NAMES: [&str; 12] = ["sens", "sense", "sen", "senz", "cens", "sends", "sence", "sans", "zens", "since", "cents", "sins"];
 
 const HALLUCINATIONS: [&str; 10] = [
     "subtitulos realizados por la comunidad de amaraorg",
@@ -84,6 +96,7 @@ pub enum Heard {
     Fetching { done: u64, total: u64 },
     Ready,
     Unfetched { message: String },
+    Woke,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -297,6 +310,22 @@ pub fn looping(text: &str) -> bool {
     })
 }
 
+pub fn woken(text: &str) -> bool {
+    let bare: String = text.to_lowercase().chars().map(|letter| if letter.is_alphanumeric() { letter } else { ' ' }).collect();
+    let words: Vec<&str> = bare.split_whitespace().collect();
+    let called = |greeting: &str, name: &str| GREETINGS.contains(&greeting) && NAMES.contains(&name);
+    match words.as_slice() {
+        [greeting, name, ..] if called(greeting, name) => true,
+        [first, ..] => GREETINGS.iter().any(|greeting| first.strip_prefix(greeting).is_some_and(|name| NAMES.contains(&name))),
+        [] => false,
+    }
+}
+
+pub fn named(text: &str) -> bool {
+    let opening: String = text.split_whitespace().take(NAMED_WITHIN).flat_map(|word| word.chars().filter(|letter| letter.is_alphanumeric())).collect::<String>().to_lowercase();
+    NAME_SOUNDS.iter().any(|sound| opening.contains(sound))
+}
+
 pub fn joined(before: &str, said: &str) -> String {
     match (before.trim(), said.trim()) {
         ("", said) => said.to_string(),
@@ -380,6 +409,8 @@ pub enum Cut {
 }
 
 pub struct Segmenter {
+    pause: usize,
+    rest: usize,
     floor: Option<f32>,
     pending: Vec<f32>,
     lead: Vec<Vec<f32>>,
@@ -392,11 +423,15 @@ pub struct Segmenter {
 
 impl Default for Segmenter {
     fn default() -> Self {
-        Self { floor: None, pending: Vec::new(), lead: Vec::new(), phrase: Vec::new(), voiced: 0, quiet: 0, idle: 0, loudness: 0.0 }
+        Self::new(PAUSE, IDLE)
     }
 }
 
 impl Segmenter {
+    pub fn new(pause: usize, rest: usize) -> Self {
+        Self { pause, rest, floor: None, pending: Vec::new(), lead: Vec::new(), phrase: Vec::new(), voiced: 0, quiet: 0, idle: 0, loudness: 0.0 }
+    }
+
     pub fn loudness(&self) -> f32 {
         self.loudness
     }
@@ -436,7 +471,7 @@ impl Segmenter {
                     self.lead.remove(0);
                 }
                 self.idle += 1;
-                if self.idle >= IDLE {
+                if self.idle >= self.rest {
                     self.idle = 0;
                     return Some(Cut::Idle);
                 }
@@ -455,7 +490,7 @@ impl Segmenter {
             self.quiet += 1;
         }
         let long = self.phrase.len() >= LONGEST * FRAME;
-        if self.quiet >= PAUSE || long {
+        if self.quiet >= self.pause || long {
             return self.close();
         }
         None
@@ -560,17 +595,43 @@ struct Live {
     thread: JoinHandle<()>,
 }
 
+impl Live {
+    fn end(self) {
+        let _ = self.stop.send(());
+        let _ = self.thread.join();
+    }
+}
+
+pub struct Hearing {
+    chosen: Option<String>,
+    model: Option<PathBuf>,
+    language: String,
+    rest: usize,
+}
+
 pub struct Voice {
     base: PathBuf,
     tell: Tell,
     live: Mutex<Option<Live>>,
+    ear: Mutex<Option<Live>>,
+    wanted: AtomicBool,
+    busy: Arc<AtomicBool>,
     fetching: Arc<AtomicBool>,
     made: AtomicU32,
 }
 
 impl Voice {
     pub fn new(base: PathBuf, tell: impl Fn(Heard) + Send + Sync + 'static) -> Self {
-        Self { base, tell: Arc::new(tell), live: Mutex::new(None), fetching: Arc::new(AtomicBool::new(false)), made: AtomicU32::new(0) }
+        Self {
+            base,
+            tell: Arc::new(tell),
+            live: Mutex::new(None),
+            ear: Mutex::new(None),
+            wanted: AtomicBool::new(false),
+            busy: Arc::new(AtomicBool::new(false)),
+            fetching: Arc::new(AtomicBool::new(false)),
+            made: AtomicU32::new(0),
+        }
     }
 
     pub fn model(&self) -> Model {
@@ -600,7 +661,7 @@ impl Voice {
         });
     }
 
-    pub fn start(&self, language: &str, transcribe: bool) -> Result<u32, Refusal> {
+    pub fn start(&self, language: &str, transcribe: bool, hands_free: bool) -> Result<u32, Refusal> {
         self.stop();
         if transcribe && !self.model().ready {
             self.prepare();
@@ -609,11 +670,19 @@ impl Voice {
         let id = self.made.fetch_add(1, Ordering::SeqCst) + 1;
         let (stop, stopped) = mpsc::channel();
         let (ready, readied) = mpsc::channel();
-        let chosen = chosen(&self.base);
-        let model = transcribe.then(|| model_path(&self.base));
-        let language = language.to_string();
+        let hearing = Hearing {
+            chosen: chosen(&self.base),
+            model: transcribe.then(|| model_path(&self.base)),
+            language: language.to_string(),
+            rest: if hands_free { HANDS_FREE_IDLE } else { IDLE },
+        };
         let tell = self.tell.clone();
-        let thread = thread::spawn(move || engine::session(id, chosen, model, language, stopped, ready, tell));
+        let busy = self.busy.clone();
+        busy.store(true, Ordering::SeqCst);
+        let thread = thread::spawn(move || {
+            engine::session(id, hearing, stopped, ready, tell);
+            busy.store(false, Ordering::SeqCst);
+        });
         match readied.recv().unwrap_or_else(|_| Err(no_microphone("—"))) {
             Ok(()) => {
                 *held(&self.live) = Some(Live { stop, thread });
@@ -629,8 +698,7 @@ impl Voice {
     pub fn stop(&self) {
         let live = held(&self.live).take();
         if let Some(live) = live {
-            let _ = live.stop.send(());
-            let _ = live.thread.join();
+            live.end();
         }
     }
 
@@ -639,23 +707,74 @@ impl Voice {
             let _ = live.stop.send(());
         }
     }
+
+    pub fn waking(&self) -> bool {
+        self.wanted.load(Ordering::SeqCst)
+    }
+
+    pub fn wake(&self, on: bool) -> Result<(), Refusal> {
+        self.wanted.store(on, Ordering::SeqCst);
+        self.deafen();
+        self.rouse()
+    }
+
+    pub fn rouse(&self) -> Result<(), Refusal> {
+        let mut ear = held(&self.ear);
+        if !self.waking() || ear.is_some() {
+            return Ok(());
+        }
+        if !self.model().ready {
+            self.prepare();
+            return Ok(());
+        }
+        let (stop, stopped) = mpsc::channel();
+        let (ready, readied) = mpsc::channel();
+        let chosen = chosen(&self.base);
+        let model = model_path(&self.base);
+        let busy = self.busy.clone();
+        let tell = self.tell.clone();
+        let thread = thread::spawn(move || engine::ear(chosen, model, stopped, ready, busy, tell));
+        let heard = readied.recv().unwrap_or_else(|_| Err(unloaded("—")));
+        if matches!(&heard, Err(refusal) if refusal.cause == Cause::Model) {
+            let _ = thread.join();
+            return heard;
+        }
+        *ear = Some(Live { stop, thread });
+        heard
+    }
+
+    fn deafen(&self) {
+        let ear = held(&self.ear).take();
+        if let Some(ear) = ear {
+            ear.end();
+        }
+    }
+
+    pub fn shutdown(&self) {
+        self.wanted.store(false, Ordering::SeqCst);
+        self.deafen();
+        self.stop();
+    }
 }
 
 #[cfg(windows)]
 mod engine {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
     use std::sync::{Arc, Mutex};
 
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use cpal::{FromSample, SizedSample};
+    use sens_agent::language::{self, Language};
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState};
 
     use std::collections::VecDeque;
 
     use super::{
-        Cut, DEAF, GUESS_EVERY, GUESS_FROM, GUESS_TOKENS, Heard, Job, Microphone, PROMPT_TAIL, Refusal, Resampler, Segmenter, TICK, Tell, cleaned, context, deaf, held, joined,
-        level, looping, louder, most_tokens, muted, next, no_microphone, pick, unloaded, unrepeated, untranscribed,
+        Cut, DEAF, GUESS_EVERY, GUESS_FROM, GUESS_TOKENS, Hearing, Heard, IDLE, Job, Microphone, PAUSE, PROMPT_TAIL, RATE, REOPEN, Refusal, Resampler, Segmenter, TICK, Tell, WAKE_HEARD,
+        WAKE_PAUSE, WAKE_PROMPT, WAKE_THREADS, WAKE_TOKENS, cleaned, context, deaf, held, joined, level, looping, louder, most_tokens, muted, next, no_microphone, pick, unloaded,
+        named, unrepeated, untranscribed, woken,
     };
 
     fn name_of(device: &cpal::Device) -> String {
@@ -759,18 +878,13 @@ mod engine {
         Ok((stream, rate))
     }
 
-    fn transcribe(state: &mut WhisperState, phrase: &[f32], language: &str, threads: i32, said: &str, guess: bool) -> Result<String, Refusal> {
-        let audio = louder(phrase);
-        let tail: String = said.chars().rev().take(PROMPT_TAIL).collect::<Vec<_>>().into_iter().rev().collect();
+    fn plain(language: &str, threads: i32, tokens: i32, samples: usize) -> FullParams<'_, '_> {
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_language(Some(language));
         params.set_n_threads(threads);
         params.set_temperature_inc(0.0);
-        params.set_max_tokens(most_tokens(audio.len()));
-        params.set_audio_ctx(context(audio.len()));
-        if guess {
-            params.set_max_tokens(most_tokens(audio.len()).min(GUESS_TOKENS));
-        }
+        params.set_max_tokens(tokens);
+        params.set_audio_ctx(context(samples));
         params.set_translate(false);
         params.set_no_timestamps(true);
         params.set_suppress_blank(true);
@@ -779,16 +893,54 @@ mod engine {
         params.set_print_realtime(false);
         params.set_print_special(false);
         params.set_print_timestamps(false);
-        params.set_initial_prompt(&tail);
-        state.full(params, &audio).map_err(|error| untranscribed(&error.to_string()))?;
-        Ok(unrepeated(&cleaned(&state.as_iter().filter_map(|segment| segment.to_str_lossy().ok().map(|text| text.into_owned())).collect::<String>())))
+        params
     }
 
-    pub fn transcriber(id: u32, model: PathBuf, language: String, jobs: Receiver<Job>, tell: Tell) -> Result<(), Refusal> {
+    fn written(state: &WhisperState) -> String {
+        state.as_iter().filter_map(|segment| segment.to_str_lossy().ok().map(|text| text.into_owned())).collect()
+    }
+
+    fn transcribe(state: &mut WhisperState, phrase: &[f32], language: &str, threads: i32, said: &str, guess: bool) -> Result<String, Refusal> {
+        let audio = louder(phrase);
+        let tail: String = said.chars().rev().take(PROMPT_TAIL).collect::<Vec<_>>().into_iter().rev().collect();
+        let tokens = if guess { most_tokens(audio.len()).min(GUESS_TOKENS) } else { most_tokens(audio.len()) };
+        let mut params = plain(language, threads, tokens, audio.len());
+        params.set_initial_prompt(&tail);
+        state.full(params, &audio).map_err(|error| untranscribed(&error.to_string()))?;
+        Ok(unrepeated(&cleaned(&written(state))))
+    }
+
+    pub fn called(state: &mut WhisperState, phrase: &[f32], language: &str, prompt: Option<&str>) -> Option<String> {
+        let audio = louder(&phrase[..phrase.len().min(WAKE_HEARD)]);
+        let mut params = plain(language, WAKE_THREADS, WAKE_TOKENS, audio.len());
+        params.set_single_segment(true);
+        if let Some(prompt) = prompt {
+            params.set_initial_prompt(prompt);
+        }
+        state.full(params, &audio).ok()?;
+        Some(written(state))
+    }
+
+    fn spoken(language: Language) -> &'static str {
+        match language {
+            Language::Ja | Language::Zh => Language::En.id(),
+            other => other.id(),
+        }
+    }
+
+    pub fn wakes(state: &mut WhisperState, phrase: &[f32], language: &str) -> bool {
+        called(state, phrase, language, Some(WAKE_PROMPT)).is_some_and(|text| woken(&text)) && called(state, phrase, language, None).is_some_and(|text| named(&text))
+    }
+
+    pub fn loaded(model: &Path) -> Result<WhisperState, Refusal> {
         whisper_rs::install_logging_hooks();
         let path = model.to_string_lossy().into_owned();
         let whisper = WhisperContext::new_with_params(&path, WhisperContextParameters { flash_attn: true, ..WhisperContextParameters::default() }).map_err(|error| unloaded(&error.to_string()))?;
-        let mut state = whisper.create_state().map_err(|error| unloaded(&error.to_string()))?;
+        whisper.create_state().map_err(|error| unloaded(&error.to_string()))
+    }
+
+    pub fn transcriber(id: u32, model: PathBuf, language: String, jobs: Receiver<Job>, tell: Tell) -> Result<(), Refusal> {
+        let mut state = loaded(&model)?;
         let threads = std::thread::available_parallelism().map(|count| count.get().clamp(1, 8)).unwrap_or(4) as i32;
         let mut said = String::new();
         let mut queue = VecDeque::new();
@@ -820,7 +972,8 @@ mod engine {
         Ok(())
     }
 
-    pub fn session(id: u32, chosen: Option<String>, model: Option<PathBuf>, language: String, stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, tell: Tell) {
+    pub fn session(id: u32, hearing: Hearing, stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, tell: Tell) {
+        let Hearing { chosen, model, language, rest } = hearing;
         let sink = Arc::new(Mutex::new(Vec::new()));
         let fault = Arc::new(Mutex::new(None));
         let (stream, rate) = match open(chosen.as_deref(), sink.clone(), fault.clone()) {
@@ -837,7 +990,7 @@ mod engine {
         });
         let _ = ready.send(Ok(()));
         let mut resampler = Resampler::new(rate);
-        let mut segmenter = Segmenter::default();
+        let mut segmenter = Segmenter::new(PAUSE, rest);
         let mut refusal = None;
         let mut since_guess = 0;
         let mut silent_ticks = 0;
@@ -890,20 +1043,88 @@ mod engine {
         }
         tell(Heard::Ended { id, refusal });
     }
+
+    pub fn ear(chosen: Option<String>, model: PathBuf, stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, busy: Arc<AtomicBool>, tell: Tell) {
+        let mut state = match loaded(&model) {
+            Ok(state) => state,
+            Err(refused) => {
+                let _ = ready.send(Err(refused));
+                return;
+            }
+        };
+        let sink = Arc::new(Mutex::new(Vec::new()));
+        let fault = Arc::new(Mutex::new(None));
+        let mut stream = None;
+        let mut resampler = Resampler::new(RATE);
+        let mut segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+        let mut unheard = REOPEN;
+        let mut ready = Some(ready);
+        loop {
+            if stream.is_none() && unheard >= REOPEN {
+                unheard = 0;
+                let opened = open(chosen.as_deref(), sink.clone(), fault.clone());
+                if let Some(ready) = ready.take() {
+                    let _ = ready.send(opened.as_ref().map(|_| ()).map_err(Refusal::clone));
+                }
+                if let Ok((open, rate)) = opened {
+                    stream = Some(open);
+                    resampler = Resampler::new(rate);
+                    segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+                }
+            }
+            std::thread::sleep(TICK);
+            if !matches!(stopped.try_recv(), Err(TryRecvError::Empty)) {
+                break;
+            }
+            let raw = std::mem::take(&mut *held(&sink));
+            if held(&fault).take().is_some() {
+                stream = None;
+            }
+            if stream.is_none() {
+                unheard += 1;
+                continue;
+            }
+            if busy.load(Ordering::SeqCst) {
+                segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+                continue;
+            }
+            let mut audio = Vec::with_capacity(raw.len() / 2);
+            resampler.push(&raw, &mut audio);
+            let phrases: Vec<Vec<f32>> = segmenter
+                .push(&audio)
+                .into_iter()
+                .filter_map(|cut| match cut {
+                    Cut::Phrase(phrase) => Some(phrase),
+                    Cut::Idle => None,
+                })
+                .collect();
+            let language = spoken(language::now());
+            if phrases.iter().any(|phrase| wakes(&mut state, phrase, language)) {
+                segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+                tell(Heard::Woke);
+            }
+        }
+    }
 }
 
 #[cfg(not(windows))]
 mod engine {
     use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use std::sync::mpsc::{Receiver, Sender};
 
-    use super::{Microphone, Refusal, Tell, no_microphone};
+    use super::{Hearing, Microphone, Refusal, Tell, no_microphone};
 
     pub fn microphones() -> Vec<Microphone> {
         Vec::new()
     }
 
-    pub fn session(_id: u32, _chosen: Option<String>, _model: Option<PathBuf>, _language: String, _stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, _tell: Tell) {
+    pub fn session(_id: u32, _hearing: Hearing, _stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, _tell: Tell) {
+        let _ = ready.send(Err(no_microphone("Windows only")));
+    }
+
+    pub fn ear(_chosen: Option<String>, _model: PathBuf, _stopped: Receiver<()>, ready: Sender<Result<(), Refusal>>, _busy: Arc<AtomicBool>, _tell: Tell) {
         let _ = ready.send(Err(no_microphone("Windows only")));
     }
 }
@@ -1022,6 +1243,44 @@ mod tests {
         assert!(looping("Y si se ha ha dicho, se ha ha dicho, se ha ha dicho, se ha ha dicho,"));
         assert!(!looping("Después añade un test para el componente del botón."));
         assert!(!looping("que sí, que sí, que no"));
+    }
+
+    #[test]
+    fn hey_sens_wakes_however_whisper_spells_it_and_only_at_the_start() {
+        for said in ["Hey Sens.", "¡Hey, Senz!", "Ey, Sens", "Oye Sens, revisa el botón", "Hola Sens.", "Hey, sense.", "ehi, senz", "Heysans", "Oyesens", " hey  sens ", "HEY SENS"] {
+            assert!(woken(said), "{said}");
+        }
+        for said in ["Hay sensores en la placa.", "Revisa el botón, hey Sens.", "Hey.", "Sens.", "Hey, ¿qué tal?", "Hay que ser sensatos", "", "A sense of humour"] {
+            assert!(!woken(said), "{said}");
+        }
+    }
+
+    #[test]
+    fn what_whisper_hears_without_help_must_sound_like_sens_near_the_start() {
+        for said in ["Asens.", "¡Escens?", "A-Sense, revisa el botón", "Heysans", "ehi, senz", "Ascent's, revise the formula's button.", "Oye senz"] {
+            assert!(named(said), "{said}");
+        }
+        for said in [" y", "¡Suscríbete!", "¡Pasar!", "I'm sorry.", "", "Revisa el componente del botón."] {
+            assert!(!named(said), "{said}");
+        }
+    }
+
+    #[test]
+    fn dictation_started_by_voice_ends_after_a_few_seconds_of_silence() {
+        let mut segmenter = Segmenter::new(PAUSE, HANDS_FREE_IDLE);
+        segmenter.push(&tone(3, 0.001));
+        segmenter.push(&tone(8, 0.2));
+        assert!(matches!(segmenter.push(&tone(PAUSE, 0.001)).as_slice(), [Cut::Phrase(_)]));
+        assert!(segmenter.push(&tone(HANDS_FREE_IDLE - 1, 0.001)).is_empty());
+        assert_eq!(segmenter.push(&tone(1, 0.001)), vec![Cut::Idle]);
+    }
+
+    #[test]
+    fn a_short_pause_is_enough_to_hear_the_wake_phrase() {
+        let mut segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+        segmenter.push(&tone(5, 0.001));
+        segmenter.push(&tone(8, 0.2));
+        assert!(matches!(segmenter.push(&tone(WAKE_PAUSE, 0.001)).as_slice(), [Cut::Phrase(_)]));
     }
 
     #[test]
@@ -1161,7 +1420,7 @@ mod tests {
         let voice = Voice::new(base, move |event| {
             let _ = sent.send(event);
         });
-        let id = voice.start("", false).unwrap();
+        let id = voice.start("", false, false).unwrap();
         std::thread::sleep(Duration::from_millis(800));
         voice.stop();
         let events: Vec<Heard> = heard.try_iter().collect();
@@ -1179,7 +1438,7 @@ mod tests {
         let voice = Voice::new(base.clone(), move |event| {
             let _ = sent.send(event);
         });
-        let id = voice.start("es", true).unwrap();
+        let id = voice.start("es", true, false).unwrap();
         std::thread::sleep(Duration::from_millis(1500));
         voice.stop();
         let events: Vec<Heard> = heard.try_iter().collect();
@@ -1230,5 +1489,50 @@ mod tests {
         assert_eq!(serde_json::to_value(muted()).unwrap()["cause"], "silent");
         assert_eq!(serde_json::to_value(deaf()).unwrap()["cause"], "silent");
         assert_eq!(serde_json::to_value(Heard::Ready).unwrap(), serde_json::json!({ "kind": "ready" }));
+        assert_eq!(serde_json::to_value(Heard::Woke).unwrap(), serde_json::json!({ "kind": "woke" }));
+    }
+
+    #[test]
+    fn hey_sens_waits_for_the_voice_model_and_stops_when_switched_off() {
+        let base = std::env::temp_dir().join(format!("sens-voice-wake-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(FOLDER)).unwrap();
+        std::fs::write(model_path(&base), b"half").unwrap();
+        let voice = Voice::new(base.clone(), |_| {});
+        voice.fetching.store(true, Ordering::SeqCst);
+        assert_eq!(voice.wake(true), Ok(()));
+        assert!(voice.waking());
+        assert!(held(&voice.ear).is_none());
+        assert_eq!(voice.wake(false), Ok(()));
+        assert!(!voice.waking());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "needs SENS_VOICE_MODEL and SENS_WAKE_WAVS"]
+    fn the_wake_phrase_is_heard_and_other_phrases_are_not() {
+        let mut state = engine::loaded(Path::new(&std::env::var("SENS_VOICE_MODEL").unwrap())).unwrap();
+        let mut wrong = Vec::new();
+        for wav in std::env::var("SENS_WAKE_WAVS").unwrap().split(';') {
+            let bytes = std::fs::read(wav).unwrap();
+            let data = bytes.windows(4).position(|window| window == b"data").unwrap() + 8;
+            let said = bytes[data..].as_chunks::<2>().0.iter().map(|pair| i16::from_le_bytes(*pair) as f32 / 32768.0);
+            let audio: Vec<f32> = std::iter::repeat_n(0.0, RATE).chain(said).chain(std::iter::repeat_n(0.0, RATE * 2)).collect();
+            let mut segmenter = Segmenter::new(WAKE_PAUSE, IDLE);
+            let mut phrases: Vec<Vec<f32>> = segmenter.push(&audio).into_iter().filter_map(|cut| if let Cut::Phrase(phrase) = cut { Some(phrase) } else { None }).collect();
+            phrases.extend(segmenter.finish());
+            for language in ["es", "en"] {
+                let began = std::time::Instant::now();
+                let heard: Vec<(Option<String>, Option<String>)> =
+                    phrases.iter().map(|phrase| (engine::called(&mut state, phrase, language, Some(WAKE_PROMPT)), engine::called(&mut state, phrase, language, None))).collect();
+                let woke = phrases.iter().any(|phrase| engine::wakes(&mut state, phrase, language));
+                println!("{language} {:>5}ms {woke:<5} {wav} {heard:?}", began.elapsed().as_millis());
+                if woke != Path::new(wav).file_name().unwrap().to_string_lossy().starts_with("wake") {
+                    wrong.push(format!("{language} {wav} {heard:?}"));
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 }

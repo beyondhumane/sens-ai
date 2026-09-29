@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useStore } from "zustand";
 import { commands, events } from "../../ipc/commands";
 import type { Shortcut, ShortcutKeys } from "../../ipc/types";
-import { chooseMicrophone, loadMicrophones, percentOf, prepareVoice, voice } from "../voice/store";
+import { profile } from "../profile/store";
+import { chooseMicrophone, loadMicrophones, percentOf, prepareVoice, setWake, voice } from "../voice/store";
 import { t } from "./copy";
 import { DEFAULT_SHORTCUT, onlyModifiers, pressedKeys, sameKeys } from "./shortcut";
 
@@ -104,6 +105,7 @@ const MEBIBYTE = 1024 * 1024;
 
 function VoiceBlock() {
   const known = useStore(voice);
+  const wake = useStore(profile, (s) => s.person.wake === true);
   const [testing, setTesting] = useState<number | null>(null);
   const [level, setLevel] = useState(0);
   const [fault, setFault] = useState("");
@@ -138,6 +140,15 @@ function VoiceBlock() {
       setTesting(await commands.voiceTest());
     } catch (reason) {
       setFault(typeof reason === "object" && reason !== null && "message" in reason ? String(reason.message) : String(reason));
+    }
+  }
+
+  async function flipWake() {
+    setFault("");
+    try {
+      await setWake(!wake);
+    } catch (reason) {
+      setFault(String(reason));
     }
   }
 
@@ -179,6 +190,11 @@ function VoiceBlock() {
         <span style={{ width: `${Math.round(level * 100)}%` }} />
       </div>
       <p className="note">{t.voiceNote}</p>
+      <div className="settings-switch">
+        <button className="switch" id="settings-wake" role="switch" aria-checked={wake} onClick={() => void flipWake()} />
+        <label htmlFor="settings-wake">{t.wakeSwitch}</label>
+      </div>
+      <p className="note">{t.wakeNote}</p>
       <div className="settings-row">
         <p className={known.fault && !known.ready ? "note fault" : "note"} role="status">
           {model}

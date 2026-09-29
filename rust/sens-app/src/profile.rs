@@ -18,6 +18,7 @@ pub struct Profile {
     pub keep_in_tray: bool,
     pub start_with_windows: bool,
     pub shortcut: Keys,
+    pub wake: bool,
 }
 
 impl Default for Profile {
@@ -31,6 +32,7 @@ impl Default for Profile {
             keep_in_tray: true,
             start_with_windows: true,
             shortcut: Keys::default(),
+            wake: false,
         }
     }
 }
@@ -71,6 +73,10 @@ pub fn set_start_with_windows(base: &Path, on: bool) -> Result<(), String> {
 
 pub fn set_shortcut(base: &Path, keys: Keys) -> Result<(), String> {
     change(base, |profile| profile.shortcut = keys)
+}
+
+pub fn set_wake(base: &Path, on: bool) -> Result<(), String> {
+    change(base, |profile| profile.wake = on)
 }
 
 pub fn set_welcomed(base: &Path, on: bool) -> Result<(), String> {
@@ -183,6 +189,20 @@ mod tests {
         assert_eq!(saved.name, "Sofía");
         let written: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(base.join(FILE)).unwrap()).unwrap();
         assert_eq!(written["shortcut"], serde_json::json!({ "ctrl": true, "alt": false, "shift": true, "win": false, "key": "K" }));
+    }
+
+    #[test]
+    fn listening_for_hey_sens_stays_off_until_asked_for() {
+        let base = temp_root("wake");
+        std::fs::write(base.join(FILE), r#"{ "name": "Sofía", "notify": false }"#).unwrap();
+        assert!(!load(&base).wake);
+
+        set_wake(&base, true).unwrap();
+
+        let saved = load(&base);
+        assert!(saved.wake);
+        assert!(!saved.notify);
+        assert_eq!(saved.name, "Sofía");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import { commands, events } from "../../ipc/commands";
 import type { Microphone } from "../../ipc/types";
+import { profile } from "../profile/store";
 
 export const voice = createStore(() => ({
   ready: false,
@@ -37,4 +38,10 @@ export async function loadMicrophones() {
 export async function chooseMicrophone(chosen: string | null) {
   await commands.voiceChoose(chosen);
   voice.setState({ chosen });
+}
+
+export async function setWake(on: boolean) {
+  const refused = await commands.setWake(on);
+  profile.setState(({ person }) => ({ person: { ...person, wake: on } }));
+  if (refused) throw refused;
 }

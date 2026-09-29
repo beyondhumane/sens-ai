@@ -15,6 +15,7 @@ export interface Profile {
   notify: boolean;
   keepInTray?: boolean;
   startWithWindows?: boolean;
+  wake?: boolean;
 }
 
 export interface Front {
@@ -56,6 +57,7 @@ export interface BarOpened {
   front: Front | null;
   pinned: boolean;
   resume: HandOver | null;
+  listen: boolean;
 }
 
 export interface Watching {
@@ -338,7 +340,8 @@ export type VoiceHeard =
   | { kind: "ended"; id: number; refusal: VoiceRefusal | null }
   | { kind: "fetching"; done: number; total: number }
   | { kind: "ready" }
-  | { kind: "unfetched"; message: string };
+  | { kind: "unfetched"; message: string }
+  | { kind: "woke" };
 
 export interface VoiceModel {
   ready: boolean;

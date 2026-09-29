@@ -78,7 +78,7 @@ pub fn quit(app: &AppHandle) -> ! {
     app.state::<Arc<Engine>>().shutdown();
     app.state::<terminal::Consoles>().shutdown();
     if let Some(voice) = app.try_state::<voice::Voice>() {
-        voice.stop();
+        voice.shutdown();
     }
     app.cleanup_before_exit();
     std::process::exit(0)

@@ -334,7 +334,7 @@ describe("the desktop shell", () => {
   });
 
   it("dictates with its own microphone and a model on this computer", () => {
-    expect(shell).toContain("commands.voiceStart(languageNow())");
+    expect(shell).toContain("commands.voiceStart(languageNow(), handsFree)");
     expect(shell).not.toContain("webkitSpeechRecognition");
   });
 
