@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Propuesto
+- **Estado:** Fase 0 hecha
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -61,6 +61,14 @@ spec. Los mismos casos vuelven como pruebas permanentes en la fase 4.
 
 **Termina cuando** la spec tiene la sección «Comprobaciones de la fase 0» con cada
 resultado, y las decisiones afectadas corregidas.
+
+**Hecha el 2026-09-29.** Todas las comprobaciones pasaron sin necesitar su plan
+alternativo. Cambios que entran en las fases siguientes: *matcher*
+`Write|Edit|NotebookEdit` (no existe `MultiEdit`); `timeout: 3600` en cada
+hook; `--disallowedTools EnterWorktree ExitWorktree` y R7 sobre `git worktree`;
+el cierre no aprueba con `background_tasks` en curso; una sesión sin el Canon
+grabado lo recibe una vez en `additionalContext`; las rutas fuera de la carpeta
+de trabajo no se juzgan; el puente MCP sigue llamándose `sens`.
 Commit: `docs(canon): what Claude Code 2.1.283 does with Sens's hooks`.
 
 ## Fase 1 — El banco primero
@@ -312,11 +320,11 @@ callback, para que una caída nunca deje algo aprobado por error.
 
 | Callback | Qué hace |
 | --- | --- |
-| `sens-prompt` | Foto `start`; fija `approved` si no existe; contexto relevante en `additionalContext`; `Event::Canon { stage: "anticipated" }` si lo hay |
-| `sens-write` | Reconstruye el `after` (`Write`, `Edit`, `MultiEdit`; `NotebookEdit` sobre el JSON de la celda) y, si el índice está listo, `judge_change`. `Deny` → `permissionDecision: "deny"` con el motivo. `Ask` → `Event::Asking` y espera la respuesta |
-| `sens-shell` | R7 sobre la orden. `git commit` o `git push` con cambios sin aprobar → auditoría de cierre completa |
+| `sens-prompt` | Foto `start`; fija `approved` si no existe; contexto relevante en `additionalContext`, más el Canon completo si la sesión no lo tiene grabado en su versión actual; `Event::Canon { stage: "anticipated" }` si lo hay |
+| `sens-write` | Ignora rutas fuera de la carpeta de trabajo. Reconstruye el `after` (`Write`, `Edit`; `NotebookEdit` sobre el JSON de la celda) y, si el índice está listo, `judge_change`. `Deny` → `permissionDecision: "deny"` con el motivo. `Ask` → `Event::Asking` y espera la respuesta |
+| `sens-shell` | R7 sobre la orden, `git worktree` incluido. `git commit` o `git push` con cambios sin aprobar → auditoría de cierre completa |
 | `sens-landed` | Si la herramienta no es de solo lectura: foto nueva, cambios desde la anterior, refresco del índice, reglas sobre el disco. R7 → restaura y bloquea; R3 y R8 → pregunta, y si la respuesta es no, restaura; R1, R2 y R6 → `decision: "block"` |
-| `sens-close` | Espera al índice hasta 30 s; `judge_turn` desde `approved`; con hallazgos, suma una ronda y bloquea hasta la tercera; en la cuarta, deja terminar y retiene con `Event::Held`. Si pasa, aprueba la foto final. En `SubagentStop` nunca retiene |
+| `sens-close` | Espera al índice hasta 30 s; `judge_turn` desde `approved`; con hallazgos, suma una ronda y bloquea hasta la tercera; en la cuarta, deja terminar y retiene con `Event::Held`. Si pasa y `background_tasks` está vacío, aprueba la foto final; si hay tareas en curso, queda pendiente hasta el `Stop` que llega cuando terminan. En `SubagentStop` nunca retiene |
 
 Cada motivo que recibe el modelo sale de una sola función que da formato a un
 `Finding`: regla, qué hacer y el objetivo con su código.

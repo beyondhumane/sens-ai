@@ -1,6 +1,6 @@
 # El Canon: el motor que decide qué código entra
 
-Fecha: 2026-09-29 · Estado: diseño aprobado, pendiente de plan de implementación.
+Fecha: 2026-09-29 · Estado: diseño aprobado; fase 0 hecha, el resto en construcción.
 Ámbito: `rust/sens-index` (nuevo), `rust/sens-canon` (nuevo), `rust/sens-bench`
 (nuevo), `rust/sens-agent`, `rust/sens-app`, `rust/sens-app/ui`.
 
@@ -54,6 +54,33 @@ Code dice además que un `deny` en `PreToolUse` bloquea en todos los modos de
 permisos, `bypassPermissions` incluido, y que `additionalContext` llega al modelo
 como recordatorio del sistema.
 
+### Comprobaciones de la fase 0
+
+Hechas el 2026-09-29 con Claude Code 2.1.283 y Haiku, en carpetas desechables,
+con callbacks registrados en el `initialize`:
+
+| # | Pregunta | Resultado | Consecuencia |
+| --- | --- | --- | --- |
+| 0.1 | ¿Un `disableAllHooks: true` del proyecto apaga los callbacks? | No. Apaga los hooks de ficheros (el hook de comando del proyecto no se ejecutó) pero los callbacks siguieron llegando y el `deny` funcionó. Tampoco los apaga un `.claude/settings.local.json` con `disableAllHooks` escrito por el modelo a mitad de sesión | No hace falta forzar nada con `--settings`. R7 sigue protegiendo esos ficheros |
+| 0.2 | ¿Pasan los subagentes por los hooks? | Sí. `PreToolUse` y `PostToolUse` llegan con `agent_id` y `agent_type`, el `deny` funciona dentro del subagente y `SubagentStop` salta. Un subagente en segundo plano puede seguir escribiendo después del `Stop` principal; al terminar, Claude Code abre otro turno del modelo y llega otro `Stop` | El cierre no aprueba mientras `background_tasks` no esté vacío |
+| 0.3 | ¿Llega `appendSystemPrompt` al retomar con `--resume`? | Se graba en la primera petición y se conserva al retomar; un texto nuevo al retomar se ignora. Con `--system-prompt-snapshot off` se usa el nuevo | Se mantiene la grabación; una sesión sin el Canon, o con una versión anterior, lo recibe una vez en `additionalContext` |
+| 0.4 | ¿Qué herramientas hay? | `Write`, `Edit`, `NotebookEdit`, `Bash` y `PowerShell`; no hay `MultiEdit`. También hay `EnterWorktree`, `ExitWorktree` y `Workflow` | *Matcher* `Write\|Edit\|NotebookEdit`; `EnterWorktree` y `ExitWorktree` prohibidas |
+| 0.5 | ¿Puede un callback esperar a la persona? | Sí: uno que tardó 180 s en contestar fue respetado, con y sin `timeout`, y el campo `timeout` se acepta | Las preguntas de R3 y R8 esperan dentro del callback; `timeout: 3600` |
+| 0.6 | ¿Funciona `decision: "block"`? | En `Stop`, cuatro bloqueos seguidos respetados; `stop_hook_active` es `false` en el primero y `true` después. En `PostToolUse`, el motivo llega al modelo, pero Haiku lo trató como información y no hizo lo que pedía | Las rondas las cuenta Sens. `PostToolUse` es feedback; la garantía sigue en `Stop` |
+| 0.7 | Dos MCP llamados `sens`: ¿cuál gana? | El de `--mcp-config` (`source: "dynamic"`) sustituye al global; solo se ven sus herramientas | El puente conserva el nombre `sens` |
+| 0.8 | ¿Funcionan los callbacks en modo plan y en `bypassPermissions`? | Sí en los dos. En `bypassPermissions`, el `deny` de `Write` y el de un `git commit` por `Bash` funcionaron y el repositorio siguió con un solo commit. En modo plan, Claude Code escribe el plan en `~/.claude/plans` | Las rutas fuera de la carpeta de trabajo no se juzgan |
+| 0.9 | ¿Qué pasa con un evento de hook que no existe? | Se ignora en silencio: el `initialize` responde `success` | Si el primer mensaje del modelo llega sin `sens-prompt` previo, el turno queda sin aprobar: «Sens no pudo conectarse» |
+
+La entrada de cada callback trae `session_id`, `transcript_path`, `cwd`,
+`prompt_id`, `permission_mode` y `hook_event_name`, y según el evento
+`tool_name`, `tool_input`, `tool_response`, `tool_use_id`, `agent_id`,
+`agent_type`, `stop_hook_active`, `last_assistant_message` y `background_tasks`.
+Las rutas llegan absolutas y con `\` en Windows.
+
+Una observación que cambia cómo se escriben los motivos: cuando un `deny` no
+dice qué hacer en su lugar, Haiku pregunta a la persona si tiene permiso en vez
+de buscar otra solución.
+
 ## Decisiones
 
 | Decisión | Elegida | Descartadas |
@@ -104,11 +131,14 @@ la interfaz traduce la regla y el hallazgo a los seis idiomas.
 1. **Llega el mensaje** (`UserPromptSubmit`). Sens toma una foto del proyecto
    (ver *Punto de control*) y devuelve en `additionalContext` lo que ya existe
    relacionado con la petición.
-2. **Antes de escribir** (`PreToolUse` con `Write|Edit|MultiEdit|NotebookEdit`).
-   Sens reconstruye el fichero resultante en memoria (`Write`: el contenido;
-   `Edit` y `MultiEdit`: los reemplazos sobre el fichero actual), lo analiza y
-   aplica las reglas de cambio. `Deny` responde `permissionDecision: "deny"` con
-   el motivo y el objetivo; `Ask` pregunta a la persona (ver *Preguntas*).
+2. **Antes de escribir** (`PreToolUse` con `Write|Edit|NotebookEdit`; Claude Code
+   2.1.283 no tiene `MultiEdit`). Sens reconstruye el fichero resultante en
+   memoria (`Write`: el contenido; `Edit`: el reemplazo sobre el fichero actual;
+   `NotebookEdit`: la celda sobre el JSON), lo analiza y aplica las reglas de
+   cambio. `Deny` responde `permissionDecision: "deny"` con el motivo y el
+   objetivo; `Ask` pregunta a la persona (ver *Preguntas*). Las rutas fuera de la
+   carpeta de trabajo no se juzgan (en modo plan, Claude Code escribe su plan en
+   `~/.claude/plans`).
 3. **Antes de la terminal** (`PreToolUse` con `Bash|PowerShell`). Solo dos
    comprobaciones: R7 sobre rutas protegidas nombradas en la orden, y *commit
    como cierre* (ver más abajo).
@@ -122,13 +152,23 @@ la interfaz traduce la regla y el hallazgo a los seis idiomas.
 5. **Al querer terminar** (`Stop` y `SubagentStop`). Auditoría del diff completo
    desde el último punto aprobado: reglas de cambio, R4 y, si todo pasa y el
    turno tocó código, el revisor. Con hallazgos bloqueantes responde
-   `decision: "block"` y el modelo sigue trabajando.
+   `decision: "block"` y el modelo sigue trabajando. Si la entrada de `Stop` trae
+   `background_tasks` sin terminar, Sens audita pero **no aprueba**: el turno queda
+   pendiente de esas tareas. Cuando terminan, Claude Code abre otro turno del
+   modelo que acaba en otro `Stop`, y ese sí puede aprobar.
 6. **Tercera ronda sin pasar**: Sens deja terminar al modelo y el turno queda
    retenido.
 
 Los pasos 2–4 dan feedback temprano. **La garantía está en el paso 5**: si el
 índice no está listo en los pasos 2–4, esos pasos dejan pasar; el paso 5 espera
 al índice y lo juzga todo.
+
+Si el primer mensaje del modelo en un turno llega sin que antes haya llegado
+`sens-prompt`, el circuito no está enganchado (una CLI que ignora los hooks lo
+hace en silencio): el turno queda sin aprobar con «Sens no pudo conectarse».
+
+Todo motivo que recibe el modelo dice qué hacer en su lugar. Sin alternativa, el
+modelo tiende a preguntar a la persona si tiene permiso en vez de corregir.
 
 ### Registro de hooks
 
@@ -139,18 +179,28 @@ al índice y lo juzga todo.
   "hooks": {
     "UserPromptSubmit": [{ "hookCallbackIds": ["sens-prompt"] }],
     "PreToolUse": [
-      { "matcher": "Write|Edit|MultiEdit|NotebookEdit", "hookCallbackIds": ["sens-write"] },
-      { "matcher": "Bash|PowerShell", "hookCallbackIds": ["sens-shell"] }
+      { "matcher": "Write|Edit|NotebookEdit", "hookCallbackIds": ["sens-write"], "timeout": 3600 },
+      { "matcher": "Bash|PowerShell", "hookCallbackIds": ["sens-shell"], "timeout": 3600 }
     ],
-    "PostToolUse": [{ "hookCallbackIds": ["sens-landed"] }],
-    "Stop": [{ "hookCallbackIds": ["sens-close"] }],
-    "SubagentStop": [{ "hookCallbackIds": ["sens-close"] }]
+    "PostToolUse": [{ "hookCallbackIds": ["sens-landed"], "timeout": 3600 }],
+    "Stop": [{ "hookCallbackIds": ["sens-close"], "timeout": 3600 }],
+    "SubagentStop": [{ "hookCallbackIds": ["sens-close"], "timeout": 3600 }]
   }
 }
 ```
 
-El plazo de cada callback se fija en su entrada para que una pregunta a la persona
-pueda esperar (fase 0 confirma el campo).
+`timeout` da margen a una pregunta a la persona y al revisor. La sesión se lanza
+además con `--disallowedTools EnterWorktree ExitWorktree`: Sens gestiona sus
+propios worktrees, y uno creado por el modelo dentro de `.claude/worktrees` (que
+suele estar en `.gitignore`) quedaría fuera del punto de control.
+
+Las instrucciones base quedan grabadas en la primera petición de cada sesión y se
+conservan al retomarla (`--system-prompt-snapshot` activado, como viene por
+defecto: desactivarlo haría que el prompt de sistema se volviera a generar en
+cada petición, con el coste de caché que eso supone). Una sesión empezada sin el
+Canon, o con una versión anterior, recibe el Canon actual una vez como
+`additionalContext` en su siguiente `sens-prompt`; Sens guarda en el estado de la
+sesión qué versión tiene grabada.
 
 ## Las reglas
 
@@ -167,7 +217,7 @@ existía antes del turno no es un hallazgo.
 | R4 Huérfanos | Solo al cierre: símbolo nuevo inalcanzable desde las entradas, o símbolo existente que el turno dejó sin usos | `Deny` si es interno y sin usos reflexivos; nota si es exportado o reflexivo |
 | R5 Crecimiento | Líneas netas y ficheros nuevos | Nunca bloquea; va al revisor |
 | R6 Normas del proyecto | Normas declaradas en los ajustes del proyecto. La primera: sin comentarios | `Deny` |
-| R7 Integridad | Escritura en `.claude/settings*.json`, `.mcp.json`, `.sens/` o `.git/` | `Deny` siempre; si llegó por la terminal, Sens restaura el fichero desde el punto de control y avisa |
+| R7 Integridad | Escritura en `.claude/settings*.json`, `.mcp.json`, `.sens/` o `.git/`, y órdenes de terminal con `git worktree` | `Deny` siempre; si llegó por la terminal, Sens restaura el fichero desde el punto de control y avisa |
 | R8 Tests protegidos | El turno borra ficheros de test, funciones de test o aserciones existentes | `Ask` |
 
 ### Reglas de criterio (revisor)
@@ -284,10 +334,11 @@ modelo no puede escribirlas: R7.
 | Atajo del modelo | Qué lo cierra |
 | --- | --- |
 | Escribir por terminal, Python u otro MCP | Paso 4 tras cada herramienta y auditoría de cierre sobre el disco |
-| Subagentes | Sus herramientas pasan por los mismos hooks y `SubagentStop` se audita (fase 0 lo confirma) |
-| Tareas en segundo plano que escriben tarde | La auditoría del turno siguiente las juzga, porque compara con el último punto aprobado |
-| Apagar los hooks o editar la configuración | Los hooks viven en el proceso, no en ficheros; R7 bloquea y restaura los ficheros de configuración |
-| Modo sin comprobaciones | `deny` en `PreToolUse` bloquea en todos los modos |
+| Subagentes | Sus herramientas pasan por los mismos hooks, con `agent_id`, y `SubagentStop` se audita |
+| Tareas en segundo plano que escriben tarde | Mientras `background_tasks` no está vacío, el cierre no aprueba; al terminar, el `Stop` siguiente audita todo desde el último punto aprobado |
+| Apagar los hooks o editar la configuración | Los hooks viven en el proceso: un `disableAllHooks` del proyecto, aunque lo escriba el modelo a mitad de sesión, no los apaga. R7 bloquea y restaura igualmente esos ficheros, que también guardan los hooks de la persona |
+| Un worktree propio del modelo | `--disallowedTools EnterWorktree ExitWorktree` y R7 sobre `git worktree` |
+| Modo sin comprobaciones o modo plan | Los callbacks funcionan en todos los modos, y `deny` en `PreToolUse` bloquea también en `bypassPermissions` |
 | Declarar que ha terminado | El cierre lo decide la auditoría de `Stop` |
 | Bucle sin fin | Sens cuenta tres rondas y retiene |
 | Commit o push de lo no aprobado | Commit como cierre |
@@ -355,10 +406,9 @@ idioma que el código, lleva un glosario de unos 200 términos de programación 
 los seis idiomas de Sens. Los embeddings lo sustituyen en la spec siguiente. La
 garantía no depende de esta búsqueda: R1 y R2 comparan código con código.
 
-El puente MCP de la app se llama `sens`. La configuración del usuario puede traer
-otro servidor con ese nombre, como el `sens-mcp` antiguo. La fase 0 comprueba cuál
-gana cuando dos se llaman igual; si no gana siempre el de la app, el puente pasa a
-llamarse `sens-app` y sus herramientas cambian de prefijo en `mcp::allowed()`.
+El puente MCP de la app se llama `sens`. Si la configuración del usuario trae otro
+servidor con ese nombre, como el `sens-mcp` antiguo, el de `--mcp-config` lo
+sustituye (fase 0): el modelo solo ve las herramientas de la app.
 
 ### Presupuestos (p95, proyecto de ~2.000 ficheros)
 
@@ -474,7 +524,7 @@ Ningún fichero lleva comentarios.
 
 | Fase | Contenido | Termina cuando |
 | --- | --- | --- |
-| 0 | Comprobaciones en vivo: `disableAllHooks` del proyecto frente a los callbacks; hooks dentro de subagentes; `appendSystemPrompt` al usar `--resume`; `MultiEdit` y `NotebookEdit` en 2.1.283; plazo de un callback que espera a la persona; `decision: "block"` en `Stop` y `PostToolUse` llegando al modelo | Cada punto confirmado o sustituido por otra vía que dé la misma garantía, y esta spec corregida |
+| 0 | Comprobaciones en vivo del comportamiento de Claude Code con los callbacks | Hecha: ver *Comprobaciones de la fase 0* |
 | 1 | `sens-bench` con las 3 tareas piloto; C0 y C1 | Resultados de C0 y C1 del piloto |
 | 2 | `sens-index` recuperado y huellas de tipo 1–3 con su calibración | Fixtures y parejas en verde; primer umbral |
 | 3 | `sens-canon` (R1–R8, Canon v1) y punto de control | Tablas de reglas y pruebas de restauración en verde |
