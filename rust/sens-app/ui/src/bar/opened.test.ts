@@ -21,6 +21,7 @@ const open = (resume: HandOver | null) =>
 beforeEach(() => {
   for (const command of Object.values(ipc.commands)) command.mockClear();
   ipc.commands.barProjects.mockResolvedValue(PROJECTS);
+  ipc.commands.workspaces.mockResolvedValue([]);
   ipc.commands.replay.mockResolvedValue([{ kind: "task", at: 1, text: "Arregla el login", files: [], images: [] }]);
   ipc.commands.chatTasks.mockResolvedValue([]);
   ipc.commands.chatBusy.mockResolvedValue(false);

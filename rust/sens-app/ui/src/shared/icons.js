@@ -100,6 +100,8 @@ export const ICONS = {
   arrow: icon('<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>'),
   updateReady: icon('<circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/>'),
   folderSmall: icon(FOLDER, 13, 1.8),
+  messageSmall: icon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', 13, 1.8),
+  messagePlusSmall: icon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>', 13, 1.8),
   fork: icon('<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>'),
   branch: icon('<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>', 13, 1.8),
   find: icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', 12, 2),

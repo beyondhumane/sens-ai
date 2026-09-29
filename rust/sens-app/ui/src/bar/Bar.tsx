@@ -7,17 +7,17 @@ import type { Notice, Reply } from "../features/chat/turns";
 import { useDictation } from "../features/composer/dictation";
 import { canSend, pasteText, takeFiles, tooLong, writeMessage } from "../features/composer/store";
 import { shared } from "../shared/copy";
-import { seconds, stem } from "../shared/format.js";
+import { seconds } from "../shared/format.js";
 import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import { Mark } from "../shared/Mark";
 import { Chips } from "./Chips";
 import { t } from "./copy";
+import { Picker, SessionChip } from "./Picker";
 import { Seam } from "./Seam";
 import {
   ask,
   bar,
-  choose,
   cycle,
   handOver,
   hide,
@@ -50,7 +50,7 @@ export function Bar() {
   return (
     <div className="float" ref={float} data-state={phase} data-pinned={pinned ? "true" : undefined}>
       <Row />
-      <Projects />
+      <Picker />
       <Chips />
       <Seam />
       <Answer reply={reply} />
@@ -183,7 +183,7 @@ function Row() {
         onKeyDown={keyDown}
         onPaste={paste}
       />
-      <ProjectChip />
+      <SessionChip />
       {pinned && (
         <button type="button" className="round pinned" aria-pressed="true" title={t.pinned} aria-label={t.pinned} onClick={pin}>
           <Icon svg={ICONS.pin} />
@@ -213,39 +213,6 @@ function Row() {
       >
         <Icon svg={busy ? ICONS.stopSquare : ICONS.arrowUp} />
       </button>
-    </div>
-  );
-}
-
-function ProjectChip() {
-  const root = useStore(own.desk, (s) => s.root);
-  const projects = useStore(bar, (s) => s.projects);
-  const choosing = useStore(bar, (s) => s.choosing);
-  if (!root) return <span className="bar-project none">{t.noProject}</span>;
-  const name = projects.find((one) => one.root === root)?.name ?? stem(root);
-  return (
-    <button type="button" className="bar-project" aria-haspopup="listbox" aria-expanded={choosing} title={t.project(name)} aria-label={t.project(name)} onClick={toggleChoosing}>
-      <Icon svg={ICONS.folderSmall} />
-      <span>{name}</span>
-      <Icon svg={ICONS.caret} />
-    </button>
-  );
-}
-
-function Projects() {
-  const choosing = useStore(bar, (s) => s.choosing);
-  const projects = useStore(bar, (s) => s.projects);
-  const root = useStore(own.desk, (s) => s.root);
-  if (!choosing || !projects.length) return null;
-  return (
-    <div className="bar-projects" role="listbox" aria-label={t.projects}>
-      {projects.map((one) => (
-        <button key={one.root} type="button" role="option" className="bar-project-row" aria-selected={one.root === root} onClick={() => choose(one.root)}>
-          <Icon svg={ICONS.folderSmall} />
-          <span className="project-name">{one.name}</span>
-          <span className="mono">{one.root}</span>
-        </button>
-      ))}
     </div>
   );
 }

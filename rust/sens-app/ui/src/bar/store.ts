@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { commands, events } from "../ipc/commands";
-import type { BarOpened, BarProject, Copied, Front, HandOver } from "../ipc/types";
+import type { BarOpened, BarProject, Copied, Front, HandOver, Workspace } from "../ipc/types";
 import { blank, hearIn, idle, keepQuiet, load } from "../features/chat/store";
 import type { Foot, Reply, Turn, You } from "../features/chat/turns";
 import { tally, type Work } from "../features/chat/work";
@@ -10,6 +10,7 @@ import { watchVoice } from "../features/voice/store";
 import { languageOf, showLanguage } from "../shared/i18n";
 import { showLook } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
+import type { Sessions } from "./choices";
 
 export const LAST = "sens.bar.last";
 const FIRST_PROVIDER = "claude";
@@ -27,6 +28,8 @@ export const own = newPane();
 
 export const bar = createStore(() => ({
   projects: [] as BarProject[],
+  sessions: {} as Sessions,
+  filter: "",
   front: null as Front | null,
   clip: null as Copied | null,
   shot: "offered" as Offer,
@@ -39,6 +42,8 @@ export const bar = createStore(() => ({
 const set = bar.setState;
 
 export const lastReply = (turns: Turn[]) => turns.findLast((turn): turn is Reply => turn.kind === "reply");
+
+export const firstQuestion = (turns: Turn[]) => turns.find((turn): turn is You => turn.kind === "you" && turn.text.trim() !== "")?.text ?? "";
 
 export const lastQuestion = (turns: Turn[]) => turns.findLast((turn): turn is You => turn.kind === "you" && turn.text.trim() !== "")?.text ?? "";
 
@@ -91,8 +96,8 @@ export async function opened({ look, language, front, pinned, resume }: BarOpene
   showLanguage(languageOf(language));
   showLook(look);
   set(({ opened }) => ({ front, pinned, clip: null, opened: opened + 1 }));
-  const projects = await commands.barProjects().catch((): BarProject[] => []);
-  set({ projects });
+  const [projects, spaces] = await Promise.all([commands.barProjects().catch((): BarProject[] => []), commands.workspaces().catch((): Workspace[] => [])]);
+  set({ projects, sessions: Object.fromEntries(spaces.map((space) => [space.root, space.sessions])) });
   if (!held()) await arrive(resume, projects);
   watch();
   const context = await commands.barContext().catch(() => null);
@@ -141,6 +146,15 @@ export function choose(root: string) {
   fresh(root, own.desk.getState().text);
 }
 
+export async function resumeSession(root: string, id: string) {
+  set({ choosing: false });
+  if (own.desk.getState().session === id) return;
+  fresh(root, own.desk.getState().text);
+  await load(id, own);
+}
+
+export const filterChoices = (filter: string) => set({ filter });
+
 export function cycle(step: number) {
   const { projects } = bar.getState();
   if (!projects.length) return;
@@ -148,7 +162,7 @@ export function cycle(step: number) {
   choose(projects[(at + step + projects.length) % projects.length].root);
 }
 
-export const toggleChoosing = () => set(({ choosing }) => ({ choosing: !choosing }));
+export const toggleChoosing = () => set(({ choosing }) => ({ choosing: !choosing, filter: "" }));
 
 export async function takeClip() {
   if (bar.getState().copied !== "offered") return;
