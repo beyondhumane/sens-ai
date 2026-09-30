@@ -28,8 +28,14 @@ const ASKING: &[&str] = &[
     "disabled",
 ];
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Reviewed {
+    pub answer: Value,
+    pub cost: f64,
+}
+
 pub trait Reviewer: Send + Sync {
-    fn review(&self, prompt: &str) -> Result<Value, String>;
+    fn review(&self, prompt: &str) -> Result<Reviewed, String>;
 }
 
 type Launch = Box<dyn Fn() -> Command + Send + Sync>;
@@ -55,19 +61,19 @@ impl Default for Haiku {
     }
 }
 
-pub fn answered(reply: &str) -> Result<Value, String> {
+pub fn answered(reply: &str) -> Result<Reviewed, String> {
     let reply: Value = serde_json::from_str(reply).map_err(|error| format!("the reviewer's reply is not JSON: {error}"))?;
     if reply["is_error"] == true {
         return Err(format!("the reviewer failed: {}", reply["errors"].as_array().and_then(|errors| errors.first()).and_then(Value::as_str).unwrap_or("no reason given")));
     }
     match &reply["structured_output"] {
-        Value::Object(_) => Ok(reply["structured_output"].clone()),
+        Value::Object(_) => Ok(Reviewed { answer: reply["structured_output"].clone(), cost: reply["total_cost_usd"].as_f64().unwrap_or(0.0) }),
         _ => Err("the reviewer gave no findings".into()),
     }
 }
 
 impl Reviewer for Haiku {
-    fn review(&self, prompt: &str) -> Result<Value, String> {
+    fn review(&self, prompt: &str) -> Result<Reviewed, String> {
         let mut command = (self.launch)();
         command.args(ASKING).arg("--system-prompt").arg(BRIEF).arg("--json-schema").arg(review::schema());
         answered(&process::run_within(command, prompt, self.patience)?)
@@ -80,7 +86,8 @@ mod tests {
 
     #[test]
     fn only_a_structured_answer_counts_as_a_review() {
-        assert_eq!(answered(r#"{"is_error":false,"structured_output":{"findings":[]}}"#).unwrap()["findings"], serde_json::json!([]));
+        let reviewed = answered(r#"{"is_error":false,"total_cost_usd":0.004,"structured_output":{"findings":[]}}"#).unwrap();
+        assert_eq!((reviewed.answer["findings"].clone(), reviewed.cost), (serde_json::json!([]), 0.004));
         assert!(answered(r#"{"is_error":true,"errors":["Reached maximum number of turns (3)"]}"#).unwrap_err().contains("maximum number of turns"));
         assert!(answered(r#"{"is_error":false,"result":"looks fine"}"#).is_err());
         assert!(answered("not json").is_err());

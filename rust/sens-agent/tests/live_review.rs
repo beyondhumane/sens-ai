@@ -53,10 +53,10 @@ fn a_real_reviewer_names_an_interface_with_one_implementation_and_leaves_a_plain
     let reviewer = Haiku::default();
 
     let review = Review::of(&index, &catalog, "Add a way to run jobs from the index.", ONE_USE);
-    let found = review.findings(&reviewer.review(&review.prompt()).unwrap());
+    let found = review.findings(&reviewer.review(&review.prompt()).unwrap().answer);
     assert!(found.iter().any(|finding| finding.rule == Rule::S1 && finding.file == "src/runner.ts"), "{found:?}");
 
     let review = Review::of(&index, &catalog, "total() crashes on an empty list; fix it.", PLAIN);
-    let found = review.findings(&reviewer.review(&review.prompt()).unwrap());
+    let found = review.findings(&reviewer.review(&review.prompt()).unwrap().answer);
     assert!(!found.iter().any(|finding| finding.severity == Severity::Block), "{found:?}");
 }

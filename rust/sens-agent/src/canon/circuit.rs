@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 use super::checkpoint::{Checkpoints, Restored, Tree};
 use super::keeper::{Keeper, Project};
+use super::log::{self, Decision, Entry};
 use super::review::Reviewer;
 use super::state::{self, State};
 use crate::chat::Event;
@@ -165,11 +166,27 @@ impl Circuit {
         self.checkpoints.as_ref()?.snapshot(&format!("{}/{}-{}-{label}", self.session, state.turn, state.step)).ok()
     }
 
-    fn weigh(&self, voice: &dyn Voice, verdict: Verdict, undo: impl Fn(&Finding) -> bool) -> Judged {
+    fn logged(&self, stage: &str, entries: Vec<Entry>) {
+        let state = State::load(&self.work);
+        let canon = state.canon.get(&self.session).cloned().unwrap_or_else(|| sens_canon::VERSION.to_string());
+        let stamped: Vec<Entry> = entries.into_iter().map(|entry| Entry { session: self.session.clone(), turn: state.turn, canon: canon.clone(), stage: stage.to_string(), round: state.rounds, ..entry }).collect();
+        let _ = log::write(&self.work, &stamped);
+    }
+
+    fn weigh(&self, voice: &dyn Voice, stage: &str, verdict: Verdict, undo: impl Fn(&Finding) -> bool) -> Judged {
         let mut exceptions = state::exceptions(&self.work);
         let mut considered = state::considered(&self.work);
         let mut judged = Judged { blocks: Vec::new(), notes: Vec::new(), restored: Vec::new() };
+        let mut entries = Vec::new();
         for finding in verdict.findings {
+            let decision = match finding.severity {
+                Severity::Block => Decision::Blocked,
+                Severity::Consider if considered.contains(&finding.key) => Decision::Kept,
+                Severity::Consider => Decision::Considered,
+                Severity::Note => Decision::Noted,
+                Severity::Ask => Decision::Refused,
+            };
+            let mut decided = log::entry(&finding, decision);
             match finding.severity {
                 Severity::Block => {
                     if finding.rule == Rule::R7 && undo(&finding) {
@@ -178,6 +195,7 @@ impl Circuit {
                     judged.blocks.push(finding);
                 }
                 Severity::Ask if voice.ask(&finding) => {
+                    decided.decision = Some(Decision::Allowed);
                     exceptions.keys.insert(finding.key.clone());
                 }
                 Severity::Ask => {
@@ -195,7 +213,9 @@ impl Circuit {
                 }
                 Severity::Note => judged.notes.push(finding),
             }
+            entries.push(decided);
         }
+        self.logged(stage, entries);
         let _ = state::save_considered(&self.work, &considered);
         let _ = state::save_exceptions(&self.work, &exceptions);
         judged
@@ -277,13 +297,13 @@ impl Circuit {
         let index = project.as_ref().map_or(&empty, |project| &project.index);
         let change = Change { path, before, after: Some(after) };
         let verdict = judge_change(index, &change, &state::rules(&self.work), &state::exceptions(&self.work));
-        let judged = self.weigh(voice, verdict, |_| false);
+        let judged = self.weigh(voice, "write", verdict, |_| false);
         self.reply(voice, "write", &judged, "PreToolUse")
     }
 
     fn shell(&self, voice: &dyn Voice, input: &Value) -> Value {
         let command = input["tool_input"]["command"].as_str().unwrap_or_default();
-        let judged = self.weigh(voice, judge_command(command), |_| false);
+        let judged = self.weigh(voice, "shell", judge_command(command), |_| false);
         if !judged.blocks.is_empty() {
             return self.reply(voice, "shell", &judged, "PreToolUse");
         }
@@ -326,7 +346,7 @@ impl Circuit {
         let (rules, exceptions) = (state::rules(&self.work), state::exceptions(&self.work));
         let verdict = changes.iter().fold(Verdict::default(), |verdict, change| verdict.with(judge_change(index, change, &rules, &exceptions).findings));
         let changed: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-        let judged = self.weigh(voice, verdict, |finding| self.put_back(&seen, &finding.file, &changed));
+        let judged = self.weigh(voice, "landed", verdict, |finding| self.put_back(&seen, &finding.file, &changed));
         if !judged.restored.is_empty() {
             let mut state = State::load(&self.work);
             state.seen = self.snapshot(&mut state, "restored");
@@ -363,7 +383,9 @@ impl Circuit {
                 json!({})
             }
             Audited::Unjudged(reason) => {
-                voice.say(Event::Held { findings: vec![unjudged(reason)] });
+                let finding = unjudged(reason);
+                self.logged("close", vec![log::entry(&finding, Decision::Unjudged)]);
+                voice.say(Event::Held { findings: vec![finding] });
                 json!({})
             }
         }
@@ -397,7 +419,7 @@ impl Circuit {
         let dead: orphans::Dead = if state.dead_known { state.dead.iter().cloned().collect() } else { orphans::dead(&project.index) };
         let (verdict, _) = judge_turn(&project.index, &changes, &dead, &state::rules(&self.work), &state::exceptions(&self.work));
         let changed: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-        let mut judged = self.weigh(voice, verdict, |finding| self.put_back(&approved, &finding.file, &changed));
+        let mut judged = self.weigh(voice, "close", verdict, |finding| self.put_back(&approved, &finding.file, &changed));
         if judged.blocks.is_empty() && !provisional {
             match self.reviewed(voice, &project, &state.request, &approved, &now) {
                 Ok(reviewed) => {
@@ -439,6 +461,7 @@ impl Circuit {
         }
         state.held = Some(judged.blocks.clone());
         let _ = state.save(&self.work);
+        self.logged("close", judged.blocks.iter().map(|finding| log::entry(finding, Decision::Held)).collect());
         Audited::Held(judged)
     }
 }
@@ -450,10 +473,12 @@ impl Circuit {
         };
         let diff = checkpoints.diff(approved, now)?;
         let review = Review::of(&project.index, &project.catalog, request, &diff);
-        let findings = review.findings(&reviewer.review(&review.prompt())?);
+        let reviewed = reviewer.review(&review.prompt())?;
+        self.logged("reviewed", vec![Entry { at: log::now(), decision: Some(Decision::Reviewed), cost: reviewed.cost, ..Entry::default() }]);
+        let findings = review.findings(&reviewed.answer);
         voice.say(Event::Canon { stage: "reviewed".into(), findings: findings.clone(), suggestions: Vec::new() });
         let verdict = state::exceptions(&self.work).filter(Verdict { findings });
-        Ok(self.weigh(voice, verdict, |_| false))
+        Ok(self.weigh(voice, "reviewed", verdict, |_| false))
     }
 }
 
@@ -492,6 +517,7 @@ pub fn accept(work: &Path) -> Result<(), String> {
     let Some(held) = state.held.take() else {
         return Ok(());
     };
+    let _ = log::write(work, &held.iter().map(|finding| Entry { turn: state.turn, ..log::entry(finding, Decision::Accepted) }).collect::<Vec<_>>());
     let mut exceptions = state::exceptions(work);
     exceptions.keys.extend(held.into_iter().filter(|finding| finding.rule != Rule::R7).map(|finding| finding.key));
     state::save_exceptions(work, &exceptions)?;
@@ -507,6 +533,8 @@ pub fn undo(work: &Path) -> Result<Restored, String> {
     };
     let checkpoints = Checkpoints::open(work).ok_or("git is not available")?;
     let restored = checkpoints.restore(&approved, &end)?;
+    let undone: Vec<Entry> = state.held.iter().flatten().map(|finding| Entry { turn: state.turn, ..log::entry(finding, Decision::Undone) }).collect();
+    let _ = log::write(work, &undone);
     state.held = None;
     state.rounds = 0;
     state.seen = Some(approved);
@@ -647,6 +675,8 @@ mod tests {
         let reason = output["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
         assert!(reason.contains("Call `totals`") && reason.contains("| export function totals("), "{reason}");
         assert!(ear.stages().contains(&"write".to_string()));
+        let logged = log::read(&root);
+        assert!(logged.iter().any(|entry| entry.stage == "write" && entry.rule == Some(Rule::R1) && entry.decision == Some(Decision::Blocked) && entry.session == "s1"), "{logged:?}");
         let elsewhere = std::env::temp_dir().join("sens-circuit-outside.ts");
         assert_eq!(circuit.answer(&ear, WRITE, &write(&elsewhere, &copy)), json!({}));
     }
@@ -661,6 +691,9 @@ mod tests {
         assert!(reason.contains("use `plain`") && reason.contains("src/lib/text.ts"), "{reason}");
         let second = circuit.answer(&ear, WRITE, &write(&root.join("src/bar.ts"), again));
         assert_eq!(decision(&second), "allow", "{second}");
+        let decided: Vec<Option<Decision>> = log::read(&root).into_iter().map(|entry| entry.decision).collect();
+        assert_eq!(decided, [Some(Decision::Considered), Some(Decision::Kept)]);
+        assert_eq!(log::avoided(&root, 0).copies, 0);
     }
 
     #[test]
@@ -761,9 +794,9 @@ mod tests {
     struct Scripted(Result<Value, String>);
 
     impl Reviewer for Scripted {
-        fn review(&self, prompt: &str) -> Result<Value, String> {
+        fn review(&self, prompt: &str) -> Result<super::super::review::Reviewed, String> {
             assert!(prompt.contains("+import { totals }"), "{prompt}");
-            self.0.clone()
+            self.0.clone().map(|answer| super::super::review::Reviewed { answer, cost: 0.002 })
         }
     }
 

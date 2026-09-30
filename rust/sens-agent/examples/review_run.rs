@@ -31,7 +31,7 @@ fn main() {
     for (file, found) in &review.candidates {
         println!("candidatos {file}: {}", found.iter().map(|candidate| format!("{} ({}:{})", candidate.name, candidate.file, candidate.line)).collect::<Vec<_>>().join(", "));
     }
-    let answer = Haiku::default().review(&review.prompt()).expect("revisor");
+    let answer = Haiku::default().review(&review.prompt()).expect("revisor").answer;
     println!("respuesta: {answer}");
     for finding in review.findings(&answer) {
         println!("{:?} {:?} {}:{} {}", finding.rule, finding.severity, finding.file, finding.line, finding.message);
