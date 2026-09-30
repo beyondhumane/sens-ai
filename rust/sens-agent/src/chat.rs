@@ -10,6 +10,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use sens_canon::verdict::Finding;
+
+use crate::canon::circuit::Suggested;
 use crate::catalog::{self, Thinking};
 use crate::process::{self, Family, hidden, unlaunched};
 use crate::said;
@@ -133,6 +136,16 @@ pub enum Event {
         request: String,
         allowed: bool,
         answers: Value,
+    },
+    Canon {
+        stage: String,
+        #[serde(default)]
+        findings: Vec<Finding>,
+        #[serde(default)]
+        suggestions: Vec<Suggested>,
+    },
+    Held {
+        findings: Vec<Finding>,
     },
     Limits {
         #[serde(default)]
