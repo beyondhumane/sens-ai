@@ -483,6 +483,11 @@ comparan funciones y métodos, no tipos de datos.
 Antes de separar forma y vocabulario había 153 parejas por encima de 0,70, con los
 setters y las rutas `base.join("x")` como falsos positivos.
 
+Sobre salidas reales de modelo (`cargo run --example replay` rehace el índice del
+estado de partida de una ejecución y juzga sus cambios): de 30 ejecuciones, las 27
+del piloto y las tres primeras difíciles, `Consider` salta en 2, las dos
+reescrituras a mano de `plain`, y en ninguna otra.
+
 ## Lo que recibe el modelo
 
 | Momento | Contenido | Límite |
