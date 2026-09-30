@@ -65,6 +65,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sens-bench"
+version = "0.1.0"
+dependencies = [
+ "sens-agent",
+ "sens-canon",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "sens-canon"
 version = "0.1.0"
 dependencies = [
