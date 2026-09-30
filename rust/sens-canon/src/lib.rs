@@ -1,3 +1,4 @@
+pub mod card;
 pub mod comments;
 pub mod copies;
 pub mod dependencies;
@@ -5,6 +6,7 @@ pub mod integrity;
 pub mod judge;
 pub mod orphans;
 pub mod protected;
+pub mod relevant;
 pub mod verdict;
 
 pub const CANON: &str = include_str!("canon.md");
