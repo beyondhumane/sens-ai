@@ -30,6 +30,7 @@ pub struct Candidate {
     pub line: u32,
     pub signature: String,
     pub uses: usize,
+    pub exported: bool,
     pub excerpt: String,
 }
 
@@ -182,7 +183,7 @@ fn candidates(index: &Index, catalog: &Catalog, file: &str, side: &Sides) -> Vec
         .take(CANDIDATES)
         .map(|(at, _)| {
             let symbol = &index.symbols[at];
-            Candidate { name: symbol.name.clone(), file: symbol.file.clone(), line: symbol.line, signature: symbol.signature.clone(), uses: index.raw_references(at).len(), excerpt: excerpt(index, &symbol.file, symbol.line) }
+            Candidate { name: symbol.name.clone(), file: symbol.file.clone(), line: symbol.line, signature: symbol.signature.clone(), uses: index.raw_references(at).len(), exported: symbol.exported, excerpt: excerpt(index, &symbol.file, symbol.line) }
         })
         .collect()
 }
@@ -216,7 +217,8 @@ impl Review {
         for (file, found) in &self.candidates {
             let _ = writeln!(out, "For {file}:\n");
             for candidate in found {
-                let _ = writeln!(out, "- `{}` at {} (used {} times)\n~~~\n{}\n~~~", candidate.signature.trim(), candidate.cited(), candidate.uses, candidate.excerpt);
+                let reach = if candidate.exported { "exported" } else { "private to its file" };
+                let _ = writeln!(out, "- `{}` at {} ({reach}, used {} times)\n~~~\n{}\n~~~", candidate.signature.trim(), candidate.cited(), candidate.uses, candidate.excerpt);
             }
             let _ = writeln!(out);
         }
@@ -256,12 +258,13 @@ impl Review {
         }
         let opening = squeezed(item["quote"].as_str()?.lines().find(|line| !line.trim().is_empty())?);
         let line = lines.iter().find(|(_, text)| squeezed(text).contains(&opening)).map_or(0, |(number, _)| *number);
-        let target = match rule {
+        let (target, severity) = match rule {
             Rule::S7 => {
                 let candidate = self.candidate(item["cites"].as_str()?)?;
-                Some(Target { symbol: candidate.name.clone(), file: candidate.file.clone(), line: candidate.line, signature: candidate.signature.clone(), excerpt: candidate.excerpt.clone() })
+                let severity = if candidate.exported { severity } else { Severity::Note };
+                (Some(Target { symbol: candidate.name.clone(), file: candidate.file.clone(), line: candidate.line, signature: candidate.signature.clone(), excerpt: candidate.excerpt.clone() }), severity)
             }
-            _ => None,
+            _ => (None, severity),
         };
         let said = |field: &str| item[field].as_str().unwrap_or_default().trim().to_string();
         Some(Finding {
@@ -302,8 +305,9 @@ deleted file mode 100644
 ";
 
     fn review() -> Review {
-        let candidate = Candidate { name: "plain".into(), file: "src/market/search.js".into(), line: 3, signature: "export const plain = (text) =>".into(), uses: 9, excerpt: "export const plain = (text) => text".into() };
-        Review { request: "Find sessions without accents.".into(), diff: DIFF.into(), sides: sides(DIFF), candidates: BTreeMap::from([("src/bar.ts".to_string(), vec![candidate])]), installed: vec!["dayjs (package.json)".into()] }
+        let candidate = Candidate { name: "plain".into(), file: "src/market/search.js".into(), line: 3, signature: "export const plain = (text) =>".into(), uses: 9, exported: true, excerpt: "export const plain = (text) => text".into() };
+        let private = Candidate { name: "folded".into(), file: "src/clip.ts".into(), line: 7, signature: "const folded = (text) =>".into(), uses: 2, exported: false, excerpt: "const folded = (text) => text".into() };
+        Review { request: "Find sessions without accents.".into(), diff: DIFF.into(), sides: sides(DIFF), candidates: BTreeMap::from([("src/bar.ts".to_string(), vec![candidate, private])]), installed: vec!["dayjs (package.json)".into()] }
     }
 
     #[test]
@@ -346,13 +350,15 @@ deleted file mode 100644
             { "rule": "S7", "file": "src/bar.ts", "quote": quote, "why": "x", "fix": "y", "confidence": "high" }
         ]});
         assert!(review.findings(&invented).is_empty());
+        let private = review.findings(&json!({ "findings": [{ "rule": "S7", "file": "src/bar.ts", "quote": quote, "why": "folded does this.", "fix": "Use folded.", "confidence": "high", "cites": "src/clip.ts:7" }] }));
+        assert_eq!(private[0].severity, Severity::Note);
         assert!(review.findings(&json!({ "nothing": true })).is_empty());
     }
 
     #[test]
     fn the_prompt_carries_the_request_the_candidates_the_dependencies_and_the_diff() {
         let prompt = review().prompt();
-        for part in ["Find sessions without accents.", "dayjs (package.json)", "src/market/search.js:3 (used 9 times)", "+export interface Picker", "~~~diff"] {
+        for part in ["Find sessions without accents.", "dayjs (package.json)", "src/market/search.js:3 (exported, used 9 times)", "src/clip.ts:7 (private to its file", "+export interface Picker", "~~~diff"] {
             assert!(prompt.contains(part), "{part} missing in:\n{prompt}");
         }
         assert!(schema().contains("\"S7\""));

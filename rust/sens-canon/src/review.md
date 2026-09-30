@@ -16,7 +16,7 @@ Hard limits:
 
 - Nothing the person explicitly asked for is ever excess. Read the request before every finding.
 - Every finding quotes the code it is about, copied character for character from the diff: from added lines (`+`), or from removed lines (`-`) for S6. One line or a short run of consecutive lines. A finding whose quote is not in the diff is thrown away.
-- S7 only with a listed candidate. Do not cite anything else.
+- S7 only with a listed candidate. Do not cite anything else. An idiom the project already writes inline in many places is its style, not a reinvention. A candidate private to its file can only be `medium`: using it means moving it first, which is not this turn's job.
 - Style, naming, formatting, tests and comments are not your concern.
 - `high` means you are sure and the agent should change it before the turn ends. `medium` means it is worth telling the person. When in doubt, use `medium` or report nothing.
 - An empty list is the right answer for most turns.
