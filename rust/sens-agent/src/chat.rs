@@ -752,6 +752,13 @@ impl Engine {
         live.control(json!({ "subtype": "interrupt" }))
     }
 
+    pub fn retry(&self, session: &str) -> Result<(), String> {
+        let live = self.live(session).ok_or_else(gone)?;
+        let circuit = live.circuit.clone().ok_or_else(gone)?;
+        circuit.retry(&*live);
+        Ok(())
+    }
+
     pub fn answer(&self, session: &str, request: &str, decision: &Decision) -> Result<(), String> {
         let live = self.live(session).ok_or_else(gone)?;
         let asked = live.questions.lock().ok().and_then(|questions| questions.get(request).cloned());

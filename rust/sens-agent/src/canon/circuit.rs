@@ -136,6 +136,10 @@ impl Circuit {
         Circuit { reviewer: Some(reviewer), ..self }
     }
 
+    pub fn retry(&self, voice: &dyn Voice) -> Value {
+        self.answer(voice, CLOSE, &json!({ "hook_event_name": "Stop", "stop_hook_active": false, "background_tasks": [] }))
+    }
+
     pub fn answer(&self, voice: &dyn Voice, callback: &str, input: &Value) -> Value {
         self.keeper.exclusive(&self.work, || match callback {
             PROMPT => self.prompt(voice, input),
@@ -512,6 +516,41 @@ pub fn held(work: &Path) -> Option<Vec<Finding>> {
     State::load(work).held
 }
 
+pub fn fix_request(work: &Path) -> Option<String> {
+    let mut state = State::load(work);
+    let held = state.held.take()?;
+    state.rounds = 0;
+    state.save(work).ok()?;
+    Some(format!("Sens held your last turn. Fix what it found, then finish again:\n{}", listed(&held.iter().collect::<Vec<_>>())))
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Excepted {
+    pub key: String,
+    pub rule: Option<Rule>,
+    pub file: String,
+    pub since: u64,
+}
+
+pub fn exceptions(work: &Path) -> Vec<Excepted> {
+    let logged = log::read(work);
+    state::exceptions(work)
+        .keys
+        .into_iter()
+        .map(|key| {
+            let granted = logged.iter().rev().find(|entry| entry.key == key && matches!(entry.decision, Some(Decision::Accepted | Decision::Allowed)));
+            Excepted { rule: granted.and_then(|entry| entry.rule), file: granted.map(|entry| entry.file.clone()).unwrap_or_default(), since: granted.map_or(0, |entry| entry.at), key }
+        })
+        .collect()
+}
+
+pub fn retract(work: &Path, key: &str) -> Result<(), String> {
+    let mut exceptions = state::exceptions(work);
+    exceptions.keys.remove(key);
+    state::save_exceptions(work, &exceptions)
+}
+
 pub fn accept(work: &Path) -> Result<(), String> {
     let mut state = State::load(work);
     let Some(held) = state.held.take() else {
@@ -761,6 +800,40 @@ mod tests {
         let restored = undo(&root).unwrap();
         assert_eq!(restored.restored, ["src/report.ts"]);
         assert!(!root.join("src/report.ts").exists() && held(&root).is_none());
+    }
+
+    #[test]
+    fn asking_for_a_fix_hands_the_findings_back_with_fresh_rounds_and_retrying_judges_again() {
+        let (root, circuit, ear) = started("fix");
+        std::fs::write(root.join("src/report.ts"), TOTALS.replace("totals", "summarize")).unwrap();
+        for _ in 0..=MAX_ROUNDS {
+            circuit.answer(&ear, CLOSE, &close());
+        }
+        assert!(held(&root).is_some());
+        let asked = fix_request(&root).unwrap();
+        assert!(asked.contains("Call `totals`"), "{asked}");
+        let state = State::load(&root);
+        assert!(state.held.is_none() && state.rounds == 0);
+        assert!(fix_request(&root).is_none());
+        std::fs::write(root.join("src/report.ts"), REUSES).unwrap();
+        assert_eq!(decision(&circuit.retry(&ear)), "allow");
+        assert_eq!(ear.stages().last().map(String::as_str), Some("passed"));
+    }
+
+    #[test]
+    fn an_accepted_exception_is_listed_with_its_date_and_can_be_retracted() {
+        let (root, circuit, ear) = started("excepted");
+        std::fs::write(root.join("src/report.ts"), TOTALS.replace("totals", "summarize")).unwrap();
+        for _ in 0..=MAX_ROUNDS {
+            circuit.answer(&ear, CLOSE, &close());
+        }
+        accept(&root).unwrap();
+        let listed = exceptions(&root);
+        assert_eq!(listed.len(), 1);
+        assert_eq!((listed[0].rule, listed[0].file.as_str()), (Some(Rule::R1), "src/report.ts"));
+        assert!(listed[0].since > 0);
+        retract(&root, &listed[0].key).unwrap();
+        assert!(exceptions(&root).is_empty());
     }
 
     #[test]
