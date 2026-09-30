@@ -177,7 +177,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     std::fs::write(plan.diffs.join(format!("{}.diff", plan.name())), &changes.patch).map_err(|error| error.to_string())?;
     let lines = measure::lines(&changes.numstat);
     let statuses = measure::statuses(&changes.statuses);
-    let tests = measure::test_lines(&changes.patch);
+    let tests = measure::test_lines(&changes.patch, |path| git::at_base(work, path), |path| std::fs::read_to_string(work.join(path)).unwrap_or_default());
     run.lines_added = lines.added;
     run.lines_removed = lines.removed;
     run.test_lines_added = tests.added;

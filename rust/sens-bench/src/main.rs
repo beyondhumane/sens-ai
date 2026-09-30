@@ -104,7 +104,7 @@ fn recheck(args: &[String]) -> Result<(), String> {
         let name = trial::name(&run.task, condition, run.rep);
         run.planted = task.reuse.clone();
         if let Ok(patch) = std::fs::read_to_string(out.join("diffs").join(format!("{name}.diff"))) {
-            let tests = measure::test_lines(&patch);
+            let tests = measure::test_lines(&patch, |path| sens_bench::git::at_base(&folder, path), |path| std::fs::read_to_string(folder.join(path)).unwrap_or_default());
             run.test_lines_added = tests.added;
             run.test_lines_removed = tests.removed;
         }

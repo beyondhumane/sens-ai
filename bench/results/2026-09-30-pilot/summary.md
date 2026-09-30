@@ -12,8 +12,8 @@ Las medianas y diferencias usan solo las ejecuciones válidas: aceptadas, sin re
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | py-slugs | C0 | 3/3 | 3 | 0 | 2 | 4 | 0 | 0 | 0 | unicodedata 3/3 | 170800 | 15 |
 | py-slugs | C1 | 3/3 | 3 | 0 | 2 | 4 | 0 | 0 | 0 | unicodedata 3/3 | 216532 | 14 |
-| rust-quiet | C0 | 3/3 | 3 | 0 | 9 | 0 | 0 | 0 | 0 | config.quiet 3/3 | 214954 | 15 |
-| rust-quiet | C1 | 3/3 | 3 | 0 | 9 | 0 | 0 | 0 | 0 | config.quiet 3/3 | 172825 | 12 |
+| rust-quiet | C0 | 3/3 | 3 | 0 | 5 | 4 | 0 | 0 | 0 | config.quiet 3/3 | 214954 | 15 |
+| rust-quiet | C1 | 3/3 | 3 | 0 | 5 | 4 | 0 | 0 | 0 | config.quiet 3/3 | 172825 | 12 |
 | ts-attachments | C0 | 3/3 | 3 | 0 | 9 | 0 | 0 | 0 | 0 | dayjs 2/3 · formatBytes 3/3 | 266123 | 17 |
 | ts-attachments | C1 | 3/3 | 3 | 0 | 9 | 0 | 0 | 0 | 0 | dayjs 3/3 · formatBytes 3/3 | 215502 | 15 |
 
@@ -24,13 +24,13 @@ Diferencia de medianas, con intervalo al 95 % por bootstrap (10000 remuestreos, 
 | Métrica | Tarea | C1 − C0 | C2 − C0 |
 | --- | --- | --- | --- |
 | Líneas netas de código | py-slugs | +0 [-1, +0] | — |
-| Líneas netas de código | rust-quiet | +0 [-6, +0] | — |
+| Líneas netas de código | rust-quiet | +0 [-2, +0] | — |
 | Líneas netas de código | ts-attachments | +0 [-18, +0] | — |
-| Líneas netas de código | Todas | +0 [-8, +0] | — |
+| Líneas netas de código | Todas | +0 [-7, +0] | — |
 | Líneas netas de tests | py-slugs | +0 [+0, +0] | — |
-| Líneas netas de tests | rust-quiet | +0 [+0, +0] | — |
+| Líneas netas de tests | rust-quiet | +0 [-4, +0] | — |
 | Líneas netas de tests | ts-attachments | +0 [+0, +0] | — |
-| Líneas netas de tests | Todas | +0 [+0, +0] | — |
+| Líneas netas de tests | Todas | +0 [-1, +0] | — |
 | Duplicación añadida | py-slugs | +0 [+0, +0] | — |
 | Duplicación añadida | rust-quiet | +0 [+0, +0] | — |
 | Duplicación añadida | ts-attachments | +0 [+0, +0] | — |

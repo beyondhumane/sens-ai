@@ -2,6 +2,8 @@ use std::path::Path;
 use std::process::Command;
 
 use sens_canon::dependencies;
+use sens_index::build;
+use sens_index::testfile::is_test_file;
 use serde_json::Value;
 
 use crate::git;
@@ -35,33 +37,58 @@ pub fn lines(numstat: &str) -> Lines {
         })
 }
 
-pub fn is_test(path: &str) -> bool {
-    let file = path.rsplit('/').next().unwrap_or(path);
-    let stem = file.split('.').next().unwrap_or(file);
-    path.split('/').any(|part| matches!(part, "test" | "tests" | "__tests__" | "spec" | "specs"))
-        || stem.starts_with("test_")
-        || stem.ends_with("_test")
-        || stem.ends_with("_spec")
-        || file.contains(".test.")
-        || file.contains(".spec.")
+#[derive(Default)]
+struct Side {
+    path: String,
+    whole_file: bool,
+    ranges: Vec<(u32, u32)>,
+    line: u32,
 }
 
-pub fn test_lines(patch: &str) -> Lines {
-    let mut file = "";
+impl Side {
+    fn of(path: &str, content: String) -> Side {
+        let whole_file = is_test_file(path);
+        let ranges = match whole_file {
+            true => Vec::new(),
+            false => build::analyze(path, &content).into_iter().filter(|unit| unit.whole && unit.test).map(|unit| (unit.start_line, unit.end_line)).collect(),
+        };
+        Side { path: path.to_string(), whole_file, ranges, line: 0 }
+    }
+
+    fn holds_test(&self) -> bool {
+        !self.path.is_empty() && !locked(&self.path) && (self.whole_file || self.ranges.iter().any(|&(start, end)| (start..=end).contains(&self.line)))
+    }
+}
+
+fn hunk_start(part: &str) -> u32 {
+    part[1..].split(',').next().and_then(|number| number.parse().ok()).unwrap_or(0)
+}
+
+pub fn test_lines(patch: &str, before: impl Fn(&str) -> String, after: impl Fn(&str) -> String) -> Lines {
+    let (mut old, mut new) = (Side::default(), Side::default());
     let mut total = Lines::default();
     for line in patch.lines() {
-        if let Some(path) = line.strip_prefix("+++ b/") {
-            file = path;
-        } else if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff --git") {
-            if line.starts_with("diff --git") {
-                file = "";
-            }
-        } else if is_test(file) && !locked(file) {
-            if line.starts_with('+') {
-                total.added += 1;
-            } else if line.starts_with('-') {
-                total.removed += 1;
-            }
+        if line.starts_with("diff --git") {
+            (old, new) = (Side::default(), Side::default());
+        } else if let Some(path) = line.strip_prefix("--- a/") {
+            old = Side::of(path, before(path));
+        } else if let Some(path) = line.strip_prefix("+++ b/") {
+            new = Side::of(path, after(path));
+        } else if line.starts_with("--- ") || line.starts_with("+++ ") {
+            continue;
+        } else if let Some(header) = line.strip_prefix("@@ ") {
+            let mut parts = header.split_whitespace();
+            old.line = parts.next().map_or(0, hunk_start);
+            new.line = parts.next().map_or(0, hunk_start);
+        } else if line.starts_with('+') {
+            total.added += u64::from(new.holds_test());
+            new.line += 1;
+        } else if line.starts_with('-') {
+            total.removed += u64::from(old.holds_test());
+            old.line += 1;
+        } else if line.starts_with(' ') {
+            old.line += 1;
+            new.line += 1;
         }
     }
     total
@@ -141,32 +168,61 @@ mod tests {
     }
 
     #[test]
-    fn tests_are_recognized_in_every_pilot_language() {
-        for path in ["tests/test_text.py", "test/attachments.test.ts", "src/lib_test.go", "web/__tests__/a.js", "spec/models/user_spec.rb", "accept/quiet.mjs.spec.js"] {
-            assert!(is_test(path), "{path}");
-        }
-        for path in ["src/attachments.ts", "blog/text.py", "src/config.rs", "src/contest.rs"] {
-            assert!(!is_test(path), "{path}");
-        }
-    }
-
-    #[test]
-    fn test_lines_are_counted_apart_from_code() {
+    fn lines_in_test_files_count_as_tests() {
         let patch = "diff --git a/src/a.py b/src/a.py
 --- a/src/a.py
 +++ b/src/a.py
-@@
+@@ -1,1 +1,1 @@
 +x = 1
 -y = 2
 diff --git a/tests/test_a.py b/tests/test_a.py
 --- a/tests/test_a.py
 +++ b/tests/test_a.py
-@@
+@@ -1,1 +1,2 @@
 +def test_x():
 +    assert x == 1
 -old = 0
 ";
-        assert_eq!(test_lines(patch), Lines { added: 2, removed: 1 });
+        assert_eq!(test_lines(patch, |_| String::new(), |_| String::new()), Lines { added: 2, removed: 1 });
+    }
+
+    #[test]
+    fn lines_inside_a_rust_test_module_count_as_tests_and_the_rest_as_code() {
+        let after = "pub fn quiet(flag: bool) -> bool {
+    flag
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quiet_is_kept() {
+        assert!(quiet(true));
+        assert!(!quiet(false));
+    }
+}
+";
+        let patch = "diff --git a/src/config.rs b/src/config.rs
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1,6 +1,14 @@
+ pub fn quiet(flag: bool) -> bool {
++    flag
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn quiet_is_kept() {
++        assert!(quiet(true));
++        assert!(!quiet(false));
++    }
+ }
+";
+        assert_eq!(test_lines(patch, |_| String::new(), |_| after.to_string()), Lines { added: 4, removed: 0 });
     }
 
     #[test]
