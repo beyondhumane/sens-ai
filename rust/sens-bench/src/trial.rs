@@ -60,6 +60,10 @@ pub struct Run {
     pub regressed: bool,
     pub lines_added: u64,
     pub lines_removed: u64,
+    #[serde(default)]
+    pub test_lines_added: u64,
+    #[serde(default)]
+    pub test_lines_removed: u64,
     pub files_added: Vec<String>,
     pub dependencies_added: Vec<String>,
     pub duplicated_before: u64,
@@ -71,6 +75,14 @@ pub struct Run {
 impl Run {
     pub fn net_lines(&self) -> f64 {
         self.lines_added as f64 - self.lines_removed as f64
+    }
+
+    pub fn net_code_lines(&self) -> f64 {
+        self.net_lines() - self.net_test_lines()
+    }
+
+    pub fn net_test_lines(&self) -> f64 {
+        self.test_lines_added as f64 - self.test_lines_removed as f64
     }
 
     pub fn duplication(&self) -> f64 {
@@ -162,8 +174,11 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     std::fs::write(plan.diffs.join(format!("{}.diff", plan.name())), &changes.patch).map_err(|error| error.to_string())?;
     let lines = measure::lines(&changes.numstat);
     let statuses = measure::statuses(&changes.statuses);
+    let tests = measure::test_lines(&changes.patch);
     run.lines_added = lines.added;
     run.lines_removed = lines.removed;
+    run.test_lines_added = tests.added;
+    run.test_lines_removed = tests.removed;
     run.files_added = measure::new_files(&statuses);
     run.dependencies_added = measure::dependencies_added(work, &statuses);
     run.reused = measure::reused(&changes.patch, &plan.task.reuse);

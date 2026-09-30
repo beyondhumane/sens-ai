@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use sens_agent::chat::Engine;
 use sens_bench::trial::{Condition, Plan};
-use sens_bench::{report, task, trial};
+use sens_bench::{measure, report, task, trial};
 
 const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>] [--minutes 30]
 sens-bench recheck --tasks <carpeta> <carpeta de resultados>
@@ -73,9 +73,10 @@ fn run(args: &[String]) -> Result<(), String> {
                 eprintln!("{} {condition:?} #{rep}…", task.id);
                 let done = trial::trial(&engine, &plan);
                 eprintln!(
-                    "  {} · {:+} líneas · {} tokens{}",
+                    "  {} · {:+} líneas de código · {:+} de tests · {} tokens{}",
                     if done.valid() { "válida" } else { "no válida" },
-                    done.net_lines(),
+                    done.net_code_lines(),
+                    done.net_test_lines(),
                     done.tokens(),
                     if done.error.is_empty() { String::new() } else { format!(" · {}", done.error.lines().next().unwrap_or_default()) }
                 );
@@ -100,7 +101,13 @@ fn recheck(args: &[String]) -> Result<(), String> {
             eprintln!("{} {condition:?} #{}: falta {}", run.task, run.rep, folder.display());
             continue;
         }
-        trial::judge(task, &folder, &out.join("diffs"), &trial::name(&run.task, condition, run.rep), run)?;
+        let name = trial::name(&run.task, condition, run.rep);
+        if let Ok(patch) = std::fs::read_to_string(out.join("diffs").join(format!("{name}.diff"))) {
+            let tests = measure::test_lines(&patch);
+            run.test_lines_added = tests.added;
+            run.test_lines_removed = tests.removed;
+        }
+        trial::judge(task, &folder, &out.join("diffs"), &name, run)?;
         eprintln!("{} {condition:?} #{}: {}", run.task, run.rep, if run.valid() { "válida" } else { "no válida" });
     }
     report::rewrite(&out, &runs)?;

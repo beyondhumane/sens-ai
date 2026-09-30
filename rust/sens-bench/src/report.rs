@@ -10,7 +10,7 @@ pub const SUMMARY: &str = "summary.md";
 
 type Metric = (&'static str, fn(&Run) -> f64);
 
-const COMPARED: [Metric; 3] = [("Líneas netas", Run::net_lines), ("Duplicación añadida", Run::duplication), ("Tokens", Run::tokens)];
+const COMPARED: [Metric; 4] = [("Líneas netas de código", Run::net_code_lines), ("Líneas netas de tests", Run::net_test_lines), ("Duplicación añadida", Run::duplication), ("Tokens", Run::tokens)];
 
 pub fn read(dir: &Path) -> Result<Vec<Run>, String> {
     let text = std::fs::read_to_string(dir.join(RUNS)).map_err(|error| format!("{}: {error}", dir.join(RUNS).display()))?;
@@ -64,8 +64,8 @@ pub fn summary(runs: &[Run]) -> String {
     let _ = writeln!(out, "Las medianas y diferencias usan solo las ejecuciones válidas: aceptadas, sin regresiones y sin error.\n");
 
     let _ = writeln!(out, "## Por tarea\n");
-    let _ = writeln!(out, "| Tarea | Condición | Válidas | Aceptadas | Regresiones | Líneas netas | Ficheros nuevos | Dependencias | Duplicación añadida | Reutilizó | Tokens | Minutos |");
-    let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+    let _ = writeln!(out, "| Tarea | Condición | Válidas | Aceptadas | Regresiones | Código neto | Tests netos | Ficheros nuevos | Dependencias | Duplicación añadida | Reutilizó | Tokens | Minutos |");
+    let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     for task in &tasks {
         for condition in CONDITIONS {
             let here = cell(runs, task, condition);
@@ -75,12 +75,13 @@ pub fn summary(runs: &[Run]) -> String {
             let count = |test: fn(&Run) -> bool| here.iter().filter(|run| test(run)).count();
             let _ = writeln!(
                 out,
-                "| {task} | {condition:?} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+                "| {task} | {condition:?} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
                 count(|run| run.valid()),
                 here.len(),
                 count(|run| run.accepted),
                 count(|run| run.regressed),
-                number(stats::median(&valid(&here, Run::net_lines))),
+                number(stats::median(&valid(&here, Run::net_code_lines))),
+                number(stats::median(&valid(&here, Run::net_test_lines))),
                 number(stats::median(&valid(&here, |run| run.files_added.len() as f64))),
                 count(|run| !run.dependencies_added.is_empty()),
                 number(stats::median(&valid(&here, Run::duplication))),
@@ -137,9 +138,9 @@ mod tests {
             run("t", Condition::C1, 22, true),
         ];
         let text = summary(&runs);
-        assert!(text.contains("| t | C0 | 2/3 | 2 | 0 | 32 |"), "{text}");
-        assert!(text.contains("| Líneas netas | t | -11 ["), "{text}");
-        assert!(text.contains("| Líneas netas | Todas | -11 ["), "{text}");
+        assert!(text.contains("| t | C0 | 2/3 | 2 | 0 | 32 | 0 |"), "{text}");
+        assert!(text.contains("| Líneas netas de código | t | -11 ["), "{text}");
+        assert!(text.contains("| Líneas netas de código | Todas | -11 ["), "{text}");
     }
 
     #[test]

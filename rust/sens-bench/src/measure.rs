@@ -35,6 +35,38 @@ pub fn lines(numstat: &str) -> Lines {
         })
 }
 
+pub fn is_test(path: &str) -> bool {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    let stem = file.split('.').next().unwrap_or(file);
+    path.split('/').any(|part| matches!(part, "test" | "tests" | "__tests__" | "spec" | "specs"))
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_spec")
+        || file.contains(".test.")
+        || file.contains(".spec.")
+}
+
+pub fn test_lines(patch: &str) -> Lines {
+    let mut file = "";
+    let mut total = Lines::default();
+    for line in patch.lines() {
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            file = path;
+        } else if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff --git") {
+            if line.starts_with("diff --git") {
+                file = "";
+            }
+        } else if is_test(file) && !locked(file) {
+            if line.starts_with('+') {
+                total.added += 1;
+            } else if line.starts_with('-') {
+                total.removed += 1;
+            }
+        }
+    }
+    total
+}
+
 pub fn statuses(name_status: &str) -> Vec<(char, String)> {
     name_status
         .lines()
@@ -106,6 +138,35 @@ mod tests {
     fn lines_add_up_without_lockfiles_or_binaries() {
         let numstat = "3\t1\tsrc/a.ts\n120\t0\tpackage-lock.json\n-\t-\tlogo.png\n2\t2\tweb/Cargo.lock\n4\t0\tsrc/b.ts\n";
         assert_eq!(lines(numstat), Lines { added: 7, removed: 1 });
+    }
+
+    #[test]
+    fn tests_are_recognized_in_every_pilot_language() {
+        for path in ["tests/test_text.py", "test/attachments.test.ts", "src/lib_test.go", "web/__tests__/a.js", "spec/models/user_spec.rb", "accept/quiet.mjs.spec.js"] {
+            assert!(is_test(path), "{path}");
+        }
+        for path in ["src/attachments.ts", "blog/text.py", "src/config.rs", "src/contest.rs"] {
+            assert!(!is_test(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn test_lines_are_counted_apart_from_code() {
+        let patch = "diff --git a/src/a.py b/src/a.py
+--- a/src/a.py
++++ b/src/a.py
+@@
++x = 1
+-y = 2
+diff --git a/tests/test_a.py b/tests/test_a.py
+--- a/tests/test_a.py
++++ b/tests/test_a.py
+@@
++def test_x():
++    assert x == 1
+-old = 0
+";
+        assert_eq!(test_lines(patch), Lines { added: 2, removed: 1 });
     }
 
     #[test]
