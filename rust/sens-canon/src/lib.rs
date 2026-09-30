@@ -1,3 +1,5 @@
+pub mod dependencies;
+
 pub const CANON: &str = include_str!("canon.md");
 pub const VERSION: &str = "v1";
 
