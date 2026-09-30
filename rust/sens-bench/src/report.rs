@@ -34,9 +34,7 @@ pub fn append(dir: &Path, run: &Run) -> Result<(), String> {
 
 pub fn rewrite(dir: &Path, runs: &[Run]) -> Result<(), String> {
     let lines: Vec<String> = runs.iter().map(serde_json::to_string).collect::<Result<_, _>>().map_err(|error| error.to_string())?;
-    std::fs::write(dir.join(RUNS), lines.join("
-") + "
-").map_err(|error| error.to_string())
+    std::fs::write(dir.join(RUNS), lines.join("\n") + "\n").map_err(|error| error.to_string())
 }
 
 fn cell<'a>(runs: &'a [Run], task: &str, condition: Condition) -> Vec<&'a Run> {
@@ -55,6 +53,17 @@ fn reuse(runs: &[&Run]) -> String {
     planted
         .iter()
         .map(|symbol| format!("{symbol} {}/{}", runs.iter().filter(|run| run.reused.iter().any(|used| used == symbol)).count(), runs.len()))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn circuit(runs: &[&Run]) -> String {
+    let seen: BTreeSet<String> = runs.iter().flat_map(|run| run.circuit.iter().map(|step| step.split('·').next().unwrap_or_default().to_string())).collect();
+    if seen.is_empty() {
+        return "—".into();
+    }
+    seen.iter()
+        .map(|step| format!("{step} {}/{}", runs.iter().filter(|run| run.circuit.iter().any(|mine| mine.split('·').next() == Some(step.as_str()))).count(), runs.len()))
         .collect::<Vec<_>>()
         .join(" · ")
 }
@@ -123,6 +132,17 @@ pub fn summary(runs: &[Run]) -> String {
         let _ = writeln!(out, "| {label} | Todas | {} | {} |", all(Condition::C1), all(Condition::C2));
     }
 
+    let watched: Vec<&str> = tasks.iter().copied().filter(|task| cell(runs, task, Condition::C2).iter().any(|run| !run.circuit.is_empty())).collect();
+    if !watched.is_empty() {
+        let _ = writeln!(out, "\n## Circuito en C2\n");
+        let _ = writeln!(out, "En cuántas ejecuciones apareció cada etapa del circuito o cada regla que saltó (`etapa:regla`).\n");
+        let _ = writeln!(out, "| Tarea | Circuito |");
+        let _ = writeln!(out, "| --- | --- |");
+        for task in watched {
+            let _ = writeln!(out, "| {task} | {} |", circuit(&cell(runs, task, Condition::C2)));
+        }
+    }
+
     let failed: Vec<&Run> = runs.iter().filter(|run| !run.error.is_empty()).collect();
     if !failed.is_empty() {
         let _ = writeln!(out, "\n## Errores\n");
@@ -156,6 +176,14 @@ mod tests {
         assert!(text.contains("| dayjs 1/3 |"), "{text}");
         assert!(text.contains("| Líneas netas de código | t | -11 ["), "{text}");
         assert!(text.contains("| Líneas netas de código | Todas | -11 ["), "{text}");
+        assert!(!text.contains("Circuito en C2"), "{text}");
+    }
+
+    #[test]
+    fn the_summary_says_how_often_each_part_of_the_circuit_acted() {
+        let watched = |steps: &[&str]| Run { circuit: steps.iter().map(|step| step.to_string()).collect(), ..run("t", Condition::C2, 5, true) };
+        let text = summary(&[watched(&["anticipated·3", "write:R1", "passed"]), watched(&["anticipated·2", "passed"])]);
+        assert!(text.contains("| t | anticipated 2/2 · passed 2/2 · write:R1 1/2 |"), "{text}");
     }
 
     #[test]

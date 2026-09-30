@@ -31,6 +31,8 @@ fn tiny_task(base: &Path) -> Task {
         format: String::new(),
         reuse: vec!["hola".into()],
         allow: Vec::new(),
+        base: None,
+        accept_into: "accept".into(),
     }
 }
 

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use sens_agent::chat::{Decision, Engine, Event, Message, Settings, Sink};
 use sens_agent::session;
+use sens_canon::verdict::Finding;
 use serde_json::Value;
 
 const NOBODY: &str = "No one is available to answer. Decide on your own and carry on.";
@@ -21,6 +22,7 @@ pub struct Turn {
     pub tokens_out: u64,
     pub asked: u64,
     pub held: bool,
+    pub circuit: Vec<String>,
 }
 
 pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, patience: Duration, allowed: &[String]) -> Result<Turn, String> {
@@ -59,6 +61,13 @@ fn permitted(tool: &str, input: &Value, allowed: &[String]) -> bool {
     tool == "sens.dependency" && input["key"].as_str().and_then(|key| key.strip_prefix("R3:")).is_some_and(|name| allowed.iter().any(|allowed| allowed == name))
 }
 
+fn heard(stage: &str, findings: &[Finding], suggested: usize) -> Vec<String> {
+    if !findings.is_empty() {
+        return findings.iter().map(|finding| format!("{stage}:{:?}", finding.rule)).collect();
+    }
+    vec![if suggested > 0 { format!("{stage}·{suggested}") } else { stage.to_string() }]
+}
+
 fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event, allowed: &[String]) -> Result<(), String> {
     match event {
         Event::Asking { request, tool, input, .. } => {
@@ -66,7 +75,11 @@ fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event, allowed: &[S
             let decision = Decision { allow: permitted(&tool, &input, allowed), message: NOBODY.into(), ..Decision::default() };
             engine.answer(id, &request, &decision)?;
         }
-        Event::Held { .. } => turn.held = true,
+        Event::Held { .. } => {
+            turn.held = true;
+            turn.circuit.push("held".into());
+        }
+        Event::Canon { stage, findings, suggestions } => turn.circuit.extend(heard(&stage, &findings, suggestions.len())),
         Event::Finished { ok, millis, turns, tokens_in, tokens_out, error, .. } => {
             turn.finished = true;
             turn.ok = ok;
@@ -99,5 +112,13 @@ mod tests {
         assert!(!permitted("sens.dependency", &json!({ "key": "R3:moment" }), &allowed));
         assert!(!permitted("sens.tests", &json!({ "key": "R3:dayjs" }), &allowed));
         assert!(!permitted("Bash", &json!({}), &allowed));
+    }
+
+    #[test]
+    fn the_circuit_is_written_down_stage_by_stage() {
+        let finding: Finding = serde_json::from_value(json!({ "rule": "R1", "severity": "Block", "file": "a.ts", "line": 1, "message": "m", "key": "k" })).unwrap();
+        assert_eq!(heard("write", &[finding.clone(), finding], 0), ["write:R1", "write:R1"]);
+        assert_eq!(heard("anticipated", &[], 3), ["anticipated·3"]);
+        assert_eq!(heard("passed", &[], 0), ["passed"]);
     }
 }

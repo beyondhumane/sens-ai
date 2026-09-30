@@ -16,6 +16,14 @@ struct Declared {
     reuse: Vec<String>,
     #[serde(default)]
     allow: Vec<String>,
+    #[serde(default)]
+    base: Option<String>,
+    #[serde(default = "accept_folder")]
+    accept_into: String,
+}
+
+fn accept_folder() -> String {
+    "accept".into()
 }
 
 #[derive(Clone, Debug)]
@@ -30,6 +38,8 @@ pub struct Task {
     pub format: String,
     pub reuse: Vec<String>,
     pub allow: Vec<String>,
+    pub base: Option<String>,
+    pub accept_into: String,
 }
 
 impl Task {
@@ -57,6 +67,8 @@ pub fn load(dir: &Path) -> Result<Task, String> {
         format: declared.format,
         reuse: declared.reuse,
         allow: declared.allow,
+        base: declared.base,
+        accept_into: declared.accept_into,
     })
 }
 
@@ -92,8 +104,11 @@ mod tests {
         assert_eq!(task.id, "uno");
         assert_eq!(task.prompt, "Haz algo.");
         assert_eq!(task.reuse, ["quiet"]);
-        assert!(task.setup.is_empty() && task.allow.is_empty());
+        assert!(task.setup.is_empty() && task.allow.is_empty() && task.base.is_none());
+        assert_eq!(task.accept_into, "accept");
         assert_eq!(task.repo(), dir.join("repo"));
+        let based = load(&written("based", "language = \"typescript\"\naccept = \"npx vitest run\"\nbase = \"7eb9269\"\naccept_into = \"ui/_accept\"\n")).unwrap();
+        assert_eq!((based.base.as_deref(), based.accept_into.as_str()), (Some("7eb9269"), "ui/_accept"));
     }
 
     #[test]

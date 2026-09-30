@@ -71,6 +71,8 @@ pub struct Run {
     pub reused: Vec<String>,
     #[serde(default)]
     pub planted: Vec<String>,
+    #[serde(default)]
+    pub circuit: Vec<String>,
     pub folder: String,
 }
 
@@ -167,6 +169,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     run.tokens_out = turn.tokens_out;
     run.asked = turn.asked;
     run.held = turn.held;
+    run.circuit = turn.circuit;
     if !turn.error.is_empty() {
         run.error = turn.error;
     }
@@ -191,8 +194,10 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
 }
 
 pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) -> Result<(), String> {
-    copy(&task.acceptance(), &work.join("accept"))?;
+    let hidden = work.join(&task.accept_into);
+    let _ = std::fs::remove_dir_all(&hidden);
     run.regressed = !shell::run(work, &task.check).ok;
+    copy(&task.acceptance(), &hidden)?;
     let accepted = shell::run(work, &task.accept);
     run.accepted = accepted.ok;
     let kept = diffs.join(format!("{name}.accept.txt"));
@@ -205,7 +210,10 @@ pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) 
 
 fn prepare(task: &Task, work: &Path) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(work);
-    copy(&task.repo(), work)?;
+    match &task.base {
+        Some(base) => git::export(base, work)?,
+        None => copy(&task.repo(), work)?,
+    }
     let setup = shell::run(work, &task.setup);
     if !setup.ok {
         return Err(format!("setup: {}", setup.output.trim()));
@@ -243,6 +251,8 @@ mod tests {
     #[test]
     fn every_condition_runs_claude_code_without_the_person_s_own_customizations() {
         let task = crate::task::Task {
+            base: None,
+            accept_into: "accept".into(),
             id: "t".into(),
             dir: PathBuf::new(),
             prompt: String::new(),
