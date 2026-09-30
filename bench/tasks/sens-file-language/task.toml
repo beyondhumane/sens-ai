@@ -1,0 +1,7 @@
+language = "typescript"
+base = "7eb9269"
+setup = "npm ci --no-audit --no-fund --prefer-offline --ignore-scripts"
+accept_into = "rust/sens-app/ui/src/_accept"
+accept = "npx vitest run rust/sens-app/ui/src/_accept"
+check = "npx tsc --noEmit -p rust/sens-app/ui && npx vitest run"
+reuse = ["languageOf", "titleOf"]

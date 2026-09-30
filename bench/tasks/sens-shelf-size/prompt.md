@@ -1,0 +1,1 @@
+En la estantería de artefactos, cada tarjeta muestra debajo del nombre el proyecto del que viene (por ejemplo `demo`). Añade ahí el tamaño del artefacto cuando se conoce, escrito como la app escribe los tamaños en otros sitios: `demo · 1,2 MB`. Si no se conoce el tamaño, que siga mostrando solo el proyecto.

@@ -1,0 +1,1 @@
+En la barra flotante, al buscar una sesión o un proyecto, escribir `cancion` no encuentra la sesión «Canción de cuna» y escribir `diseno` no encuentra el proyecto «Diseño». Haz que esa búsqueda no distinga acentos ni mayúsculas.
