@@ -1,0 +1,1 @@
+`click.unstyle()` leaves some escape sequences in the text. `click.unstyle("\x1b[38:2:255:0:0mhi\x1b[0m")` still has the color code in it, and so do cursor-shape codes like `\x1b[0 q`, mouse-reporting codes and function-key codes like `\x1b[3~`. Other programs emit these, and click should treat any terminal escape sequence as invisible.

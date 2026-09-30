@@ -7,7 +7,8 @@ use sens_bench::{measure, report, task, trial};
 
 const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>[,<tarea>]] [--minutes 30] [--variant v2]
 sens-bench recheck --tasks <carpeta> <carpeta de resultados>
-sens-bench report <carpeta>";
+sens-bench report <carpeta>
+sens-bench validate --tasks <carpeta> [--only <tarea>[,<tarea>]]";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -22,8 +23,36 @@ fn go(args: &[String]) -> Result<(), String> {
         Some("run") => run(&args[1..]),
         Some("recheck") => recheck(&args[1..]),
         Some("report") => summarize(Path::new(args.get(1).ok_or(USAGE)?)).map(|text| println!("{text}")),
+        Some("validate") => validate(&args[1..]),
         _ => Err(USAGE.into()),
     }
+}
+
+fn validate(args: &[String]) -> Result<(), String> {
+    let tasks = task::all(Path::new(&flag(args, "--tasks").ok_or(USAGE)?), flag(args, "--only").as_deref())?;
+    let scratch = std::env::temp_dir().join("sens-bench-validate");
+    let mut broken = 0;
+    for task in &tasks {
+        let found = trial::validate(task, &scratch.join(&task.id))?;
+        let mark = |ok: bool| if ok { "sí" } else { "no" };
+        println!(
+            "{} · base: tests {} · oculta falla {} · referencia: tests {} · oculta pasa {} · {}",
+            task.id,
+            mark(found.base_check),
+            mark(!found.base_accept),
+            mark(found.fixed_check),
+            mark(found.fixed_accept),
+            if found.valid() { "válida" } else { "NO VÁLIDA" }
+        );
+        if !found.valid() {
+            broken += 1;
+            println!("{}", found.said.lines().rev().take(25).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
+        }
+    }
+    if broken > 0 {
+        return Err(format!("{broken} tareas no válidas"));
+    }
+    Ok(())
 }
 
 fn flag(args: &[String], name: &str) -> Option<String> {
@@ -56,10 +85,15 @@ fn run(args: &[String]) -> Result<(), String> {
     let jscpd = jscpd()?;
     let scratch = std::env::temp_dir().join("sens-bench").join(out.file_name().unwrap_or_default());
 
+    let recorded = report::recorded(&out)?;
     let engine = Engine::default();
     for rep in 1..=reps {
         for task in &tasks {
             for &condition in &conditions {
+                if recorded.contains(&trial::name(&task.id, condition, &variant, rep)) {
+                    eprintln!("{} {condition:?} #{rep} ya está en {}", task.id, report::RUNS);
+                    continue;
+                }
                 let plan = Plan {
                     task,
                     condition,

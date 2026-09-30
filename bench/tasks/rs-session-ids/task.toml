@@ -1,0 +1,6 @@
+language = "rust"
+base = "7eb9269"
+accept_into = "rust/sens-agent/tests/_accept"
+accept = "cargo test -q --manifest-path rust/sens-agent/Cargo.toml --test _accept"
+check = "cargo test -q --manifest-path rust/sens-agent/Cargo.toml"
+reuse = ["is_uuid"]

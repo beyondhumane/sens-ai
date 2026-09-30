@@ -1,0 +1,19 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..a0c4971 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -511,8 +511,12 @@ pub fn shorten(text: &str) -> String {
+     if clean.chars().count() <= TITLE_LIMIT {
+         return clean;
+     }
+-    let cut: String = clean.chars().take(TITLE_LIMIT).collect();
+-    format!("{}…", cut.trim_end())
++    let cut: String = clean.chars().take(TITLE_LIMIT + 1).collect();
++    let whole = match cut.rsplit_once(' ') {
++        Some((words, _)) => words.to_string(),
++        None => cut.chars().take(TITLE_LIMIT).collect(),
++    };
++    format!("{}…", whole.trim_end())
+ }
+ 
+ #[cfg(test)]

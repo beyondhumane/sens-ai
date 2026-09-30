@@ -1,0 +1,1 @@
+When a click program styles the text of a prompt with `click.style()` and its output is not a terminal, or color is turned off, `click.confirm()` and `click.prompt()` print the raw ANSI codes, while `click.echo()` strips them. Make prompts do what `echo()` does.

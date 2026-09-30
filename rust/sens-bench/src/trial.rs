@@ -133,16 +133,27 @@ impl Plan<'_> {
         name(&self.task.id, self.condition, &self.variant, self.rep)
     }
 
-    fn settings(&self) -> Settings {
+    fn settings(&self, work: &Path) -> Settings {
         Settings {
             model: self.model.clone(),
             effort: self.effort.clone(),
             mode: "bypassPermissions".into(),
             canon: self.condition.canon(),
             extra: vec![ISOLATED.into()],
+            env: path_first(&self.task.path_first, work),
             ..Settings::default()
         }
     }
+}
+
+fn path_first(dirs: &[String], work: &Path) -> std::collections::BTreeMap<String, String> {
+    if dirs.is_empty() {
+        return std::collections::BTreeMap::new();
+    }
+    let ahead = dirs.iter().map(|dir| work.join(dir));
+    let rest = std::env::var_os("PATH").map(|path| std::env::split_paths(&path).collect::<Vec<_>>()).unwrap_or_default();
+    let joined = std::env::join_paths(ahead.chain(rest)).map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
+    std::collections::BTreeMap::from([("PATH".to_string(), joined)])
 }
 
 pub fn trial(engine: &Engine, plan: &Plan) -> Run {
@@ -171,7 +182,7 @@ pub fn trial(engine: &Engine, plan: &Plan) -> Run {
 fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(), String> {
     prepare(plan.task, work)?;
 
-    let turn: Turn = drive::drive(engine, work, &plan.task.prompt, plan.settings(), plan.patience, &plan.task.allow)?;
+    let turn: Turn = drive::drive(engine, work, &plan.task.prompt, plan.settings(work), plan.patience, &plan.task.allow)?;
     run.finished = turn.finished;
     run.millis = turn.millis;
     run.turns = turn.turns;
@@ -205,10 +216,25 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     judge(plan.task, work, &plan.diffs, &plan.name(), run)
 }
 
+fn checked(work: &Path, check: &str) -> shell::Outcome {
+    let first = shell::run(work, check);
+    if first.ok {
+        return first;
+    }
+    shell::run(work, check)
+}
+
 pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) -> Result<(), String> {
     let hidden = work.join(&task.accept_into);
     let _ = std::fs::remove_dir_all(&hidden);
-    run.regressed = !shell::run(work, &task.check).ok;
+    let check = checked(work, &task.check);
+    run.regressed = !check.ok;
+    let regression = diffs.join(format!("{name}.check.txt"));
+    if check.ok {
+        let _ = std::fs::remove_file(regression);
+    } else {
+        std::fs::write(regression, &check.output).map_err(|error| error.to_string())?;
+    }
     copy(&task.acceptance(), &hidden)?;
     let accepted = shell::run(work, &task.accept);
     run.accepted = accepted.ok;
@@ -220,11 +246,47 @@ pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) 
     std::fs::write(kept, &accepted.output).map_err(|error| error.to_string())
 }
 
+#[derive(Debug, Default, PartialEq)]
+pub struct Validation {
+    pub base_check: bool,
+    pub base_accept: bool,
+    pub fixed_check: bool,
+    pub fixed_accept: bool,
+    pub said: String,
+}
+
+impl Validation {
+    pub fn valid(&self) -> bool {
+        self.base_check && !self.base_accept && self.fixed_check && self.fixed_accept
+    }
+}
+
+fn judged(task: &Task, work: &Path) -> Result<(shell::Outcome, shell::Outcome), String> {
+    let hidden = work.join(&task.accept_into);
+    let _ = std::fs::remove_dir_all(&hidden);
+    let checked = checked(work, &task.check);
+    copy(&task.acceptance(), &hidden)?;
+    let accepted = shell::run(work, &task.accept);
+    let _ = std::fs::remove_dir_all(&hidden);
+    Ok((checked, accepted))
+}
+
+pub fn validate(task: &Task, work: &Path) -> Result<Validation, String> {
+    prepare(task, work)?;
+    let (base_check, base_accept) = judged(task, work)?;
+    let reference = task.dir.join("reference.patch");
+    git::git(work, &["apply", "--whitespace=nowarn", &reference.to_string_lossy()])?;
+    let (fixed_check, fixed_accept) = judged(task, work)?;
+    let failed = [&base_check, &fixed_check, &fixed_accept].into_iter().find(|ran| !ran.ok).map(|ran| ran.output.clone()).unwrap_or_default();
+    Ok(Validation { base_check: base_check.ok, base_accept: base_accept.ok, fixed_check: fixed_check.ok, fixed_accept: fixed_accept.ok, said: failed })
+}
+
 fn prepare(task: &Task, work: &Path) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(work);
-    match &task.base {
-        Some(base) => git::export(&git::this_repository(), base, work)?,
-        None => copy(&task.repo(), work)?,
+    match (&task.base, &task.source) {
+        (Some(base), Some(url)) => git::export(&git::cached(url, base, &crate::task::sources())?, base, work)?,
+        (Some(base), None) => git::export(&git::this_repository(), base, work)?,
+        (None, _) => copy(&task.repo(), work)?,
     }
     let setup = shell::run(work, &task.setup);
     if !setup.ok {
@@ -265,6 +327,8 @@ mod tests {
         let task = crate::task::Task {
             base: None,
             accept_into: "accept".into(),
+            source: None,
+            path_first: vec![".venv/Scripts".into()],
             id: "t".into(),
             dir: PathBuf::new(),
             prompt: String::new(),
@@ -278,11 +342,27 @@ mod tests {
         };
         for condition in CONDITIONS {
             let plan = Plan { task: &task, condition, rep: 1, model: "m".into(), effort: "e".into(), scratch: PathBuf::new(), diffs: PathBuf::new(), jscpd: PathBuf::new(), patience: Duration::ZERO, variant: String::new() };
-            let settings = plan.settings();
+            let work = Path::new("C:/runs/t-C0-1");
+            let settings = plan.settings(work);
             assert_eq!(settings.extra, [ISOLATED]);
             assert_eq!(settings.canon, condition.canon());
             assert_eq!(settings.mode, "bypassPermissions");
+            let path = settings.env.get("PATH").unwrap();
+            assert!(std::env::split_paths(path).next().is_some_and(|first| first == work.join(".venv/Scripts")), "{path}");
         }
+    }
+
+    fn flaky(work: &Path) -> String {
+        let _ = std::fs::remove_dir_all(work);
+        std::fs::create_dir_all(work).unwrap();
+        if cfg!(windows) { "if exist seen (exit /b 0) else (type nul > seen & exit /b 1)".into() } else { "if [ -e seen ]; then exit 0; else touch seen; exit 1; fi".into() }
+    }
+
+    #[test]
+    fn a_check_that_fails_once_and_then_passes_is_not_a_regression() {
+        let work = std::env::temp_dir().join("sens-bench-flaky");
+        assert!(checked(&work, &flaky(&work)).ok);
+        assert!(!checked(&work, "exit 1").ok);
     }
 
     #[test]

@@ -1,0 +1,9 @@
+language = "python"
+source = "https://github.com/pallets/click"
+base = "8.5.0"
+setup = 'python -m venv .venv && .venv\Scripts\python -m pip install -q --disable-pip-version-check --no-index --find-links "{sources}\wheels" pytest && .venv\Scripts\python "{tasks}\_python\link.py"'
+path_first = [".venv/Scripts"]
+accept_into = "tests/_accept"
+accept = '.venv\Scripts\python -m pytest -q -p no:cacheprovider tests/_accept'
+check = '.venv\Scripts\python -m pytest -q -p no:cacheprovider tests'
+reuse = ["expanduser"]

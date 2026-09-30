@@ -33,6 +33,8 @@ fn tiny_task(base: &Path) -> Task {
         allow: Vec::new(),
         base: None,
         accept_into: "accept".into(),
+        source: None,
+        path_first: Vec::new(),
     }
 }
 

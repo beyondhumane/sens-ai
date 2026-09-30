@@ -1,0 +1,1 @@
+With `click.progressbar(..., update_min_steps=N)`, when the length isn't a multiple of N the bar finishes short: with `length=20`, `update_min_steps=7` and `show_pos=True` it stops at `14/20` instead of `20/20`, and `bar.pos` stays at 14.

@@ -20,6 +20,10 @@ struct Declared {
     base: Option<String>,
     #[serde(default = "accept_folder")]
     accept_into: String,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    path_first: Vec<String>,
 }
 
 fn accept_folder() -> String {
@@ -40,6 +44,8 @@ pub struct Task {
     pub allow: Vec<String>,
     pub base: Option<String>,
     pub accept_into: String,
+    pub source: Option<String>,
+    pub path_first: Vec<String>,
 }
 
 impl Task {
@@ -52,7 +58,20 @@ impl Task {
     }
 }
 
+pub fn sources() -> PathBuf {
+    std::env::temp_dir().join("sens-bench-sources")
+}
+
+fn placed(command: &str, dir: &Path) -> String {
+    let shown = |path: &Path| path.to_string_lossy().into_owned();
+    command
+        .replace("{sources}", &shown(&sources()))
+        .replace("{task}", &shown(dir))
+        .replace("{tasks}", &shown(dir.parent().unwrap_or(dir)))
+}
+
 pub fn load(dir: &Path) -> Result<Task, String> {
+    let dir = &std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf());
     let read = |name: &str| std::fs::read_to_string(dir.join(name)).map_err(|error| format!("{}: {error}", dir.join(name).display()));
     let declared: Declared = toml::from_str(&read("task.toml")?).map_err(|error| format!("{}: {error}", dir.join("task.toml").display()))?;
     let id = dir.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
@@ -61,14 +80,16 @@ pub fn load(dir: &Path) -> Result<Task, String> {
         dir: dir.to_path_buf(),
         prompt: read("prompt.md")?.trim().to_string(),
         language: declared.language,
-        setup: declared.setup,
-        accept: declared.accept,
-        check: declared.check,
-        format: declared.format,
+        setup: placed(&declared.setup, dir),
+        accept: placed(&declared.accept, dir),
+        check: placed(&declared.check, dir),
+        format: placed(&declared.format, dir),
         reuse: declared.reuse,
         allow: declared.allow,
         base: declared.base,
         accept_into: declared.accept_into,
+        source: declared.source,
+        path_first: declared.path_first,
     })
 }
 
@@ -109,6 +130,11 @@ mod tests {
         assert_eq!(task.repo(), dir.join("repo"));
         let based = load(&written("based", "language = \"typescript\"\naccept = \"npx vitest run\"\nbase = \"7eb9269\"\naccept_into = \"ui/_accept\"\n")).unwrap();
         assert_eq!((based.base.as_deref(), based.accept_into.as_str()), (Some("7eb9269"), "ui/_accept"));
+        let sourced = load(&written("sourced", "language = \"python\"\nsource = \"https://github.com/pallets/click\"\nsetup = \"git apply {task}/inject.patch && {tasks}/_python/link.py\"\naccept = \"py {sources}/wheels\"\npath_first = [\".venv/Scripts\"]\n")).unwrap();
+        let dir = std::env::temp_dir().join("sens-bench-task").join("sourced");
+        assert_eq!(sourced.setup, format!("git apply {}/inject.patch && {}/_python/link.py", dir.display(), dir.parent().unwrap().display()));
+        assert_eq!(sourced.accept, format!("py {}/wheels", sources().display()));
+        assert_eq!((sourced.source.as_deref(), sourced.path_first.as_slice()), (Some("https://github.com/pallets/click"), [".venv/Scripts".to_string()].as_slice()));
     }
 
     #[test]

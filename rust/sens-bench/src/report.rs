@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use crate::stats::{self, Estimate};
-use crate::trial::{CONDITIONS, Condition, Run};
+use crate::trial::{self, CONDITIONS, Condition, Run};
 
 pub const RUNS: &str = "runs.jsonl";
 pub const SUMMARY: &str = "summary.md";
@@ -18,6 +18,13 @@ pub fn read(dir: &Path) -> Result<Vec<Run>, String> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).map_err(|error| format!("{RUNS}: {error}")))
         .collect()
+}
+
+pub fn recorded(dir: &Path) -> Result<BTreeSet<String>, String> {
+    if !dir.join(RUNS).is_file() {
+        return Ok(BTreeSet::new());
+    }
+    Ok(read(dir)?.iter().filter_map(|run| run.condition.map(|condition| trial::name(&run.task, condition, &run.variant, run.rep))).collect())
 }
 
 pub fn append(dir: &Path, run: &Run) -> Result<(), String> {
@@ -234,5 +241,15 @@ mod tests {
         back[1].accepted = true;
         rewrite(&dir, &back).unwrap();
         assert!(read(&dir).unwrap()[1].accepted);
+    }
+
+    #[test]
+    fn a_batch_knows_which_runs_it_already_recorded() {
+        let dir = std::env::temp_dir().join("sens-bench-recorded");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(recorded(&dir).unwrap().is_empty());
+        append(&dir, &Run { rep: 2, ..run("t", Condition::C2, 5, true) }).unwrap();
+        append(&dir, &Run { rep: 1, variant: "v2".into(), ..run("t", Condition::C2, 5, false) }).unwrap();
+        assert_eq!(recorded(&dir).unwrap(), BTreeSet::from(["t-C2-2".to_string(), "t-C2-v2-1".to_string()]));
     }
 }

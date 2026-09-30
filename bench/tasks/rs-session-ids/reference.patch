@@ -1,0 +1,18 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..3df0bd3 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -194,8 +194,12 @@ fn uncreated(folder: &Path, error: std::io::Error) -> String {
+     )
+ }
+ 
++fn is_legacy(id: &str) -> bool {
++    id.len() == 8 && id.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
++}
++
+ fn named(id: &str) -> Result<(), String> {
+-    if is_uuid(id) {
++    if is_uuid(id) || is_legacy(id) {
+         return Ok(());
+     }
+     Err(invalid(id))

@@ -1,0 +1,24 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 0eb8462..3380f5f 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -471,12 +471,18 @@ class Choice(ParamType[_ValueT_co], t.Generic[_ValueT_co]):
+ 
+         .. versionadded:: 8.2
+         """
++        from difflib import get_close_matches
++
++        from .exceptions import _format_possibilities
++
+         choices_str = ", ".join(map(repr, self._normalized_mapping(ctx=ctx).values()))
+-        return ngettext(
++        message = ngettext(
+             "{value!r} is not {choice}.",
+             "{value!r} is not one of {choices}.",
+             len(self.choices),
+         ).format(value=value, choice=choices_str, choices=choices_str)
++        close = get_close_matches(str(value), [str(choice) for choice in self._normalized_mapping(ctx=ctx).values()])
++        return f"{message} {_format_possibilities(close)}" if close else message
+ 
+     def __repr__(self) -> str:
+         return _("Choice({choices})").format(choices=list(self.choices))

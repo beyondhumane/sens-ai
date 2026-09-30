@@ -19,6 +19,19 @@ pub fn this_repository() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+pub fn cached(url: &str, base: &str, sources: &Path) -> Result<std::path::PathBuf, String> {
+    let name = url.trim_end_matches('/').trim_end_matches(".git").rsplit('/').next().unwrap_or("source");
+    let folder = sources.join(name);
+    if !folder.join(".git").is_dir() {
+        std::fs::create_dir_all(sources).map_err(|error| format!("{}: {error}", sources.display()))?;
+        git(sources, &["clone", "--quiet", url, name])?;
+    }
+    if git(&folder, &["cat-file", "-e", &format!("{base}^{{commit}}")]).is_err() {
+        git(&folder, &["fetch", "--quiet", "--tags", "origin"])?;
+    }
+    Ok(folder)
+}
+
 pub fn export(source: &Path, base: &str, work: &Path) -> Result<(), String> {
     std::fs::create_dir_all(work).map_err(|error| format!("{}: {error}", work.display()))?;
     let archive = work.with_extension("tar");
