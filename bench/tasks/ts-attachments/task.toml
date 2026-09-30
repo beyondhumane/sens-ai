@@ -1,0 +1,7 @@
+language = "typescript"
+setup = "npm ci --no-audit --no-fund"
+format = "npx prettier --write src test"
+check = "node --test \"test/**/*.test.ts\""
+accept = "node --test \"accept/**/*.test.ts\""
+reuse = ["formatBytes", "dayjs"]
+allow = []

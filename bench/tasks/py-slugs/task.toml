@@ -1,0 +1,5 @@
+language = "python"
+check = "python -m unittest discover -s tests -t ."
+accept = "python -m unittest discover -s accept -t ."
+reuse = ["unicodedata"]
+allow = []
