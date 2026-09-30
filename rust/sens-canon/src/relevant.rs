@@ -37,6 +37,8 @@ pub struct Suggestion {
 
 struct Doc {
     symbol: usize,
+    file: String,
+    name: String,
     terms: HashMap<String, usize>,
     length: usize,
     uses: usize,
@@ -218,7 +220,7 @@ impl Catalog {
             .map(|(at, _)| {
                 let terms = described(index, &mut sources, at);
                 let length = terms.values().sum();
-                Doc { symbol: at, terms, length, uses: index.raw_references(at).len() }
+                Doc { symbol: at, file: index.symbols[at].file.clone(), name: index.symbols[at].name.clone(), terms, length, uses: index.raw_references(at).len() }
             })
             .collect();
         let mut frequency: HashMap<String, usize> = HashMap::new();
@@ -260,14 +262,14 @@ impl Catalog {
         rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - B + B * doc.length as f32 / self.average))
     }
 
-    pub fn relevant(&self, prompt: &str) -> Vec<Suggestion> {
-        let groups = self.wanted(prompt);
+    fn ranked(&self, groups: &[HashSet<String>], keep: impl Fn(&Doc) -> bool) -> Vec<Suggestion> {
         if groups.is_empty() {
             return Vec::new();
         }
         let mut scored: Vec<Suggestion> = self
             .docs
             .iter()
+            .filter(|doc| keep(doc))
             .map(|doc| {
                 let matched: f32 = groups.iter().map(|group| group.iter().map(|term| self.weight(doc, term)).fold(0.0, f32::max)).sum();
                 Suggestion { symbol: doc.symbol, score: matched * (1.0 + POPULARITY * (1.0 + doc.uses as f32).ln()), uses: doc.uses }
@@ -276,6 +278,23 @@ impl Catalog {
         scored.sort_by(|a, b| b.score.total_cmp(&a.score).then(b.uses.cmp(&a.uses)).then(a.symbol.cmp(&b.symbol)));
         let best = scored.first().map_or(0.0, |top| top.score);
         scored.into_iter().filter(|found| found.score >= MIN_SCORE && found.score >= best * KEEP_SHARE).take(LIMIT).collect()
+    }
+
+    pub fn relevant(&self, prompt: &str) -> Vec<Suggestion> {
+        self.ranked(&self.wanted(prompt), |_| true)
+    }
+
+    pub fn like_code(&self, code: &str, file: &str) -> Vec<Suggestion> {
+        let spoken = unquoted(code);
+        let named: HashSet<&str> = spoken.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).filter(|name| !name.is_empty()).collect();
+        let mut groups: Vec<HashSet<String>> = Vec::new();
+        for word in meaningful(&spoken).collect::<HashSet<String>>() {
+            let matched = self.matches(&HashSet::from([word]));
+            if !matched.is_empty() && !groups.contains(&matched) {
+                groups.push(matched);
+            }
+        }
+        self.ranked(&groups, |doc| doc.file != file && !named.contains(doc.name.as_str()))
     }
 }
 
@@ -334,6 +353,23 @@ mod tests {
         assert!(names(&index, "hola, ¿qué tal?").is_empty());
         let greeted = names(&index, "greet everyone");
         assert!(!greeted.contains(&"greetInTest".to_string()) && !greeted.contains(&"greeting_is_one".to_string()), "{greeted:?}");
+    }
+
+    #[test]
+    fn new_code_finds_what_it_reinvents_elsewhere_but_not_what_it_already_calls() {
+        let index = project(
+            "code",
+            &[
+                ("src/market/search.js", r#"export const plain = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();"#),
+                ("src/market/use.js", "import { plain } from './search.js';\nexport const matching = (items, query) => items.filter((item) => plain(item.name).includes(plain(query)));\n"),
+                ("src/format.js", "export const weigh = (bytes) => `${Math.round(bytes / 1024)} KB`;\n"),
+            ],
+        );
+        let catalog = Catalog::of(&index);
+        let named = |code: &str| catalog.like_code(code, "src/bar/choices.ts").iter().map(|found| index.symbols[found.symbol].name.clone()).collect::<Vec<_>>();
+        let rewritten = r#"const lower = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();"#;
+        assert_eq!(named(rewritten).first().map(String::as_str), Some("plain"));
+        assert!(!named("const wanted = plain(filter.trim()).normalize(\"NFD\");").contains(&"plain".to_string()));
     }
 
     #[test]
