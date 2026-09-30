@@ -6,6 +6,7 @@ use sens_bench::trial::{Condition, Plan};
 use sens_bench::{report, task, trial};
 
 const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>] [--minutes 30]
+sens-bench recheck --tasks <carpeta> <carpeta de resultados>
 sens-bench report <carpeta>";
 
 fn main() {
@@ -19,6 +20,7 @@ fn main() {
 fn go(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
+        Some("recheck") => recheck(&args[1..]),
         Some("report") => summarize(Path::new(args.get(1).ok_or(USAGE)?)).map(|text| println!("{text}")),
         _ => Err(USAGE.into()),
     }
@@ -82,6 +84,26 @@ fn run(args: &[String]) -> Result<(), String> {
         }
     }
     engine.shutdown();
+    summarize(&out).map(|text| println!("{text}"))
+}
+
+fn recheck(args: &[String]) -> Result<(), String> {
+    let tasks = task::all(Path::new(&flag(args, "--tasks").ok_or(USAGE)?), None)?;
+    let out = PathBuf::from(args.last().ok_or(USAGE)?);
+    let mut runs = report::read(&out)?;
+    for run in &mut runs {
+        let (Some(task), Some(condition)) = (tasks.iter().find(|task| task.id == run.task), run.condition) else {
+            continue;
+        };
+        let folder = PathBuf::from(&run.folder);
+        if !folder.is_dir() {
+            eprintln!("{} {condition:?} #{}: falta {}", run.task, run.rep, folder.display());
+            continue;
+        }
+        trial::judge(task, &folder, &out.join("diffs"), &trial::name(&run.task, condition, run.rep), run)?;
+        eprintln!("{} {condition:?} #{}: {}", run.task, run.rep, if run.valid() { "válida" } else { "no válida" });
+    }
+    report::rewrite(&out, &runs)?;
     summarize(&out).map(|text| println!("{text}"))
 }
 

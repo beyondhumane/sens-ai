@@ -32,6 +32,13 @@ pub fn append(dir: &Path, run: &Run) -> Result<(), String> {
     writeln!(file, "{line}").map_err(|error| error.to_string())
 }
 
+pub fn rewrite(dir: &Path, runs: &[Run]) -> Result<(), String> {
+    let lines: Vec<String> = runs.iter().map(serde_json::to_string).collect::<Result<_, _>>().map_err(|error| error.to_string())?;
+    std::fs::write(dir.join(RUNS), lines.join("
+") + "
+").map_err(|error| error.to_string())
+}
+
 fn cell<'a>(runs: &'a [Run], task: &str, condition: Condition) -> Vec<&'a Run> {
     runs.iter().filter(|run| run.task == task && run.condition == Some(condition)).collect()
 }
@@ -141,9 +148,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         append(&dir, &run("t", Condition::C2, 5, true)).unwrap();
         append(&dir, &run("u", Condition::C0, 7, false)).unwrap();
-        let back = read(&dir).unwrap();
+        let mut back = read(&dir).unwrap();
         assert_eq!(back.len(), 2);
         assert_eq!(back[0].condition, Some(Condition::C2));
         assert_eq!(back[1].lines_added, 7);
+        back[1].accepted = true;
+        rewrite(&dir, &back).unwrap();
+        assert!(read(&dir).unwrap()[1].accepted);
     }
 }

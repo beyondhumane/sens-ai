@@ -98,9 +98,13 @@ pub struct Plan<'a> {
     pub patience: Duration,
 }
 
+pub fn name(task: &str, condition: Condition, rep: u32) -> String {
+    format!("{task}-{condition:?}-{rep}")
+}
+
 impl Plan<'_> {
     fn name(&self) -> String {
-        format!("{}-{:?}-{}", self.task.id, self.condition, self.rep)
+        name(&self.task.id, self.condition, self.rep)
     }
 
     fn settings(&self) -> Settings {
@@ -165,14 +169,20 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     run.reused = measure::reused(&changes.patch, &plan.task.reuse);
     run.duplicated_after = measure::duplicated_lines(work, &plan.jscpd)?;
 
-    copy(&plan.task.acceptance(), &work.join("accept"))?;
-    run.regressed = !shell::run(work, &plan.task.check).ok;
-    let accepted = shell::run(work, &plan.task.accept);
+    judge(plan.task, work, &plan.diffs, &plan.name(), run)
+}
+
+pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) -> Result<(), String> {
+    copy(&task.acceptance(), &work.join("accept"))?;
+    run.regressed = !shell::run(work, &task.check).ok;
+    let accepted = shell::run(work, &task.accept);
     run.accepted = accepted.ok;
-    if !accepted.ok {
-        std::fs::write(plan.diffs.join(format!("{}.accept.txt", plan.name())), &accepted.output).map_err(|error| error.to_string())?;
+    let kept = diffs.join(format!("{name}.accept.txt"));
+    if accepted.ok {
+        let _ = std::fs::remove_file(kept);
+        return Ok(());
     }
-    Ok(())
+    std::fs::write(kept, &accepted.output).map_err(|error| error.to_string())
 }
 
 fn prepare(task: &Task, work: &Path) -> Result<(), String> {

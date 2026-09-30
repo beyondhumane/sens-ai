@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::process::Command;
 
+const BUILD_ELSEWHERE: &str = "CARGO_TARGET_DIR";
+
 pub struct Outcome {
     pub ok: bool,
     pub output: String,
@@ -10,7 +12,7 @@ pub fn run(dir: &Path, line: &str) -> Outcome {
     if line.trim().is_empty() {
         return Outcome { ok: true, output: String::new() };
     }
-    match shell(line).current_dir(dir).output() {
+    match shell(line).current_dir(dir).env_remove(BUILD_ELSEWHERE).output() {
         Ok(done) => Outcome {
             ok: done.status.success(),
             output: format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr)),
@@ -45,6 +47,13 @@ mod tests {
         let failed = run(&here, "node -e \"console.log('mal'); process.exit(3)\"");
         assert!(!failed.ok);
         assert!(failed.output.contains("mal"));
+    }
+
+    #[test]
+    fn a_task_builds_in_its_own_folder_whatever_the_bench_was_built_with() {
+        let here = std::env::temp_dir();
+        let seen = run(&here, "node -e \"process.exit(process.env.CARGO_TARGET_DIR ? 1 : 0)\"");
+        assert!(seen.ok, "{}", seen.output);
     }
 
     #[test]
