@@ -622,6 +622,12 @@
   .settings-pane .note { margin: 0; font-size: 12px; line-height: 16px; color: var(--faint); }
   .settings-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .settings-row .field { flex: 1 1 220px; width: auto; }
+  .settings-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .settings-list li { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 6px 0; border-top: 1px solid var(--hair); font-size: 13px; color: var(--text); }
+  .settings-list-main { flex: none; }
+  .settings-list-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .settings-list-when { flex: none; margin-left: auto; font-size: 12px; color: var(--faint); }
+  .settings-facts { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--text); }
   .settings-row .quiet { height: 32px; border: 1px solid var(--hair-strong); }
   .provider { display: grid; gap: 14px; }
   .provider-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -767,6 +773,8 @@
   .run-icon svg { transition: transform var(--fast) var(--curve); }
   .run[open] > .run-head .run-icon svg { transform: rotate(90deg); }
   .run-failed { color: var(--red); }
+  .run-sens { flex: none; color: var(--dim); }
+  .run-sens-lit { color: var(--accent-text); }
   .run[data-failed="true"] .run-state { background: var(--red); }
   .run-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
   .run[data-folded="true"] .run-steps { margin: 2px 0 0 7px; padding-left: 18px; border-left: 1px solid var(--hair-strong); }
@@ -839,6 +847,21 @@
   .ask-note { margin: 0; font-size: 12px; line-height: 16px; color: var(--faint); }
   .ask-note[hidden] { display: none; }
   .ask-note.fault { color: var(--red); }
+  .ask.held[data-state="settled"] { border-left-color: var(--hair-strong); }
+  .ask.held[data-state="settled"] .ask-icon { color: var(--faint); }
+  .step.sens[data-tone="stop"] .step-icon { color: var(--amber); }
+  .step.sens[data-tone="pass"] .step-icon { color: var(--accent-text); }
+  .step.sens[data-tone="quiet"] .step-target, .step.sens[data-tone="note"] .step-target { color: var(--dim); }
+  .sens-found { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 12px; color: var(--faint); }
+  .sens-signature { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: var(--text); }
+  .sens-uses { flex: none; margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ghost); }
+  .sens-place { flex: none; padding: 0; font-family: var(--mono); font-size: 12px; color: var(--dim); text-align: left; }
+  .sens-place:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .sens-finding { display: grid; gap: 6px; min-width: 0; }
+  .sens-rule { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 13px; color: var(--text); }
+  .sens-why { margin: 0; font-size: 12px; line-height: 18px; color: var(--dim); }
+  .sens-target { display: grid; gap: 6px; min-width: 0; }
+  .sens-target .sens-rule { font-size: 12px; color: var(--faint); }
   .question { display: grid; gap: 8px; }
   .question .q-text { margin: 0; font-size: 14px; line-height: 22px; color: var(--text); }
   .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; }
@@ -1454,7 +1477,6 @@
   .reading .prose { margin: 0 auto; font-size: 14px; line-height: 22px; }
   .source { --line: 21.25px; overflow: auto; padding: 12px 0 28px; user-select: text; background: var(--ground); }
   .source[hidden] { display: none; }
-  /* Tabs as wide as VS Code draws them, wherever code shows. */
   .source, .diff .lines, .codeblock pre, .prose pre { tab-size: 4; }
   .site { display: grid; grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr); min-height: 0; background: var(--ground); }
   .site-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--hair); }

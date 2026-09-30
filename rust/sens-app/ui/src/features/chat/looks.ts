@@ -3,11 +3,9 @@ import { ICONS } from "../../shared/icons.js";
 import { addedRows, patchRows, type Row } from "../../shared/rows";
 import type { Shell } from "../../shared/syntax/shells";
 import { project } from "../project/store";
+import { t as sens } from "./canon.copy";
 import { t } from "./step.copy";
 
-// How a tool call reads in a step: its icon (or a site's favicon), a verb, what
-// it acts on, and whether that is a path to open; `ask` is how a permission
-// question names it.
 export interface Look {
   icon: string;
   verb: string;
@@ -20,12 +18,10 @@ export interface Look {
   shell?: Shell;
 }
 
-// Tools the chat does not show as steps: their questions or plans come as asks.
 export const SILENT = new Set(["ToolSearch", "AskUserQuestion", "ExitPlanMode"]);
 export const EDITS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 export const SHELLS = new Set(["Bash", "PowerShell"]);
 
-// A path inside the open project, relative to it; any other as it came.
 export function relative(path: string) {
   if (!path) return "";
   const { work: root } = project.getState();
@@ -68,6 +64,9 @@ const LOOKS: Record<string, (input: ToolInput) => Look> = {
   Agent: (input) => ({ icon: ICONS.split, verb: t.delegate, ask: t.wantsDelegate, target: input.description || input.subagent_type || "" }),
   Skill: (input) => ({ icon: ICONS.book, verb: t.useSkill, ask: t.wantsSkill, target: String(input.skill || input.command || "") }),
   mcp__sens__read_terminal: () => ({ icon: ICONS.terminal, verb: t.readTerminal, ask: t.wantsReadTerminal, target: "" }),
+  "sens.dependency": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.dependencyTitle, target: String(input.key ?? "").replace(/^R3:/, ""), mono: true }),
+  "sens.tests": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.testsTitle, target: relative(String(input.file ?? "")), mono: true, link: relative(String(input.file ?? "")) }),
+  "sens.canon": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.canonTitle, target: relative(String(input.file ?? "")), mono: true }),
 };
 
 export function describe(name: string, input: ToolInput = {}): Look {
@@ -76,7 +75,6 @@ export function describe(name: string, input: ToolInput = {}): Look {
   return { icon: ICONS.wrench, verb: name, ask: t.wantsUse(name), target: "" };
 }
 
-// What the live line says while a tool runs.
 export function statusOf(name: string, input: ToolInput) {
   const look = describe(name, input);
   return [look.verb, look.target].filter(Boolean).join(" · ");
@@ -92,8 +90,6 @@ export function hostOf(url: string) {
 
 export const consulting = (links: Link[]) => (links.length === 1 ? t.consulting(hostOf(links[0].url)) : t.reviewing(links.length));
 
-// What an edit changed, as rows: from the patch Claude Code reports, or every
-// line of a file it created. `path` is relative to the project.
 export interface Edit {
   path: string;
   rows: Row[];
@@ -113,7 +109,6 @@ export function editOf(name: string, input: ToolInput, detail: ToolDetail | null
   return null;
 }
 
-// The lines a search printed, without its own header or "nothing found".
 export const hitsOf = (output: string) =>
   String(output || "")
     .split("\n")

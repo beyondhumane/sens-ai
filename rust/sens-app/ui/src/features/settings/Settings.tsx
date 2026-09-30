@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useStore } from "zustand";
 import { showView } from "../../app/session";
 import { looks } from "../../shared/copy";
@@ -20,6 +20,8 @@ import { FocusSection } from "./FocusSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { settingsSheet } from "./sheet";
 import { SECTIONS, closeSettings, enterSettings, setResident, settings, settingsClosed, showSection, type Section } from "./store";
+import { ProjectSection } from "./ProjectSection";
+import { Switch } from "./Switch";
 
 export function SettingsDialog() {
   const open = useStore(settingsSheet, (s) => s.open);
@@ -74,6 +76,7 @@ export function Settings() {
         {section === "look" && <LookSection key={visits} />}
         {section === "language" && <LanguageSection key={visits} />}
         {section === "providers" && <ProvidersSection key={visits} />}
+        {section === "project" && <ProjectSection key={visits} />}
       </div>
     </div>
   );
@@ -279,31 +282,6 @@ function UpdatesBlock() {
         {t.checkAtStart}
       </Switch>
     </div>
-  );
-}
-
-function Switch({ id, on, save, children }: { id: string; on: boolean; save: (on: boolean) => Promise<unknown>; children: ReactNode }) {
-  const [fault, setFault] = useState("");
-
-  async function flip() {
-    setFault("");
-    try {
-      await save(!on);
-    } catch (reason) {
-      setFault(String(reason));
-    }
-  }
-
-  return (
-    <>
-      <div className="settings-switch">
-        <button className="switch" id={id} role="switch" aria-checked={on} onClick={flip} />
-        <label htmlFor={id}>{children}</label>
-      </div>
-      <p className="note fault" role="alert" hidden={!fault}>
-        {fault}
-      </p>
-    </>
   );
 }
 

@@ -1,12 +1,13 @@
 import { FENCE, inline, mended, splitBlocks, type Inline } from "../../shared/markdown/parse";
 import { EDITS, SHELLS } from "./looks";
-import type { Part, Step, Thought } from "./turns";
+import type { Part, Sens, Step, Thought } from "./turns";
 
 export const FOLD_AT = 5;
 const TITLE_MOST = 160;
 const LOOK_BACK = 3;
 
-export type Work = Step | Thought;
+export type Work = Step | Thought | Sens;
+type Timed = Step | Thought;
 
 export interface Stretch {
   kind: "run";
@@ -20,7 +21,7 @@ export function grouped(parts: Part[]): Piece[] {
   const pieces: Piece[] = [];
   let run: Stretch | null = null;
   for (const part of parts) {
-    if (part.kind !== "step" && part.kind !== "thought") {
+    if (part.kind !== "step" && part.kind !== "thought" && part.kind !== "sens") {
       run = null;
       pieces.push(part);
       continue;
@@ -73,7 +74,7 @@ export function titleOf(text: string, live: boolean) {
   return trimmed(heads[heads.length - 1] ?? lastSentence(text));
 }
 
-export const tookOf = (part: Work) => (part.began !== null && part.ended !== null ? part.ended - part.began : null);
+export const tookOf = (part: Timed) => (part.began !== null && part.ended !== null ? part.ended - part.began : null);
 
 export interface Tally {
   commands: number;
@@ -83,14 +84,34 @@ export interface Tally {
   others: number;
   failed: number;
   took: number | null;
+  stops: number;
+  reused: number;
+  approved: boolean;
 }
 
 const SEARCHES = new Set(["Grep", "Glob", "WebSearch"]);
 const UNCOUNTED = new Set(["TodoWrite"]);
 
+export const stopping = (part: Sens) => part.findings.some((finding) => finding.severity === "Block" || finding.severity === "Consider");
+
+const identifiers = (text: string) => new Set(text.match(/[\w$]+/g) ?? []);
+
+export function reusedIn(parts: Work[]) {
+  const offered = new Set(
+    parts.flatMap((part) => (part.kind === "sens" ? [...part.suggestions.map((found) => found.name), ...part.findings.flatMap((finding) => (finding.target ? [finding.target.symbol] : []))] : [])),
+  );
+  const written = identifiers(parts.flatMap((part) => (part.kind === "step" && EDITS.has(part.name) ? [String(part.input.content ?? part.input.new_string ?? "")] : [])).join(" "));
+  return [...offered].filter((name) => written.has(name.split(".").pop() ?? name)).length;
+}
+
 export function tally(parts: Work[]): Tally {
-  const told: Tally = { commands: 0, reads: 0, edits: 0, searches: 0, others: 0, failed: 0, took: spanOf(parts) };
+  const told: Tally = { commands: 0, reads: 0, edits: 0, searches: 0, others: 0, failed: 0, took: spanOf(parts), stops: 0, reused: reusedIn(parts), approved: false };
   for (const part of parts) {
+    if (part.kind === "sens") {
+      if (stopping(part) && part.stage !== "reviewed") told.stops += 1;
+      if (part.stage === "passed") told.approved = true;
+      continue;
+    }
     if (part.kind !== "step") continue;
     if (part.state === "failed") told.failed += 1;
     if (SHELLS.has(part.name)) told.commands += 1;
@@ -103,7 +124,8 @@ export function tally(parts: Work[]): Tally {
 }
 
 function spanOf(parts: Work[]) {
-  const began = parts[0]?.began ?? null;
-  const ends = parts.flatMap((part) => (part.ended === null ? [] : [part.ended]));
+  const timed = parts.filter((part): part is Timed => part.kind !== "sens");
+  const began = timed[0]?.began ?? null;
+  const ends = timed.flatMap((part) => (part.ended === null ? [] : [part.ended]));
   return began === null || !ends.length ? null : Math.max(...ends) - began;
 }

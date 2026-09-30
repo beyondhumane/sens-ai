@@ -1,13 +1,7 @@
-import type { Answers, Asking, ChatEvent, Finished, Link, ToolDetail, ToolInput } from "../../ipc/types";
+import type { Answers, Asking, ChatEvent, Finding, Finished, Link, Suggested, ToolDetail, ToolInput } from "../../ipc/types";
 import { SILENT } from "./looks";
 
-// The chat as data: what you asked, what Claude replied, and notices the app
-// adds (a branch switched, something refused). Each piece has a key that stays
-// while it lives on screen.
 
-// Text the model wrote. `streamed` when it arrived piece by piece (it is
-// revealed as it comes); `settled` once the full text came; `done` once
-// the turn ended and it shows whole at once.
 export interface Said {
   kind: "said";
   key: number;
@@ -41,8 +35,6 @@ export interface Step {
   ended: number | null;
 }
 
-// A question for you: permission for a tool, a plan to approve, a form. It
-// waits for an answer only while `active`.
 export interface Ask {
   kind: "ask";
   key: number;
@@ -73,10 +65,22 @@ export interface Compacted {
   auto: boolean;
 }
 
-export type Part = Said | Thought | Step | Ask | Fault | Foot | Compacted;
+export interface Sens {
+  kind: "sens";
+  key: number;
+  stage: string;
+  findings: Finding[];
+  suggestions: Suggested[];
+}
 
-// `open` is the part taking the deltas that arrive; `working`, what the live
-// line says while Claude works (empty when it does not show).
+export interface Held {
+  kind: "held";
+  key: number;
+  findings: Finding[];
+}
+
+export type Part = Said | Thought | Step | Ask | Fault | Foot | Compacted | Sens | Held;
+
 export interface Reply {
   kind: "reply";
   key: number;
@@ -88,7 +92,6 @@ export interface Reply {
   closed: boolean;
 }
 
-// Pictures come as data URLs, or read later when a session is replayed.
 export type Picture = string | Promise<string>;
 
 export interface You {
@@ -114,6 +117,7 @@ let keys = 0;
 export const nextKey = () => ++keys;
 
 export const CLOSING = new Set(["finished", "failed"]);
+export const SENS_STOPPED = "Sens stopped this";
 
 export const opening = (who = ""): Reply => ({
   kind: "reply",
@@ -144,8 +148,6 @@ function leave(reply: Reply, now: number | null): Reply {
   return swap<Thought>(reply, open.key, (part) => ending(part, now));
 }
 
-// A delta goes on the part it belongs to; a switch between thinking and
-// writing opens a new one.
 function delta(reply: Reply, thinking: boolean, text: string, now: number | null): Reply {
   const kind = thinking ? "thought" : "said";
   const open = reply.parts.findLast((part) => part.key === reply.open);
@@ -155,8 +157,6 @@ function delta(reply: Reply, thinking: boolean, text: string, now: number | null
   return { ...left, parts: [...left.parts, fresh], open: fresh.key };
 }
 
-// The full text replaces what the deltas built, on the first part of its kind
-// still waiting for it; without one, it is a part of its own.
 function settle(reply: Reply, thinking: boolean, text: string, now: number | null): Reply {
   const kind = thinking ? "thought" : "said";
   const waiting = reply.parts.find((part): part is Said | Thought => part.kind === kind && !part.settled);
@@ -167,8 +167,6 @@ function settle(reply: Reply, thinking: boolean, text: string, now: number | nul
   return reply.open === waiting.key ? { ...settled, open: null } : settled;
 }
 
-// The turn ended: text shows whole, thoughts end, questions left unanswered
-// expire and tools still running stop.
 function close(reply: Reply, now: number | null): Reply {
   const left = leave(reply, now);
   return {
@@ -190,8 +188,6 @@ const fault = (text: string): Fault => ({ kind: "fault", key: nextKey(), text })
 const footOf = ({ millis, tokensOut, stopped }: Finished): Foot[] =>
   millis || tokensOut || stopped ? [{ kind: "foot", key: nextKey(), millis, tokens: tokensOut, stopped }] : [];
 
-// One event on the reply it belongs to. `live`: whether an ask may still be
-// answered (a replayed one only while its turn is still running).
 export function heard(reply: Reply, event: ChatEvent, live: boolean): Reply {
   const now = clock(live);
   switch (event.kind) {
@@ -216,7 +212,8 @@ export function heard(reply: Reply, event: ChatEvent, live: boolean): Reply {
     case "toolDone": {
       const step = reply.parts.find((part): part is Step => part.kind === "step" && part.id === event.id);
       if (!step) return reply;
-      return swap<Step>(reply, step.key, (part) => ({ ...part, state: event.error ? "failed" : "done", output: event.output, detail: event.detail, ended: now }));
+      const stopped = event.error && event.output.includes(SENS_STOPPED);
+      return swap<Step>(reply, step.key, (part) => ({ ...part, state: stopped ? "stopped" : event.error ? "failed" : "done", output: event.output, detail: event.detail, ended: now }));
     }
     case "consulted": {
       const step = reply.parts.find((part): part is Step => part.kind === "step" && part.id === event.tool);
@@ -242,6 +239,15 @@ export function heard(reply: Reply, event: ChatEvent, live: boolean): Reply {
     }
     case "compacted":
       return { ...reply, parts: [...reply.parts, { kind: "compacted", key: nextKey(), before: event.before, auto: event.auto }] };
+    case "canon": {
+      if (event.stage === "reviewed" && event.findings.length === 0) return reply;
+      const left = leave(reply, now);
+      return { ...left, open: null, parts: [...left.parts, { kind: "sens", key: nextKey(), stage: event.stage, findings: event.findings, suggestions: event.suggestions }] };
+    }
+    case "held": {
+      const left = leave(reply, now);
+      return { ...left, open: null, parts: [...left.parts, { kind: "held", key: nextKey(), findings: event.findings }] };
+    }
     case "finished": {
       const ended = close(reply, now);
       return { ...ended, parts: [...ended.parts, ...(event.error ? [fault(event.error)] : []), ...footOf(event)] };
@@ -255,6 +261,5 @@ export function heard(reply: Reply, event: ChatEvent, live: boolean): Reply {
   }
 }
 
-// An answer given here, before the event that confirms it comes back.
 export const answered = (reply: Reply, request: string, allowed: boolean, answers: Answers | null): Reply =>
   heard(reply, { kind: "answered", request, allowed, answers }, false);

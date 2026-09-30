@@ -229,7 +229,7 @@ describe("general settings", () => {
     expect(labels).toEqual(["Nombre", "Inicio y bandeja", "Avisos", "Actualizaciones", "Bienvenida"]);
     expect(screen.queryByText("Atajo")).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Micrófono" })).toBeNull();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["General", "Focus y voz", "Apariencia", "Idioma", "Proveedores"]);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["General", "Focus y voz", "Apariencia", "Idioma", "Proveedores", "Proyecto"]);
   });
 });
 

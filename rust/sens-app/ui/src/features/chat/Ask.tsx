@@ -11,17 +11,17 @@ import { usePane } from "../panes/context";
 import { shellOf } from "../../shared/syntax/shells";
 import { SHELLS, describe } from "./looks";
 import { Ran, WebLink, DIFF_PREVIEW } from "./Step";
+import { t as said } from "./canon.copy";
 import { t } from "./step.copy";
 import { answer } from "./store";
 import type { Ask as AskPart } from "./turns";
 
-// A choice: its label, whether it is the main one, and the decision it sends,
-// or how to make it (a message instead when it cannot be made yet).
 type Choice = [string, boolean, Decision | (() => Decision | string)];
 
 export const Ask = memo(function Ask({ part, reply }: { part: AskPart; reply: number }) {
   if (part.event.tool === "AskUserQuestion") return <Questions part={part} reply={reply} />;
   if (part.event.tool === "ExitPlanMode") return <Plan part={part} reply={reply} />;
+  if (part.event.tool.startsWith("sens.")) return <SensQuestion part={part} reply={reply} />;
   return <Permission part={part} reply={reply} />;
 });
 
@@ -34,8 +34,6 @@ const SETTLED: Record<string, (answers: Answers | null) => string> = {
   expired: () => t.unanswered,
 };
 
-// The frame every question shares: what it is about, what it shows, the
-// choices while it waits, and then what was decided.
 function Frame({
   part,
   reply,
@@ -107,8 +105,6 @@ function Frame({
   );
 }
 
-// Allowing for good offers to stop asking: in this session, or by accepting
-// edits from now on, which then becomes the mode.
 function Permission({ part, reply }: { part: AskPart; reply: number }) {
   const { tool, input, suggestions } = part.event;
   const look = describe(tool, input);
@@ -131,7 +127,17 @@ function Permission({ part, reply }: { part: AskPart; reply: number }) {
   );
 }
 
-// What the tool would do: the command, the edit, the page, the search.
+function SensQuestion({ part, reply }: { part: AskPart; reply: number }) {
+  const { tool, input } = part.event;
+  const look = describe(tool, input);
+  const lead = tool === "sens.dependency" ? said.dependencyLead : tool === "sens.tests" ? said.testsLead : String(input.message ?? "");
+  return (
+    <Frame part={part} reply={reply} icon={ICONS.shieldAlert} title={look.ask} target={look.target} mono={look.mono} choices={[[t.allow, true, { allow: true }], [t.deny, false, { allow: false }]]}>
+      <p className="ask-note">{lead}</p>
+    </Frame>
+  );
+}
+
 function Preview({ tool, input }: { tool: string; input: AskPart["event"]["input"] }) {
   const language = languageOf(input.file_path || "", input.content || "");
   if (SHELLS.has(tool)) {
@@ -156,7 +162,6 @@ function Preview({ tool, input }: { tool: string; input: AskPart["event"]["input
   return <CodeBlock text={JSON.stringify(input, null, 2)} language="json" />;
 }
 
-// An approved plan runs in the mode chosen with it.
 function Plan({ part, reply }: { part: AskPart; reply: number }) {
   const pane = usePane();
   const choices: Choice[] = [
@@ -178,7 +183,6 @@ function Plan({ part, reply }: { part: AskPart; reply: number }) {
   );
 }
 
-// Each question takes one option (or several), or an answer typed instead.
 function Questions({ part, reply }: { part: AskPart; reply: number }) {
   const questions = part.event.input.questions || [];
   const [picked, setPicked] = useState<Record<string, string[]>>({});
