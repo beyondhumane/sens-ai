@@ -159,7 +159,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     prepare(plan.task, work)?;
     run.duplicated_before = measure::duplicated_lines(work, &plan.jscpd)?;
 
-    let turn: Turn = drive::drive(engine, work, &plan.task.prompt, plan.settings(), plan.patience)?;
+    let turn: Turn = drive::drive(engine, work, &plan.task.prompt, plan.settings(), plan.patience, &plan.task.allow)?;
     run.finished = turn.finished;
     run.millis = turn.millis;
     run.turns = turn.turns;

@@ -218,6 +218,7 @@ name = "sens-agent"
 version = "0.1.0"
 dependencies = [
  "sens-canon",
+ "sens-index",
  "serde",
  "serde_json",
  "windows",
@@ -239,8 +240,12 @@ dependencies = [
 name = "sens-canon"
 version = "0.1.0"
 dependencies = [
+ "ignore",
+ "sens-index",
+ "serde",
  "serde_json",
  "toml",
+ "tree-sitter",
 ]
 
 [[package]]

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use sens_agent::chat::{Decision, Engine, Event, Message, Settings, Sink};
 use sens_agent::session;
+use serde_json::Value;
 
 const NOBODY: &str = "No one is available to answer. Decide on your own and carry on.";
 const TICK: Duration = Duration::from_millis(250);
@@ -22,7 +23,7 @@ pub struct Turn {
     pub held: bool,
 }
 
-pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, patience: Duration) -> Result<Turn, String> {
+pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, patience: Duration, allowed: &[String]) -> Result<Turn, String> {
     let id = session::open(root)?;
     let (tell, heard) = mpsc::channel::<Event>();
     let tell = Mutex::new(tell);
@@ -42,7 +43,7 @@ pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, pat
             break;
         }
         match heard.recv_timeout(TICK) {
-            Ok(event) => settle(engine, &id, &mut turn, event)?,
+            Ok(event) => settle(engine, &id, &mut turn, event, allowed)?,
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -54,13 +55,18 @@ pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, pat
     Ok(turn)
 }
 
-fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event) -> Result<(), String> {
+fn permitted(tool: &str, input: &Value, allowed: &[String]) -> bool {
+    tool == "sens.dependency" && input["key"].as_str().and_then(|key| key.strip_prefix("R3:")).is_some_and(|name| allowed.iter().any(|allowed| allowed == name))
+}
+
+fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event, allowed: &[String]) -> Result<(), String> {
     match event {
-        Event::Asking { request, .. } => {
+        Event::Asking { request, tool, input, .. } => {
             turn.asked += 1;
-            let refusal = Decision { allow: false, message: NOBODY.into(), ..Decision::default() };
-            engine.answer(id, &request, &refusal)?;
+            let decision = Decision { allow: permitted(&tool, &input, allowed), message: NOBODY.into(), ..Decision::default() };
+            engine.answer(id, &request, &decision)?;
         }
+        Event::Held { .. } => turn.held = true,
         Event::Finished { ok, millis, turns, tokens_in, tokens_out, error, .. } => {
             turn.finished = true;
             turn.ok = ok;
@@ -79,4 +85,19 @@ fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event) -> Result<()
         _ => {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn only_a_dependency_the_task_allows_is_accepted_for_the_person() {
+        let allowed = vec!["dayjs".to_string()];
+        assert!(permitted("sens.dependency", &json!({ "key": "R3:dayjs" }), &allowed));
+        assert!(!permitted("sens.dependency", &json!({ "key": "R3:moment" }), &allowed));
+        assert!(!permitted("sens.tests", &json!({ "key": "R3:dayjs" }), &allowed));
+        assert!(!permitted("Bash", &json!({}), &allowed));
+    }
 }

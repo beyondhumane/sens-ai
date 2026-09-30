@@ -274,7 +274,7 @@ impl Circuit {
             return json!({});
         }
         match self.audit(voice, false, None) {
-            Audited::Clean | Audited::Pending => json!({}),
+            Audited::Untouched | Audited::Clean | Audited::Pending => json!({}),
             Audited::Blocked(judged) | Audited::Held(judged) => {
                 voice.say(Event::Canon { stage: "commit".into(), findings: judged.blocks.clone(), suggestions: Vec::new() });
                 denied(format!("Sens has not approved these changes, so they cannot be committed yet:\n{}", listed(&judged.blocks.iter().collect::<Vec<_>>())))
@@ -331,6 +331,7 @@ impl Circuit {
         let helper = (input["hook_event_name"] == "SubagentStop").then(|| input["agent_id"].as_str().unwrap_or("helper").to_string());
         let running = input["background_tasks"].as_array().is_some_and(|tasks| !tasks.is_empty());
         match self.audit(voice, helper.is_some() || running, helper.as_deref()) {
+            Audited::Untouched => json!({}),
             Audited::Clean => {
                 voice.say(Event::Canon { stage: "passed".into(), findings: Vec::new(), suggestions: Vec::new() });
                 json!({})
@@ -369,7 +370,7 @@ impl Circuit {
                 state.held = None;
             }
             let _ = state.save(&self.work);
-            return Audited::Clean;
+            return Audited::Untouched;
         }
         if self.project(INDEX_PATIENCE).is_none() {
             let _ = state.save(&self.work);
@@ -414,6 +415,7 @@ impl Circuit {
 }
 
 enum Audited {
+    Untouched,
     Clean,
     Pending,
     Blocked(Judged),

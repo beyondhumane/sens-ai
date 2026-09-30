@@ -4,15 +4,16 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use sens_canon::verdict::Finding;
+use sens_canon::verdict::{Finding, Rule};
 
-use crate::canon::circuit::Suggested;
+use crate::canon::circuit::{self, Circuit, Suggested, Voice};
+use crate::canon::keeper::Keeper;
 use crate::catalog::{self, Thinking};
 use crate::process::{self, Family, hidden, unlaunched};
 use crate::said;
@@ -46,6 +47,8 @@ const OFFER_PATIENCE: Duration = Duration::from_secs(10);
 const GREETING: &str = "sens-initialize";
 const SEARCHED: &str = "Web search results for query:";
 const REFUSALS_BEFORE_LOCKOUT: u64 = 2;
+const CARD_PATIENCE: Duration = Duration::from_secs(3);
+const QUESTION_PATIENCE: Duration = Duration::from_secs(3600);
 
 fn denied() -> String {
     said!(
@@ -400,9 +403,66 @@ struct Live {
     told: Condvar,
     compacted: AtomicBool,
     forgotten: AtomicBool,
+    circuit: Option<Arc<Circuit>>,
+    questions: Mutex<HashMap<String, mpsc::Sender<bool>>>,
+    awaiting: AtomicBool,
+    prompted: AtomicBool,
+}
+
+impl Voice for Live {
+    fn say(&self, event: Event) {
+        self.keep(event.clone());
+        self.tell(&event);
+    }
+
+    fn ask(&self, finding: &Finding) -> bool {
+        let request = format!("sens-canon-{}", self.requests.fetch_add(1, Ordering::SeqCst));
+        let (answer, heard) = mpsc::channel();
+        if let Ok(mut questions) = self.questions.lock() {
+            questions.insert(request.clone(), answer);
+        }
+        let tool = match finding.rule {
+            Rule::R3 => "sens.dependency",
+            Rule::R8 => "sens.tests",
+            _ => "sens.canon",
+        };
+        self.say(Event::Asking {
+            request: request.clone(),
+            tool: tool.into(),
+            input: json!({ "message": finding.message, "file": finding.file, "key": finding.key }),
+            suggestions: json!([]),
+        });
+        let allowed = heard.recv_timeout(QUESTION_PATIENCE).unwrap_or(false);
+        if let Ok(mut questions) = self.questions.lock() {
+            questions.remove(&request);
+        }
+        allowed
+    }
 }
 
 impl Live {
+    fn hook(self: &Arc<Self>, message: &Value) {
+        let request = text_of(&message["request_id"]);
+        let callback = text_of(&message["request"]["callback_id"]);
+        let input = message["request"]["input"].clone();
+        if callback == circuit::PROMPT {
+            self.prompted.store(true, Ordering::SeqCst);
+        }
+        let Some(circuit) = self.circuit.clone() else {
+            let _ = self.reply(&request, json!({}));
+            return;
+        };
+        let live = self.clone();
+        std::thread::spawn(move || {
+            let output = circuit.answer(live.as_ref(), &callback, &input);
+            let _ = live.reply(&request, output);
+        });
+    }
+
+    fn unheard(&self) -> bool {
+        self.circuit.is_some() && self.awaiting.swap(false, Ordering::SeqCst) && !self.prompted.load(Ordering::SeqCst)
+    }
+
     fn offer(&self, slashes: Vec<Slash>) {
         if let Ok(mut offered) = self.offered.lock() {
             offered.get_or_insert(slashes);
@@ -585,6 +645,7 @@ impl Live {
 pub struct Engine {
     launcher: Vec<String>,
     lives: Lives,
+    keeper: Arc<Keeper>,
 }
 
 impl Default for Engine {
@@ -598,6 +659,7 @@ impl Engine {
         Self {
             launcher,
             lives: Arc::default(),
+            keeper: Arc::default(),
         }
     }
 
@@ -618,6 +680,8 @@ impl Engine {
             return Err(still_working());
         }
         live.stopping.store(false, Ordering::SeqCst);
+        live.prompted.store(false, Ordering::SeqCst);
+        live.awaiting.store(true, Ordering::SeqCst);
         {
             let _order = live.log.lock();
             let _ = session::append(
@@ -635,8 +699,15 @@ impl Engine {
             .inspect_err(|_| live.busy.store(false, Ordering::SeqCst))
     }
 
+    pub fn keeper(&self) -> Arc<Keeper> {
+        self.keeper.clone()
+    }
+
     pub fn warm(&self, root: &Path, session: &str, settings: Settings, sink: Sink) -> Result<Vec<Slash>, String> {
         settings.vet()?;
+        if settings.canon == Canon::Full {
+            self.keeper.warm(settings.cwd.as_deref().unwrap_or(root));
+        }
         Ok(self.ready(root, session, settings, sink)?.slashes(OFFER_PATIENCE))
     }
 
@@ -646,6 +717,11 @@ impl Engine {
             return Ok(());
         }
         live.stopping.store(true, Ordering::SeqCst);
+        if let Ok(mut questions) = live.questions.lock() {
+            for (_, answer) in questions.drain() {
+                let _ = answer.send(false);
+            }
+        }
         let waiting: Vec<String> = live
             .pending
             .lock()
@@ -664,6 +740,16 @@ impl Engine {
 
     pub fn answer(&self, session: &str, request: &str, decision: &Decision) -> Result<(), String> {
         let live = self.live(session).ok_or_else(gone)?;
+        let asked = live.questions.lock().ok().and_then(|questions| questions.get(request).cloned());
+        if let Some(answer) = asked {
+            let _ = answer.send(decision.allow);
+            live.keep(Event::Answered {
+                request: request.to_string(),
+                allowed: decision.allow,
+                answers: Value::Null,
+            });
+            return Ok(());
+        }
         let pending = live
             .pending
             .lock()
@@ -799,9 +885,13 @@ impl Engine {
     }
 
     fn spawn(&self, root: &Path, session: &str, settings: Settings, sink: Sink) -> Result<Arc<Live>, String> {
-        let args = arguments(&settings, &claude_id(session), session::has_begun(root, session));
+        let resumed = session::has_begun(root, session);
+        let args = arguments(&settings, &claude_id(session), resumed);
         let cwd = settings.cwd.clone().unwrap_or_else(|| root.to_path_buf());
-        let greeted = greeting(&settings);
+        let full = settings.canon == Canon::Full;
+        let circuit = full.then(|| Arc::new(Circuit::new(&cwd, session, self.keeper.clone(), resumed)));
+        let card = full.then(|| self.keeper.ready(&cwd, CARD_PATIENCE)).flatten().map(|project| sens_canon::card::card(&project.index));
+        let greeted = greeting(&settings, card.as_deref());
 
         let mut child = hidden(&mut self.command())
             .args(&args)
@@ -844,6 +934,10 @@ impl Engine {
             told: Condvar::new(),
             compacted: AtomicBool::new(false),
             forgotten: AtomicBool::new(false),
+            circuit,
+            questions: Mutex::default(),
+            awaiting: AtomicBool::new(false),
+            prompted: AtomicBool::new(false),
         });
         live.write(&greeted)?;
 
@@ -883,6 +977,13 @@ fn listen(live: Arc<Live>, output: ChildStdout, heard: Arc<Mutex<String>>, lives
         if let Some(slashes) = offered(&message) {
             live.offer(slashes);
             continue;
+        }
+        if message["type"] == "control_request" && message["request"]["subtype"] == "hook_callback" {
+            live.hook(&message);
+            continue;
+        }
+        if message["type"] == "assistant" && live.unheard() {
+            live.say(Event::Canon { stage: "detached".into(), findings: Vec::new(), suggestions: Vec::new() });
         }
         for event in interpret(&message) {
             let event = live.settle(event);
@@ -945,16 +1046,25 @@ pub fn arguments(settings: &Settings, id: &str, resume: bool) -> Vec<String> {
     if !settings.thinking && traits.thinking == Thinking::Toggle {
         args.extend(["--thinking".to_string(), "disabled".to_string()]);
     }
+    if settings.canon == Canon::Full {
+        args.extend(["--disallowedTools".to_string(), circuit::BARRED_TOOLS.to_string()]);
+    }
     args.extend(settings.extra.iter().cloned());
     let session_flag = if resume { "--resume" } else { "--session-id" };
     args.extend([session_flag.to_string(), id.to_string()]);
     args
 }
 
-pub fn greeting(settings: &Settings) -> Value {
+pub fn greeting(settings: &Settings, card: Option<&str>) -> Value {
     let mut request = json!({ "subtype": "initialize", "hooks": null });
     if settings.canon != Canon::Off {
         request["appendSystemPrompt"] = json!(sens_canon::CANON);
+    }
+    if settings.canon == Canon::Full {
+        request["hooks"] = circuit::hooks();
+        if let Some(card) = card {
+            request["appendSystemPrompt"] = json!(format!("{}\n\n{card}", sens_canon::CANON));
+        }
     }
     json!({ "type": "control_request", "request_id": GREETING, "request": request })
 }
@@ -1679,12 +1789,18 @@ mod tests {
     }
 
     #[test]
-    fn the_canon_travels_in_the_greeting_unless_it_is_off() {
-        let appended = |canon| greeting(&Settings { canon, ..opus("default") })["request"]["appendSystemPrompt"].clone();
-        assert_eq!(appended(Canon::Off), Value::Null);
-        assert_eq!(appended(Canon::Instructions), json!(sens_canon::CANON));
-        assert_eq!(appended(Canon::Full), json!(sens_canon::CANON));
-        assert_eq!(greeting(&opus("default"))["request"]["subtype"], "initialize");
+    fn the_canon_travels_in_the_greeting_unless_it_is_off_and_only_full_registers_the_circuit() {
+        let greeted = |canon, card| greeting(&Settings { canon, ..opus("default") }, card)["request"].clone();
+        assert_eq!(greeted(Canon::Off, None)["appendSystemPrompt"], Value::Null);
+        assert_eq!(greeted(Canon::Off, None)["hooks"], Value::Null);
+        assert_eq!(greeted(Canon::Instructions, Some("card"))["appendSystemPrompt"], json!(sens_canon::CANON));
+        assert_eq!(greeted(Canon::Instructions, None)["hooks"], Value::Null);
+        let full = greeted(Canon::Full, Some("## This project"));
+        assert!(full["appendSystemPrompt"].as_str().unwrap().ends_with("## This project"));
+        assert_eq!(full["hooks"]["Stop"][0]["hookCallbackIds"][0], circuit::CLOSE);
+        assert_eq!(full["hooks"]["PreToolUse"][0]["matcher"], "Write|Edit|NotebookEdit");
+        let barred = |canon| arguments(&Settings { canon, ..opus("default") }, "x", false).windows(2).any(|pair| pair == ["--disallowedTools", circuit::BARRED_TOOLS]);
+        assert!(barred(Canon::Full) && !barred(Canon::Instructions) && !barred(Canon::Off));
     }
 
     #[test]
