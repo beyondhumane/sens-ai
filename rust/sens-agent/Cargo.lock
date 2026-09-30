@@ -36,10 +36,15 @@ dependencies = [
 name = "sens-agent"
 version = "0.1.0"
 dependencies = [
+ "sens-canon",
  "serde",
  "serde_json",
  "windows",
 ]
+
+[[package]]
+name = "sens-canon"
+version = "0.1.0"
 
 [[package]]
 name = "serde"

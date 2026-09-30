@@ -271,6 +271,16 @@ pub struct Settings {
     pub env: BTreeMap<String, String>,
     #[serde(skip)]
     pub cwd: Option<PathBuf>,
+    #[serde(skip)]
+    pub canon: Canon,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Canon {
+    Off,
+    Instructions,
+    #[default]
+    Full,
 }
 
 impl Default for Settings {
@@ -284,6 +294,7 @@ impl Default for Settings {
             extra: Vec::new(),
             env: BTreeMap::new(),
             cwd: None,
+            canon: Canon::default(),
         }
     }
 }
@@ -777,6 +788,7 @@ impl Engine {
     fn spawn(&self, root: &Path, session: &str, settings: Settings, sink: Sink) -> Result<Arc<Live>, String> {
         let args = arguments(&settings, &claude_id(session), session::has_begun(root, session));
         let cwd = settings.cwd.clone().unwrap_or_else(|| root.to_path_buf());
+        let greeted = greeting(&settings);
 
         let mut child = hidden(&mut self.command())
             .args(&args)
@@ -820,7 +832,7 @@ impl Engine {
             compacted: AtomicBool::new(false),
             forgotten: AtomicBool::new(false),
         });
-        live.write(&json!({ "type": "control_request", "request_id": GREETING, "request": { "subtype": "initialize", "hooks": null } }))?;
+        live.write(&greeted)?;
 
         let heard = Arc::new(Mutex::new(String::new()));
         let collected = heard.clone();
@@ -924,6 +936,14 @@ pub fn arguments(settings: &Settings, id: &str, resume: bool) -> Vec<String> {
     let session_flag = if resume { "--resume" } else { "--session-id" };
     args.extend([session_flag.to_string(), id.to_string()]);
     args
+}
+
+pub fn greeting(settings: &Settings) -> Value {
+    let mut request = json!({ "subtype": "initialize", "hooks": null });
+    if settings.canon != Canon::Off {
+        request["appendSystemPrompt"] = json!(sens_canon::CANON);
+    }
+    json!({ "type": "control_request", "request_id": GREETING, "request": request })
 }
 
 pub fn claude_id(session: &str) -> String {
@@ -1643,6 +1663,15 @@ mod tests {
         );
         let Event::Compacted { auto, .. } = one(r#"{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":1}}"#) else { panic!() };
         assert!(auto);
+    }
+
+    #[test]
+    fn the_canon_travels_in_the_greeting_unless_it_is_off() {
+        let appended = |canon| greeting(&Settings { canon, ..opus("default") })["request"]["appendSystemPrompt"].clone();
+        assert_eq!(appended(Canon::Off), Value::Null);
+        assert_eq!(appended(Canon::Instructions), json!(sens_canon::CANON));
+        assert_eq!(appended(Canon::Full), json!(sens_canon::CANON));
+        assert_eq!(greeting(&opus("default"))["request"]["subtype"], "initialize");
     }
 
     #[test]

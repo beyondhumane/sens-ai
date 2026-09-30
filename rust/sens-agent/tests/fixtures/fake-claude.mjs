@@ -10,6 +10,7 @@ const say = (message) => process.stdout.write(JSON.stringify({ session_id: sessi
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 let answerFor = null;
+let canon = false;
 let interrupted = false;
 
 const finish = (subtype = "success", result = "") =>
@@ -44,7 +45,7 @@ const speak = (text) => {
 };
 
 async function turn(content) {
-  say({ type: "system", subtype: "init", model: `${argv.join(" ")} @ ${process.cwd()}` });
+  say({ type: "system", subtype: "init", model: `${canon ? "+canon " : ""}${argv.join(" ")} @ ${process.cwd()}` });
   const blocks = typeof content === "string" ? [{ type: "text", text: content }] : content;
   const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("\n");
   const pictures = blocks.filter((block) => block.type === "image" && block.source?.type === "base64");
@@ -88,6 +89,7 @@ async function turn(content) {
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.type === "control_request" && message.request.subtype === "initialize") {
+    canon = Boolean(message.request.appendSystemPrompt);
     say({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response: { commands: OFFERED } } });
   } else if (message.type === "control_request" && message.request.subtype === "interrupt") {
     interrupted = true;

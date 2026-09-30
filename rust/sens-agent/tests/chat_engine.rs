@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use sens_agent::chat::{Decision, Engine, Event, Image, Message, Settings, Sink};
+use sens_agent::chat::{Canon, Decision, Engine, Event, Image, Message, Settings, Sink};
 use sens_agent::language::{Language, speaking};
 use sens_agent::session::{self, Entry};
 
@@ -176,6 +176,28 @@ fn changing_the_settings_restarts_claude_on_the_same_conversation() {
 
     assert!(launched.contains(&format!("--resume {id}")), "{launched}");
     assert!(launched.contains("--effort max"), "{launched}");
+    engine.shutdown();
+}
+
+#[test]
+fn every_session_gets_the_canon_unless_it_is_off() {
+    let root = project("canon");
+    let engine = engine();
+    let (heard, sink) = ear();
+
+    let with = session::open(&root).unwrap();
+    engine.send(&root, &with, &text("hola"), settings(), sink.clone()).unwrap();
+    let Event::Started { model: launched } = wait_for(&heard, |event| matches!(event, Event::Started { .. })) else { unreachable!() };
+    wait_for(&heard, finished);
+    assert!(launched.starts_with("+canon "), "{launched}");
+    heard.lock().unwrap().clear();
+
+    let without = session::open(&root).unwrap();
+    let off = Settings { canon: Canon::Off, ..settings() };
+    engine.send(&root, &without, &text("hola"), off, sink).unwrap();
+    let Event::Started { model: launched } = wait_for(&heard, |event| matches!(event, Event::Started { .. })) else { unreachable!() };
+    wait_for(&heard, finished);
+    assert!(!launched.contains("+canon"), "{launched}");
     engine.shutdown();
 }
 
