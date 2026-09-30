@@ -11,7 +11,8 @@
     "brand": "tsx scripts/brand.ts",
     "release": "tsx scripts/release.ts",
     "frames": "tsx scripts/frames.ts",
-    "perf": "tsx scripts/perf.ts"
+    "perf": "tsx scripts/perf.ts",
+    "a11y": "tsx scripts/a11y.ts"
   },
   "dependencies": {
     "gsap": "^3.15.0"
