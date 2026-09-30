@@ -2,14 +2,37 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
+use crate::verdict::{Change, Finding, Rule, Severity};
+
 const NODE_SECTIONS: &[&str] = &["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 const CARGO_SECTIONS: &[&str] = &["dependencies", "dev-dependencies", "build-dependencies"];
+const COMPOSER_SECTIONS: &[&str] = &["require", "require-dev"];
+const GRADLE_CONFIGURATIONS: &[&str] = &[
+    "implementation",
+    "api",
+    "compileOnly",
+    "runtimeOnly",
+    "testImplementation",
+    "testRuntimeOnly",
+    "testCompileOnly",
+    "annotationProcessor",
+    "kapt",
+    "ksp",
+    "debugImplementation",
+    "releaseImplementation",
+];
 
 enum Manifest {
     Node,
     Cargo,
     Pyproject,
     Requirements,
+    Go,
+    Dotnet,
+    Composer,
+    Gemfile,
+    Gradle,
+    Maven,
 }
 
 fn manifest(path: &str) -> Option<Manifest> {
@@ -18,6 +41,12 @@ fn manifest(path: &str) -> Option<Manifest> {
         "package.json" => Some(Manifest::Node),
         "Cargo.toml" => Some(Manifest::Cargo),
         "pyproject.toml" => Some(Manifest::Pyproject),
+        "go.mod" => Some(Manifest::Go),
+        "composer.json" => Some(Manifest::Composer),
+        "Gemfile" => Some(Manifest::Gemfile),
+        "build.gradle" | "build.gradle.kts" => Some(Manifest::Gradle),
+        "pom.xml" => Some(Manifest::Maven),
+        _ if name.ends_with(".csproj") => Some(Manifest::Dotnet),
         _ if name.starts_with("requirements") && name.ends_with(".txt") => Some(Manifest::Requirements),
         _ => None,
     }
@@ -33,6 +62,12 @@ pub fn declared(path: &str, content: &str) -> BTreeSet<String> {
         Some(Manifest::Cargo) => cargo(content),
         Some(Manifest::Pyproject) => pyproject(content),
         Some(Manifest::Requirements) => content.lines().filter_map(requirement).collect(),
+        Some(Manifest::Go) => go(content),
+        Some(Manifest::Dotnet) => attributes(content, "<PackageReference", "Include=\""),
+        Some(Manifest::Composer) => composer(content),
+        Some(Manifest::Gemfile) => content.lines().filter_map(|line| line.trim().strip_prefix("gem ").and_then(quoted)).collect(),
+        Some(Manifest::Gradle) => gradle(content),
+        Some(Manifest::Maven) => maven(content),
         None => BTreeSet::new(),
     }
 }
@@ -40,6 +75,24 @@ pub fn declared(path: &str, content: &str) -> BTreeSet<String> {
 pub fn added(path: &str, before: &str, after: &str) -> Vec<String> {
     let known = declared(path, before);
     declared(path, after).into_iter().filter(|name| !known.contains(name)).collect()
+}
+
+pub fn findings(change: &Change) -> Vec<Finding> {
+    if !is_manifest(&change.path) {
+        return Vec::new();
+    }
+    added(&change.path, change.before(), change.after())
+        .into_iter()
+        .map(|name| Finding {
+            rule: Rule::R3,
+            severity: Severity::Ask,
+            file: change.path.clone(),
+            line: 1,
+            message: format!("`{name}` would be a new dependency in {}. New dependencies need the person's approval; if the standard library or something already installed covers the need, use that instead.", change.path),
+            target: None,
+            key: format!("R3:{name}"),
+        })
+        .collect()
 }
 
 fn node(content: &str) -> BTreeSet<String> {
@@ -108,6 +161,86 @@ fn pyproject(content: &str) -> BTreeSet<String> {
         .collect()
 }
 
+fn go(content: &str) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    let mut inside = false;
+    for line in content.lines().map(|line| line.split("//").next().unwrap_or("").trim()) {
+        if line.starts_with("require (") || line == "require(" {
+            inside = true;
+        } else if inside && line == ")" {
+            inside = false;
+        } else if let Some(single) = line.strip_prefix("require ") {
+            found.extend(single.split_whitespace().next().map(str::to_string));
+        } else if inside {
+            found.extend(line.split_whitespace().next().map(str::to_string));
+        }
+    }
+    found
+}
+
+fn quoted(text: &str) -> Option<String> {
+    let start = text.find(['"', '\''])?;
+    let quote = text[start..].chars().next()?;
+    let rest = &text[start + 1..];
+    let end = rest.find(quote)?;
+    (end > 0).then(|| rest[..end].to_string())
+}
+
+fn attributes(content: &str, element: &str, attribute: &str) -> BTreeSet<String> {
+    content
+        .split(element)
+        .skip(1)
+        .filter_map(|tail| {
+            let tag = tail.split('>').next()?;
+            let value = tag.split(attribute).nth(1)?;
+            value.split('"').next().filter(|name| !name.is_empty()).map(str::to_string)
+        })
+        .collect()
+}
+
+fn composer(content: &str) -> BTreeSet<String> {
+    let Ok(parsed) = serde_json::from_str::<Value>(content) else {
+        return BTreeSet::new();
+    };
+    COMPOSER_SECTIONS
+        .iter()
+        .filter_map(|section| parsed[section].as_object())
+        .flat_map(|section| section.keys().cloned())
+        .filter(|name| name != "php" && !name.starts_with("ext-"))
+        .collect()
+}
+
+fn gradle(content: &str) -> BTreeSet<String> {
+    content
+        .lines()
+        .map(str::trim)
+        .filter(|line| GRADLE_CONFIGURATIONS.iter().any(|configuration| line.strip_prefix(configuration).is_some_and(|rest| rest.starts_with(['(', ' ']))))
+        .filter_map(quoted)
+        .filter_map(|coordinates| {
+            let mut parts = coordinates.split(':');
+            Some(format!("{}:{}", parts.next()?, parts.next()?))
+        })
+        .collect()
+}
+
+fn element<'a>(block: &'a str, name: &str) -> Option<&'a str> {
+    let open = format!("<{name}>");
+    let start = block.find(&open)? + open.len();
+    let end = block[start..].find("</")? + start;
+    Some(block[start..end].trim())
+}
+
+fn maven(content: &str) -> BTreeSet<String> {
+    content
+        .split("<dependency>")
+        .skip(1)
+        .filter_map(|block| {
+            let block = block.split("</dependency>").next()?;
+            Some(format!("{}:{}", element(block, "groupId")?, element(block, "artifactId")?))
+        })
+        .collect()
+}
+
 fn requirement(line: &str) -> Option<String> {
     let line = line.split('#').next()?.trim();
     if line.is_empty() || line.starts_with('-') {
@@ -134,6 +267,9 @@ mod tests {
         assert!(is_manifest("web/package.json"));
         assert!(is_manifest("crates\\core\\Cargo.toml"));
         assert!(is_manifest("requirements-dev.txt"));
+        for path in ["go.mod", "web/App.csproj", "composer.json", "Gemfile", "build.gradle", "app/build.gradle.kts", "pom.xml"] {
+            assert!(is_manifest(path), "{path}");
+        }
         assert!(!is_manifest("package.jsonc"));
         assert!(!is_manifest("src/main.rs"));
     }
@@ -160,6 +296,39 @@ mod tests {
     fn requirements_skip_comments_options_and_blank_lines() {
         let content = "# pinned\n-r base.txt\n\nDjango==5.1  # web\nnumpy\n--index-url https://x\n";
         assert_eq!(names(declared("requirements.txt", content)), ["django", "numpy"]);
+    }
+
+    #[test]
+    fn go_modules_count_single_and_grouped_requires() {
+        let content = "module x\n\ngo 1.23\n\nrequire github.com/a/b v1.0.0\n\nrequire (\n\tgolang.org/x/text v0.1.0 // indirect\n\tgithub.com/c/d v2.0.0\n)\n";
+        assert_eq!(names(declared("go.mod", content)), ["github.com/a/b", "github.com/c/d", "golang.org/x/text"]);
+    }
+
+    #[test]
+    fn dotnet_composer_and_ruby_manifests_are_read() {
+        let project = r#"<Project><ItemGroup><PackageReference Include="Newtonsoft.Json" Version="13" /><PackageReference Version="1" Include="Serilog" /></ItemGroup></Project>"#;
+        assert_eq!(names(declared("App/App.csproj", project)), ["Newtonsoft.Json", "Serilog"]);
+        let composer = r#"{ "require": { "php": ">=8.2", "ext-json": "*", "guzzlehttp/guzzle": "^7" }, "require-dev": { "phpunit/phpunit": "^11" } }"#;
+        assert_eq!(names(declared("composer.json", composer)), ["guzzlehttp/guzzle", "phpunit/phpunit"]);
+        let gemfile = "source 'https://rubygems.org'\ngem 'rails', '~> 8.0'\ngem \"pg\"\n";
+        assert_eq!(names(declared("Gemfile", gemfile)), ["pg", "rails"]);
+    }
+
+    #[test]
+    fn gradle_and_maven_name_group_and_artifact() {
+        let gradle = "dependencies {\n    implementation(\"com.squareup.okhttp3:okhttp:4.12.0\")\n    testImplementation 'junit:junit:4.13.2'\n    implementationSomething(\"x:y:1\")\n}\n";
+        assert_eq!(names(declared("app/build.gradle.kts", gradle)), ["com.squareup.okhttp3:okhttp", "junit:junit"]);
+        let pom = "<project><dependencies><dependency>\n<groupId>org.slf4j</groupId>\n<artifactId>slf4j-api</artifactId>\n</dependency></dependencies></project>";
+        assert_eq!(names(declared("pom.xml", pom)), ["org.slf4j:slf4j-api"]);
+    }
+
+    #[test]
+    fn each_new_dependency_is_a_question_for_the_person() {
+        let change = Change { path: "package.json".into(), before: Some(r#"{ "dependencies": { "dayjs": "1" } }"#.into()), after: Some(r#"{ "dependencies": { "dayjs": "1", "moment": "2" } }"#.into()) };
+        let found = findings(&change);
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].rule, found[0].severity, found[0].key.as_str()), (Rule::R3, Severity::Ask, "R3:moment"));
+        assert!(findings(&Change { path: "src/a.ts".into(), before: None, after: Some("x".into()) }).is_empty());
     }
 
     #[test]
