@@ -44,7 +44,7 @@ fn a_real_claude_code_is_stopped_from_copying_and_the_circuit_hears_every_turn()
     let heard: Arc<Mutex<Vec<Event>>> = Arc::default();
     let kept = heard.clone();
     let sink: Sink = Arc::new(move |_, event| kept.lock().unwrap().push(event.clone()));
-    let settings = Settings { model: "haiku".into(), mode: "bypassPermissions".into(), ..Settings::default() };
+    let settings = Settings { model: "haiku".into(), mode: "bypassPermissions".into(), extra: vec!["--safe-mode".into()], ..Settings::default() };
     let words = "Create src/report.ts exporting summarize(rows, limit) that computes exactly what totals in src/lib/totals.ts computes. Write the whole function body in the new file.";
     engine.send(&root, &id, &Message { text: words.into(), ..Message::default() }, settings, sink).unwrap();
 
