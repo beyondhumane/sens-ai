@@ -100,6 +100,10 @@ impl Checkpoints {
         done.status.success().then_some(done.stdout)
     }
 
+    pub fn diff(&self, from: &Tree, to: &Tree) -> Result<String, String> {
+        self.git(&["diff", "--no-color", "--no-ext-diff", "--no-renames", "-U3", &from.0, &to.0])
+    }
+
     pub fn changes(&self, from: &Tree, to: &Tree) -> Result<Vec<Change>, String> {
         let text = |tree: &Tree, path: &str| self.read(tree, path).and_then(|bytes| String::from_utf8(bytes).ok());
         Ok(self

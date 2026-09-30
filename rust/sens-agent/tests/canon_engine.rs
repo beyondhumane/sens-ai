@@ -113,6 +113,18 @@ fn what_the_terminal_writes_is_judged_too() {
 }
 
 #[test]
+fn the_reviewer_stops_an_abstraction_with_one_use_and_the_fix_passes() {
+    let (root, engine, _, heard) = run("revisor", "revisor");
+    finished(&heard);
+    assert_eq!(said(&heard), ["revisor bloqueó", "cierre limpio"]);
+    let reviewed = heard.lock().unwrap().iter().find_map(|event| match event { Event::Canon { stage, findings, .. } if stage == "reviewed" && !findings.is_empty() => Some(findings.clone()), _ => None }).unwrap();
+    assert_eq!((reviewed[0].rule, reviewed[0].file.as_str(), reviewed[0].line), (Rule::S1, "src/runner.ts", 1));
+    assert!(stages(&heard).contains(&"passed".to_string()));
+    assert!(!std::fs::read_to_string(root.join("src/runner.ts")).unwrap().contains("interface"));
+    engine.shutdown();
+}
+
+#[test]
 fn three_blocked_endings_hold_the_turn_for_the_person() {
     let (root, engine, _, heard) = run("rondas", "rondas");
     finished(&heard);

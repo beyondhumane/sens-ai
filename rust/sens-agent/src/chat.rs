@@ -14,6 +14,7 @@ use sens_canon::verdict::{Finding, Rule};
 
 use crate::canon::circuit::{self, Circuit, Suggested, Voice};
 use crate::canon::keeper::Keeper;
+use crate::canon::review::{Haiku, Reviewer};
 use crate::catalog::{self, Thinking};
 use crate::process::{self, Family, hidden, unlaunched};
 use crate::said;
@@ -646,6 +647,7 @@ pub struct Engine {
     launcher: Vec<String>,
     lives: Lives,
     keeper: Arc<Keeper>,
+    reviewer: Arc<dyn Reviewer>,
 }
 
 impl Default for Engine {
@@ -656,10 +658,22 @@ impl Default for Engine {
 
 impl Engine {
     pub fn launching(launcher: Vec<String>) -> Self {
+        let reviewer: Arc<dyn Reviewer> = match launcher.split_first() {
+            Some((program, leading)) => {
+                let (program, leading) = (program.clone(), leading.to_vec());
+                Arc::new(Haiku::launching(move || {
+                    let mut command = Command::new(&program);
+                    command.args(&leading);
+                    command
+                }))
+            }
+            None => Arc::new(Haiku::default()),
+        };
         Self {
             launcher,
             lives: Arc::default(),
             keeper: Arc::default(),
+            reviewer,
         }
     }
 
@@ -889,7 +903,7 @@ impl Engine {
         let args = arguments(&settings, &claude_id(session), resumed);
         let cwd = settings.cwd.clone().unwrap_or_else(|| root.to_path_buf());
         let full = settings.canon == Canon::Full;
-        let circuit = full.then(|| Arc::new(Circuit::new(&cwd, session, self.keeper.clone(), resumed)));
+        let circuit = full.then(|| Arc::new(Circuit::new(&cwd, session, self.keeper.clone(), resumed).reviewed_by(self.reviewer.clone())));
         let card = full.then(|| self.keeper.ready(&cwd, CARD_PATIENCE)).flatten().map(|project| sens_canon::card::card(&project.index));
         let greeted = greeting(&settings, card.as_deref());
 

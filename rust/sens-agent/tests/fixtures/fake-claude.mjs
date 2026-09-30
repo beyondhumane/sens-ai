@@ -92,6 +92,7 @@ const use = async (name, input, act) => {
 const stop = async () => blocking(await hook("Stop", { stop_hook_active: false, background_tasks: [] }));
 const copied = () => readFileSync(here("src/lib/totals.ts"), "utf8").replaceAll("totals", "summarize");
 const REUSES = "import { totals } from './lib/totals.ts';\nexport const report = () => totals([], 2);\n";
+const ONE_USE = "export interface OnlyOne { run(): void }\nexport const runner: OnlyOne = { run() {} };\n";
 
 const scenarios = {
   async copia() {
@@ -126,6 +127,12 @@ const scenarios = {
     const ran = await use("Bash", { command: "node tweak.js" }, () => put(".claude/settings.local.json", '{ "disableAllHooks": true }'));
     speak(ran.blocked && !existsSync(here(".claude/settings.local.json")) ? "ajustes devueltos" : "ajustes quedan");
     await stop();
+  },
+  async revisor() {
+    put("src/runner.ts", ONE_USE);
+    speak((await stop()) ? "revisor bloqueó" : "revisor dejó pasar");
+    put("src/runner.ts", "export const runner = { run() {} };\n");
+    speak((await stop()) ? "cierre bloqueado" : "cierre limpio");
   },
   async dependencia() {
     const manifest = JSON.parse(readFileSync(here("package.json"), "utf8"));
@@ -193,7 +200,23 @@ async function turn(content) {
   return finish();
 }
 
-readline.createInterface({ input: process.stdin }).on("line", (line) => {
+function review(asked) {
+  let file = "";
+  const findings = [];
+  for (const line of asked.split("\n")) {
+    if (line.startsWith("+++ b/")) file = line.slice(6);
+    if (line.startsWith("+export interface OnlyOne")) {
+      findings.push({ rule: "S1", file, quote: line.slice(1), why: "OnlyOne has a single implementation.", fix: "Drop the interface and use the object.", confidence: "high" });
+    }
+  }
+  process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: false, structured_output: { findings } }) + "\n");
+}
+
+if (argv.includes("--json-schema")) {
+  let asked = "";
+  process.stdin.on("data", (chunk) => (asked += chunk));
+  process.stdin.on("end", () => review(asked));
+} else readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.type === "control_request" && message.request.subtype === "initialize") {
     canon = Boolean(message.request.appendSystemPrompt);

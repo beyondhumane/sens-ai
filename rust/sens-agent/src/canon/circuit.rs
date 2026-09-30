@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use sens_canon::judge::{judge_change, judge_command, judge_turn};
 use sens_canon::orphans;
+use sens_canon::review::Review;
 use sens_canon::verdict::{Change, Finding, Rule, Severity, Verdict};
 use sens_index::index::Index;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ use serde_json::{Value, json};
 
 use super::checkpoint::{Checkpoints, Restored, Tree};
 use super::keeper::{Keeper, Project};
+use super::review::Reviewer;
 use super::state::{self, State};
 use crate::chat::Event;
 
@@ -101,6 +103,7 @@ fn commits(command: &str) -> bool {
     })
 }
 
+#[derive(Default)]
 struct Judged {
     blocks: Vec<Finding>,
     notes: Vec<Finding>,
@@ -112,11 +115,12 @@ pub struct Circuit {
     session: String,
     keeper: Arc<Keeper>,
     checkpoints: Option<Checkpoints>,
+    reviewer: Option<Arc<dyn Reviewer>>,
 }
 
 impl Circuit {
     pub fn new(work: &Path, session: &str, keeper: Arc<Keeper>, resumed: bool) -> Circuit {
-        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work) };
+        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None };
         if !resumed {
             circuit.keeper.exclusive(&circuit.work, || {
                 let mut state = State::load(&circuit.work);
@@ -125,6 +129,10 @@ impl Circuit {
             });
         }
         circuit
+    }
+
+    pub fn reviewed_by(self, reviewer: Arc<dyn Reviewer>) -> Circuit {
+        Circuit { reviewer: Some(reviewer), ..self }
     }
 
     pub fn answer(&self, voice: &dyn Voice, callback: &str, input: &Value) -> Value {
@@ -389,7 +397,19 @@ impl Circuit {
         let dead: orphans::Dead = if state.dead_known { state.dead.iter().cloned().collect() } else { orphans::dead(&project.index) };
         let (verdict, _) = judge_turn(&project.index, &changes, &dead, &state::rules(&self.work), &state::exceptions(&self.work));
         let changed: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-        let judged = self.weigh(voice, verdict, |finding| self.put_back(&approved, &finding.file, &changed));
+        let mut judged = self.weigh(voice, verdict, |finding| self.put_back(&approved, &finding.file, &changed));
+        if judged.blocks.is_empty() && !provisional {
+            match self.reviewed(voice, &project, &state.request, &approved, &now) {
+                Ok(reviewed) => {
+                    judged.blocks = reviewed.blocks;
+                    judged.notes.extend(reviewed.notes);
+                }
+                Err(reason) => {
+                    let _ = state.save(&self.work);
+                    return Audited::Unjudged(format!("Sens's reviewer could not judge this turn: {reason}"));
+                }
+            }
+        }
         if judged.blocks.is_empty() {
             if provisional {
                 let _ = state.save(&self.work);
@@ -420,6 +440,20 @@ impl Circuit {
         state.held = Some(judged.blocks.clone());
         let _ = state.save(&self.work);
         Audited::Held(judged)
+    }
+}
+
+impl Circuit {
+    fn reviewed(&self, voice: &dyn Voice, project: &Project, request: &str, approved: &Tree, now: &Tree) -> Result<Judged, String> {
+        let (Some(reviewer), Some(checkpoints)) = (&self.reviewer, &self.checkpoints) else {
+            return Ok(Judged::default());
+        };
+        let diff = checkpoints.diff(approved, now)?;
+        let review = Review::of(&project.index, &project.catalog, request, &diff);
+        let findings = review.findings(&reviewer.review(&review.prompt())?);
+        voice.say(Event::Canon { stage: "reviewed".into(), findings: findings.clone(), suggestions: Vec::new() });
+        let verdict = state::exceptions(&self.work).filter(Verdict { findings });
+        Ok(self.weigh(voice, verdict, |_| false))
     }
 }
 
@@ -722,6 +756,54 @@ mod tests {
         let state = State::load(&root);
         assert_eq!(state.approved, state.end);
         assert_eq!(ear.stages(), ["pending", "passed"]);
+    }
+
+    struct Scripted(Result<Value, String>);
+
+    impl Reviewer for Scripted {
+        fn review(&self, prompt: &str) -> Result<Value, String> {
+            assert!(prompt.contains("+import { totals }"), "{prompt}");
+            self.0.clone()
+        }
+    }
+
+    fn reviewed(name: &str, answer: Result<Value, String>) -> (PathBuf, Circuit, Ear) {
+        let (root, keeper) = project(name);
+        let circuit = Circuit::new(&root, "s1", keeper, false).reviewed_by(Arc::new(Scripted(answer)));
+        let ear = Ear::default();
+        circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
+        std::fs::write(root.join("src/report.ts"), REUSES).unwrap();
+        (root, circuit, ear)
+    }
+
+    #[test]
+    fn a_reviewer_that_cannot_answer_holds_the_turn_for_the_person() {
+        let (root, circuit, ear) = reviewed("review-down", Err("no network".into()));
+        assert_eq!(circuit.answer(&ear, CLOSE, &close()), json!({}));
+        assert_eq!(ear.stages(), ["held"]);
+        let state = State::load(&root);
+        assert_ne!(state.approved, state.end);
+    }
+
+    #[test]
+    fn a_medium_finding_is_told_and_the_turn_is_approved() {
+        let medium = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "medium" }] });
+        let (root, circuit, ear) = reviewed("review-medium", Ok(medium));
+        let told = circuit.answer(&ear, CLOSE, &close());
+        assert_eq!(decision(&told), "allow", "{told}");
+        assert_eq!(ear.stages(), ["reviewed", "passed"]);
+        let state = State::load(&root);
+        assert_eq!(state.approved, state.end);
+    }
+
+    #[test]
+    fn a_high_finding_the_person_accepted_before_no_longer_stops() {
+        let high = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "high" }] });
+        let (root, circuit, ear) = reviewed("review-high", Ok(high));
+        assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "block");
+        let key = "S4:src/report.ts:totals([], 2)".to_string();
+        state::save_exceptions(&root, &sens_canon::verdict::Exceptions { keys: [key].into() }).unwrap();
+        assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "allow");
     }
 
     #[test]
