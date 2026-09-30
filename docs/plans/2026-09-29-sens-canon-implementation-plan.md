@@ -476,6 +476,28 @@ tres tareas difíciles están escritas y validadas sobre Sens en `7eb9269`
   debe dar S1.
 - Repetir el piloto de C2. **Se pide antes.**
 
+**Estado el 2026-09-30.** Construido y probado, falta repetir C2 con el revisor.
+- `sens-canon/src/review.md` y `review.rs`: instrucciones S1–S7, esquema, entrada
+  y validación. Un hallazgo sin cita literal, con regla desconocida o con un S7
+  que cita algo fuera de los candidatos se descarta; `high` bloquea y `medium` es
+  nota.
+- Los candidatos de S7 se buscan por función: cada función nueva o tocada consulta
+  el índice con sus propias palabras, y las líneas sueltas juntas, hasta 5 por
+  fichero. Un formateador de tamaños hecho a mano trae `weigh` aunque el mismo
+  cambio añada marcado sin relación.
+- `sens-agent/src/canon/review.rs`: `Reviewer` intercambiable; `Haiku` lo lanza con
+  `--safe-mode`, sin herramientas, `--json-schema` y `--max-turns 3` (la salida
+  estructurada gasta un turno), y lo corta a los 180 s. El motor usa el mismo
+  programa que para el chat, así que el Claude simulado también hace de revisor.
+- En el cierre, solo si las reglas deterministas pasan y no queda trabajo en
+  segundo plano. Sus bloqueos cuentan como rondas; si no responde, el turno queda
+  retenido.
+- Pruebas: citas inventadas, reglas desconocidas, confianza media, S7 con cita
+  falsa, revisor que no responde, excepción aceptada, un escenario de extremo a
+  extremo (una interfaz de un solo uso se para y la corrección pasa) y la prueba
+  en vivo con Haiku, que pasa: nombra S1 y deja en paz un arreglo limpio, unos 7 s
+  por revisión.
+
 ## Fase 6 — La app, el registro y la interfaz
 
 Antes de tocar la interfaz se lee entera `docs/brand/identity.md`.

@@ -241,15 +241,19 @@ Nada pedido explícitamente en el mensaje de la persona cuenta como sobrante.
 ### El revisor
 
 - Se lanza como el título de sesión (`title.rs`): `claude -p --model haiku
-  --output-format json --json-schema <esquema> --tools "" --strict-mcp-config
-  --no-session-persistence --settings {"disableAllHooks":true}` con un
-  `--system-prompt` propio.
+  --output-format json --json-schema <esquema> --max-turns 3 --tools ""
+  --strict-mcp-config --safe-mode --no-session-persistence --settings
+  {"disableAllHooks":true}` con un `--system-prompt` propio. La respuesta llega en
+  `structured_output`; entregarla gasta un turno, por eso `--max-turns 3`. Si no
+  responde en 180 s se corta y el turno queda retenido.
 - Recibe la petición de la persona, el diff del turno, para cada símbolo tocado lo
   que dice el índice (quién lo usa, qué se le parece) y las dependencias
-  instaladas. Además, los candidatos de S7: para cada fichero cambiado, los
-  símbolos de otros ficheros que más se parecen a las líneas añadidas según la
-  búsqueda del índice, usando como consulta las palabras del código nuevo, que ya
-  están en inglés, con firma, `fichero:línea`, usos y 3–5 líneas.
+  instaladas. Además, los candidatos de S7: para cada fichero cambiado, hasta 5
+  símbolos de otros ficheros que el código nuevo no usa ya, buscados con las
+  palabras de cada función nueva o tocada por separado (y las líneas sueltas
+  juntas), que ya están en inglés, con firma, `fichero:línea`, usos y 5 líneas.
+  Estas consultas conservan lo que va dentro de `${…}` y normalizan la longitud
+  con 0,3 en vez de 0,75, para no castigar las utilidades muy usadas.
 - Devuelve `{ findings: [{ rule, file, quote, why, fix, confidence }] }`, con
   `rule` en S1–S6 y `confidence` en `high` o `medium`.
 - Sens descarta todo hallazgo cuyo `quote` no aparezca literal en las líneas
