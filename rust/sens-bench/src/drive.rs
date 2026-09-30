@@ -24,6 +24,7 @@ pub struct Turn {
     pub asked: u64,
     pub held: bool,
     pub circuit: Vec<String>,
+    pub findings: Vec<Finding>,
     pub lingered: bool,
 }
 
@@ -89,7 +90,14 @@ fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event, allowed: &[S
             turn.held = true;
             turn.circuit.push("held".into());
         }
-        Event::Canon { stage, findings, suggestions } => turn.circuit.extend(heard(&stage, &findings, suggestions.len())),
+        Event::Canon { stage, findings, suggestions } => {
+            turn.circuit.extend(heard(&stage, &findings, suggestions.len()));
+            for finding in findings {
+                if !turn.findings.iter().any(|known| known.key == finding.key) {
+                    turn.findings.push(finding);
+                }
+            }
+        }
         Event::Finished { ok, millis, turns, tokens_in, tokens_out, error, .. } => {
             turn.finished = true;
             turn.ok = ok;

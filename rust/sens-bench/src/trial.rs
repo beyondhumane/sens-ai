@@ -74,6 +74,8 @@ pub struct Run {
     #[serde(default)]
     pub circuit: Vec<String>,
     #[serde(default)]
+    pub findings: Vec<sens_canon::verdict::Finding>,
+    #[serde(default)]
     pub lingered: bool,
     #[serde(default)]
     pub variant: String,
@@ -179,6 +181,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     run.held = turn.held;
     run.circuit = turn.circuit;
     run.lingered = turn.lingered;
+    run.findings = turn.findings;
     if !turn.error.is_empty() {
         run.error = turn.error;
     }
