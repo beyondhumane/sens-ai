@@ -1,0 +1,39 @@
+diff --git a/rust/sens-app/ui/src/bar/choices.ts b/rust/sens-app/ui/src/bar/choices.ts
+index db7790e..a91e3b7 100644
+--- a/rust/sens-app/ui/src/bar/choices.ts
++++ b/rust/sens-app/ui/src/bar/choices.ts
+@@ -1,4 +1,5 @@
+ import type { BarProject, SessionSummary } from "../ipc/types";
++import { plain } from "../features/market/search.js";
+ import { stem } from "../shared/format.js";
+ 
+ export const MOST_SESSIONS = 8;
+@@ -10,8 +11,6 @@ export type Choice =
+   | { kind: "session"; root: string; name: string; id: string; title: string }
+   | { kind: "project"; root: string; name: string };
+ 
+-const lower = (text: string) => text.toLocaleLowerCase();
+-
+ const nameOf = (projects: BarProject[], root: string) => projects.find((one) => one.root === root)?.name ?? stem(root);
+ 
+ const recent = (sessions: Sessions, root: string) =>
+@@ -22,7 +21,7 @@ const sessionIn = (root: string, name: string) => (summary: SessionSummary): Cho
+ const projectOf = (one: BarProject): Choice => ({ kind: "project", root: one.root, name: one.name });
+ 
+ export function choicesOf(projects: BarProject[], sessions: Sessions, root: string, filter: string): Choice[] {
+-  const wanted = lower(filter.trim());
++  const wanted = plain(filter.trim());
+   if (!wanted) {
+     const here: Choice[] = root ? [{ kind: "new", root, name: nameOf(projects, root) }, ...recent(sessions, root).slice(0, MOST_SESSIONS).map(sessionIn(root, nameOf(projects, root)))] : [];
+     return [...here, ...projects.filter((one) => one.root !== root).map(projectOf)];
+@@ -30,8 +29,8 @@ export function choicesOf(projects: BarProject[], sessions: Sessions, root: stri
+   const ordered = [...projects].sort((one, other) => Number(other.root === root) - Number(one.root === root));
+   const said = ordered.flatMap((one) => recent(sessions, one.root).map(sessionIn(one.root, one.name)));
+   return [
+-    ...said.filter((choice) => choice.kind === "session" && lower(choice.title).includes(wanted)),
+-    ...ordered.filter((one) => lower(one.name).includes(wanted)).map(projectOf),
++    ...said.filter((choice) => choice.kind === "session" && plain(choice.title).includes(wanted)),
++    ...ordered.filter((one) => plain(one.name).includes(wanted)).map(projectOf),
+   ];
+ }
+ 

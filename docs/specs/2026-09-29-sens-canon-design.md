@@ -1,6 +1,6 @@
 # El Canon: el motor que decide qué código entra
 
-Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 4 construidas, C2 del piloto medido, faltan las tareas difíciles.
+Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 5 construidas y medidas en el piloto y en las tareas difíciles.
 Ámbito: `rust/sens-index` (nuevo), `rust/sens-canon` (nuevo), `rust/sens-bench`
 (nuevo), `rust/sens-agent`, `rust/sens-app`, `rust/sens-app/ui`.
 
@@ -674,6 +674,58 @@ comprueban antes, con los tests y los tipos del proyecto.
 
 Cada una se validó: en la base los tests del proyecto pasan y los ocultos fallan;
 con una solución de referencia de 2 a 7 líneas pasan todos y los tipos compilan.
+
+### Resultados en las tareas difíciles (2026-09-30)
+
+Sonnet 5.5 medio, `--safe-mode`, 3 repeticiones por brazo, 45 ejecuciones, todas
+válidas. `C2` es el circuito con la búsqueda por nombre y sin copias pequeñas;
+`C2·v2` añade la búsqueda por lo que hace el código, las copias pequeñas y
+`Consider`; `C2·v3` añade el revisor. Resultados en
+`bench/results/2026-09-30-hard/`.
+
+| Brazo | `bar-accents`: usa `plain` | `shelf-size`: usa `weigh` | `file-language`: código neto | Tests añadidos (mediana por tarea) |
+| --- | --- | --- | --- | --- |
+| C0 | 0/3 | 3/3 | 35 | 8 · 10 · 31 |
+| C1 | 3/3 | 3/3 | 31 | 0 · 0 · 30 |
+| C2 | 0/3 | 3/3 | 31 | 0 · 0 · 0 |
+| C2·v2 | 3/3 | 3/3 | 27 | 0 · 0 · 0 |
+| C2·v3 | 3/3 | 3/3 | 12 | 0 · 0 · 0 |
+
+Lo que dicen:
+
+- **La primera versión de C2 empeoraba lo que arreglaba C1.** Con 8 sugerencias
+  sin relación, el modelo no buscó y reescribió `plain` a mano las tres veces; con
+  el Canon solo como texto la importó las tres. Una lista equivocada de lo que ya
+  existe da una falsa seguridad. Con la búsqueda nueva `plain` va entre las
+  sugerencias y C2·v2 y C2·v3 la usan 3/3, sin que haga falta parar nada.
+- **`weigh` no discrimina**: la petición dice «como la app escribe los tamaños» y
+  todos los brazos la encuentran.
+- **En `file-language` las diferencias no se pueden atribuir al circuito**: el
+  revisor no dijo nada en esas tres ejecuciones, y la variación entre repeticiones
+  (12 a 36 líneas) viene de si el modelo decide leer el shebang también en el
+  panel de cambios. Nadie reescribió la tabla de lenguajes; nueve de quince
+  repitieron a mano la última línea de `titleOf` en vez de llamarla, algo que ni
+  las copias ni el revisor marcaron.
+- **Duplicación añadida: cero en todos los brazos**, medida ya solo sobre las
+  líneas que añade el turno. jscpd no ve copias de menos de 30 tokens, así que las
+  reescrituras de `plain` solo aparecen en la columna de reutilización.
+- **Tokens**: C2·v3 − C0 = −307 750 [−414 323, −92 011] sumando las tres tareas;
+  incluyen lecturas de caché.
+- **Los brazos de C2 no escriben tests** (0 en las quince ejecuciones), cuando C0
+  los escribe en todas. Ninguna petición los pide y el Canon no dice nada de
+  escribirlos; no es un recorte (no se quita ninguno), pero sí una diferencia de
+  práctica que la fase 7 tiene que entender antes de dar el Canon por bueno.
+- **El revisor**: en 9 ejecuciones, 3 hallazgos, todos S7 sobre `joined`, un
+  ayudante privado de `Clip.tsx` que hace `[…].filter(Boolean).join(" · ")`. Es
+  cierto, pero ese modismo aparece en línea en diez sitios del proyecto: es su
+  estilo. Dos veces fue nota y una bloqueó; el modelo movió `joined` a
+  `shared/format.js` y la compartió, buen código pero fuera del alcance del turno.
+  Desde entonces un S7 que cita algo privado es siempre nota, y el revisor sabe
+  que un modismo repetido es estilo. Repetir el revisor sobre la misma ejecución
+  (`cargo run --example review_run`) dio `high` donde la ejecución real dio
+  `medium`: su confianza no es estable y por eso las reglas que deciden si algo
+  bloquea no pueden depender solo de ella.
+- **Coste del revisor**: entre 7 y 15 s por cierre con código.
 
 ## Registro
 

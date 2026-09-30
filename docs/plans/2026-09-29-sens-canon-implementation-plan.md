@@ -449,7 +449,12 @@ planeado:
 **C2 del piloto, hecho el 2026-09-30.** 9/9 válidas, el circuito actuó en todas
 (Canon, ficha y lo que ya existe) sin bloquear nada; resultados en la spec. Las
 tres tareas difíciles están escritas y validadas sobre Sens en `7eb9269`
-(`base` y `accept_into` en `task.toml`); falta su tanda de C0, C1 y C2.
+(`base` y `accept_into` en `task.toml`).
+
+**Tareas difíciles, hecho el 2026-09-30.** 27 ejecuciones de C0, C1 y C2 y 9 de
+C2·v2 tras rehacer la búsqueda; una de C0 se repitió porque el banco la contaminó
+(un comando del modelo que quedó colgado terminó después del turno al matarlo a
+mano; desde entonces el banco detiene la sesión entera). Resultados en la spec.
 
 ## Fase 5 — El revisor
 
@@ -476,7 +481,10 @@ tres tareas difíciles están escritas y validadas sobre Sens en `7eb9269`
   debe dar S1.
 - Repetir el piloto de C2. **Se pide antes.**
 
-**Estado el 2026-09-30.** Construido y probado, falta repetir C2 con el revisor.
+**Estado el 2026-09-30.** Hecha. C2 con el revisor (C2·v3) medido en las tres
+tareas difíciles: 9/9 válidas, `plain` 3/3, `weigh` 3/3; resultados y la regla que
+salió de ellos (un S7 que cita algo privado es nota) en la spec. El banco guarda
+los hallazgos completos de cada ejecución para medir la precisión del revisor.
 - `sens-canon/src/review.md` y `review.rs`: instrucciones S1–S7, esquema, entrada
   y validación. Un hallazgo sin cita literal, con regla desconocida o con un S7
   que cita algo fuera de los candidatos se descarta; `high` bloquea y `medium` es
