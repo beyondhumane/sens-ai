@@ -134,7 +134,7 @@ html[data-motion="reduce"] .replay {
   initial-value: 0px;
 }
 
-:root[data-theming] :not(.theme, .theme *) {
+:root[data-theming] :not(.theme-icon *) {
   transition: none;
 }
 

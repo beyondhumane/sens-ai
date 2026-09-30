@@ -163,7 +163,7 @@ html:not([data-js]) .nav {
   place-items: center;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-control), scale var(--dur-fast) var(--ease-control);
+  transition: background-color var(--dur-fast) var(--ease-control);
 }
 
 .icon-button:hover {
@@ -176,10 +176,6 @@ html:not([data-js]) .nav {
 
 .menu > summary::-webkit-details-marker {
   display: none;
-}
-
-.theme:active {
-  scale: 0.92;
 }
 
 html:not([data-js]) .theme {
