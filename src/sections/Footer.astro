@@ -1,0 +1,22 @@
+---
+import { links } from "../content/site";
+
+const items = [
+  { label: "MIT licence", href: links.license },
+  { label: "Releases", href: links.releases },
+  { label: "Issues", href: links.issues },
+  { label: "README", href: links.readme },
+];
+---
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <nav class="footer-links" aria-label="Project">
+      {items.map((item) => <a href={item.href}>{item.label}</a>)}
+    </nav>
+    <p class="footer-note">
+      Sens is an independent project, not affiliated with or endorsed by Anthropic. Claude and Claude Code are trademarks of
+      Anthropic.
+    </p>
+  </div>
+</footer>

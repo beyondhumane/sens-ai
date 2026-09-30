@@ -1,0 +1,71 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+import type { Step } from "../content/session";
+import Code from "./Code.astro";
+
+interface Props {
+  step: Step;
+  open?: boolean;
+}
+
+const { step, open = false } = Astro.props;
+const seconds = `${step.seconds.toFixed(1)} s`;
+---
+
+{
+  step.kind === "thought" ? (
+    <div class="thought" data-step={step.id} data-live="false">
+      <div class="thought-head">
+        <span class="thought-icon">
+          <Icon paths={appIcons.thought} size={16} stroke={1.4} />
+        </span>
+        <span class="thought-verb">Thought</span>
+        <span class="thought-title">{step.title}</span>
+        <span class="thought-time">{seconds}</span>
+        <span class="thought-end" />
+      </div>
+    </div>
+  ) : (
+    <div class="step" data-step={step.id} data-state="done" data-edits={step.kind === "edit" ? "" : undefined} data-open={open ? "true" : "false"}>
+      <div class="step-head">
+        <span class="step-icon">
+          <Icon paths={appIcons[step.kind]} size={16} />
+        </span>
+        <span class="step-verb">{{ read: "Read", search: "Search", run: "Run", edit: "Edit" }[step.kind]}</span>
+        {step.kind === "read" && <span class="step-target mono">{step.path}</span>}
+        {step.kind === "search" && <span class="step-target mono">{step.query}</span>}
+        {step.kind === "edit" && (
+          <span class="step-target mono" data-part="target" data-landed="false">
+            {step.path}
+          </span>
+        )}
+        {step.kind === "run" && (
+          <span class="step-target mono">
+            <Code code={step.command} lang="shellscript" />
+          </span>
+        )}
+        {step.kind === "read" && <span class="step-meta">{step.meta}</span>}
+        {step.kind === "search" && <span class="step-meta">{step.meta}</span>}
+        {step.kind === "edit" && <span class="step-meta">{step.minus > 0 ? `+${step.plus} −${step.minus}` : `+${step.plus}`}</span>}
+        {step.kind === "run" && <span class="step-meta">{seconds}</span>}
+        <span class="step-state" />
+      </div>
+      {step.kind === "run" && (
+        <div class="step-body" data-part="step-body">
+          <div class="step-inner">
+            <div class="terminal">
+              <div class="terminal-command">
+                <span class="prompt">$</span>
+                <span class="command">
+                  <Code code={step.command} lang="shellscript" />
+                </span>
+              </div>
+              <pre class="terminal-output">{step.output.map((line) => <span class="line" data-part="output-line">{line.map((segment) => (segment.tone ? <span data-tone={segment.tone}>{segment.text}</span> : segment.text))}</span>)}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

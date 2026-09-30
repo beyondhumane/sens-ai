@@ -1,0 +1,72 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+import { changes, totalsOf } from "../content/session";
+import Code from "./Code.astro";
+
+interface Props {
+  open?: string;
+}
+
+const { open = "header" } = Astro.props;
+const totals = totalsOf(changes);
+const kinds = { " ": "", "+": "add", "−": "del" } as const;
+---
+
+<section class="tool" data-part="changes">
+  <div class="code-head">
+    <span class="tool-name">Changes</span>
+    <span class="marks" data-part="totals">
+      <span class="files">{totals.files} files</span>
+      <span class="plus">+{totals.plus}</span>
+      <span class="minus">−{totals.minus}</span>
+    </span>
+    <span class="code-tools">
+      <span class="icon-btn"><Icon paths={appIcons.reload} size={14} /></span>
+      <span class="icon-btn"><Icon paths={appIcons.shut} size={14} stroke={1.8} /></span>
+    </span>
+  </div>
+  <div class="tool-body">
+    <p class="none" data-part="clean">No changes since the last commit.</p>
+    {
+      changes.map((change) => (
+        <div class="change" data-change={change.id} data-open={change.id === open ? "true" : "false"}>
+          <div class="change-head" data-part="change-head" data-landed="false">
+            <span class="chev">
+              <Icon paths={appIcons.chevronRight} size={16} />
+            </span>
+            <span class="state">{change.state}</span>
+            <span class="glyph">
+              <img src={`/file-icons/${change.icon}.svg`} width="16" height="16" alt="" />
+            </span>
+            <span class="name" data-part="change-name">
+              {change.name}
+            </span>
+            <span class="dirname">{change.dir}</span>
+            <span class="marks">
+              <span class="plus">+{change.plus}</span>
+              <span class="minus">−{change.minus}</span>
+            </span>
+          </div>
+          {change.rows.length > 0 && (
+            <div class="change-body">
+              <div class="diff">
+                <div class="lines">
+                  {change.rows.map((row) => (
+                    <div class={`row ${kinds[row.mark]}`} data-part="diff-row">
+                      <span class="num">{row.num}</span>
+                      <span class="mark">{row.mark}</span>
+                      <span class="src">
+                        <Code code={row.src} lang="tsx" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</section>

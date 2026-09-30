@@ -1,0 +1,39 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+import { session } from "../content/session";
+
+const { knobs } = session;
+const circle = 2 * Math.PI * 6;
+---
+
+<div class="composer">
+  <div class="workspace" data-part="chips">
+    <span class="chipbtn"><Icon paths={appIcons.folder} size={13} stroke={1.8} /><span>{session.project}</span></span>
+    <span class="chipbtn"><Icon paths={appIcons.branch} size={13} stroke={1.8} /><span>{session.branch}</span></span>
+  </div>
+  <div class="box">
+    <span class="round"><Icon paths={appIcons.attach} size={15} stroke={1.7} /></span>
+    <span class="round"><Icon paths={appIcons.dictate} size={15} stroke={1.7} /></span>
+    <span class="placeholder">Ask for anything · @ for a file, / for a command</span>
+    <span class="round send"><Icon paths={appIcons.send} size={16} stroke={2} /></span>
+  </div>
+  <div class="under">
+    <span class="knob">{knobs.model}<Icon paths={appIcons.caret} size={11} stroke={2.4} /></span>
+    <span class="knob">{knobs.mode}<Icon paths={appIcons.caret} size={11} stroke={2.4} /></span>
+    <span class="knobs-right">
+      <span class="meter">
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+          <circle class="meter-track" cx="8" cy="8" r="6"></circle>
+          <circle class="meter-fill" cx="8" cy="8" r="6" stroke-dasharray={`${(circle * knobs.context) / 100} ${circle}`} transform="rotate(-90 8 8)"></circle>
+        </svg>
+        {knobs.context}%
+      </span>
+      <span class="toggle">
+        <Icon paths={appIcons.thought} size={18} stroke={1.4} />
+        <span class="toggle-track"><span class="toggle-knob"></span></span>
+      </span>
+      <span class="knob">{knobs.effort}<Icon paths={appIcons.caret} size={11} stroke={2.4} /></span>
+    </span>
+  </div>
+</div>

@@ -1,0 +1,45 @@
+---
+import "../styles/tokens.css";
+import "../styles/base.css";
+import "../styles/product.css";
+import brand from "../brand/brand.json";
+import { rootCss } from "../lib/root";
+import { pageColors, THEME_KEY } from "../motion/theme";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content={brand.palette.paper} />
+    <script is:inline define:vars={{ key: THEME_KEY, colors: pageColors }}>
+      let chosen = null;
+      try {
+        chosen = localStorage.getItem(key);
+      } catch {
+        chosen = null;
+      }
+      const system = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      const theme = chosen === "dark" || chosen === "light" ? chosen : system;
+      document.documentElement.dataset.theme = theme;
+      document.querySelector('meta[name="theme-color"]').setAttribute("content", colors[theme]);
+    </script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+    <style is:inline set:html={rootCss()}></style>
+    <slot name="head" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

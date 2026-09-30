@@ -1,0 +1,26 @@
+---
+import brand from "../brand/brand.json";
+
+interface Props {
+  id: string;
+  size: number;
+  micro?: boolean;
+  class?: string;
+}
+
+const { id, size, micro = false, class: className } = Astro.props;
+const { mark } = brand;
+const clip = `mark-${id}`;
+---
+
+<svg class={className} width={size} height={size} viewBox={`0 0 ${mark.size} ${mark.size}`} aria-hidden="true" focusable="false">
+  <defs>
+    <clipPath id={clip}>
+      <rect width={mark.size} height={mark.size} rx={mark.radius}></rect>
+    </clipPath>
+  </defs>
+  <g clip-path={`url(#${clip})`}>
+    <rect width={mark.size} height={mark.size} fill="var(--mark-body)"></rect>
+    <path d={mark.cut} fill="none" stroke="var(--mark-cut)" stroke-width={micro ? mark.microCutWidth : mark.cutWidth} stroke-linecap="round"></path>
+  </g>
+</svg>

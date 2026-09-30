@@ -1,0 +1,31 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+import { secondsOf, steps, tallyOf } from "../content/session";
+import Step from "./Step.astro";
+
+interface Props {
+  open?: boolean;
+  openStep?: string;
+  only?: readonly string[];
+}
+
+const { open = false, openStep, only } = Astro.props;
+const shown = only ? steps.filter((step) => only.includes(step.id)) : steps;
+---
+
+<div class="run" data-part="run" data-open={open ? "true" : "false"}>
+  <div class="run-head" data-part="run-head">
+    <span class="run-icon"><Icon paths={appIcons.chevronRight} size={16} /></span>
+    <span class="run-verb">Worked</span>
+    <span class="run-tally">{tallyOf(steps)}</span>
+    <span class="run-time">{secondsOf(steps)}</span>
+    <span class="run-state"></span>
+  </div>
+  <div class="run-body" data-part="run-body">
+    <div class="run-steps">
+      <span class="run-line" data-part="run-line"></span>
+      {shown.map((step) => <Step step={step} open={step.id === openStep} />)}
+    </div>
+  </div>
+</div>

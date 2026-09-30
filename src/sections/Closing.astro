@@ -1,0 +1,37 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import wordmark from "../brand/wordmark.svg?raw";
+import { siteIcons } from "../content/icons";
+import { megabytes, type Release } from "../content/release";
+import { links } from "../content/site";
+import data from "../data/release.json";
+
+const release = data as Release;
+const needs = [
+  release.version && `v${release.version}`,
+  release.installer && megabytes(release.installer.bytes),
+  "Windows 10 or 11",
+  "x64",
+  "WebView2",
+  "A Claude account",
+]
+  .filter(Boolean)
+  .join(" · ");
+---
+
+<section class="closing" aria-labelledby="closing-title" data-closing>
+  <div class="wrap closing-inner">
+    <h2 class="closing-title" id="closing-title">Give Claude Code a window.</h2>
+    <div class="actions">
+      <Download label="Download for Windows" />
+      <a class="link" href={links.repo}>Explore on GitHub <Icon paths={siteIcons.arrow} size={18} /></a>
+    </div>
+    <p class="mono">{needs}</p>
+    <p class="closing-note">
+      The installer isn't code-signed yet, so Windows SmartScreen will warn you. Compare it with the SHA-256 in the{" "}
+      <a href={links.latest}>release notes</a>.
+    </p>
+  </div>
+  <div class="wordmark" aria-hidden="true" set:html={wordmark} />
+</section>

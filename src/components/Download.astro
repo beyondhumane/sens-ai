@@ -1,0 +1,37 @@
+---
+import Icon from "./Icon.astro";
+import { siteIcons } from "../content/icons";
+import { megabytes, type Release } from "../content/release";
+import data from "../data/release.json";
+
+interface Props {
+  label: string;
+  size?: "small" | "large";
+  class?: string;
+}
+
+const { label, size = "large", class: className } = Astro.props;
+const release = data as Release;
+const installer = release.installer;
+const version = release.version ? ` ${release.version}` : "";
+const weight = installer ? `, ${megabytes(installer.bytes)} installer` : "";
+const direct = installer?.url ?? release.page;
+---
+
+<a
+  class:list={["button", size === "small" && "button-small", "only-wide", className]}
+  href={direct}
+  aria-label={`${label}: Sens${version} for Windows${weight}`}
+  data-download
+>
+  <span class="button-icon"><Icon paths={siteIcons.download} size={20} /></span>
+  <span>{label}</span>
+</a>
+<a
+  class:list={["button", size === "small" && "button-small", "only-cards", className]}
+  href={release.page}
+  aria-label={`${label}: the Sens${version} release on GitHub`}
+>
+  <span class="button-icon"><Icon paths={siteIcons.download} size={20} /></span>
+  <span>{label}</span>
+</a>

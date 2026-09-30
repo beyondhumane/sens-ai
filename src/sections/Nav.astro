@@ -1,0 +1,53 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import Mark from "../components/Mark.astro";
+import { siteIcons } from "../content/icons";
+import { links } from "../content/site";
+
+const items = [
+  { label: "Product", href: "#how-it-works", external: false },
+  { label: "GitHub", href: links.repo, external: true },
+];
+---
+
+<header class="nav" data-nav>
+  <div class="nav-inner wrap">
+    <a class="nav-home" href="#top" aria-label="Sens, home">
+      <Mark id="nav" size={28} />
+      <span class="nav-word" aria-hidden="true">sens</span>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      {
+        items.map((item) => (
+          <a class="nav-link" href={item.href}>
+            {item.label}
+            {item.external && <Icon paths={siteIcons.external} size={16} />}
+          </a>
+        ))
+      }
+    </nav>
+    <div class="nav-end">
+      <Download label="Download" size="small" />
+      <button class="icon-button theme" type="button" aria-label="Dark mode" aria-pressed="false" data-theme-toggle>
+        <Icon paths={siteIcons.theme} size={20} class="theme-icon" />
+      </button>
+      <details class="menu" data-menu>
+        <summary class="icon-button" aria-label="Menu">
+          <span class="menu-icon open"><Icon paths={siteIcons.menu} size={22} /></span>
+          <span class="menu-icon shut"><Icon paths={siteIcons.close} size={22} /></span>
+        </summary>
+        <div class="menu-sheet">
+          {
+            items.map((item, index) => (
+              <a href={item.href} style={`--i: ${index}`}>
+                {item.label}
+                <Icon paths={item.external ? siteIcons.external : siteIcons.arrow} size={20} />
+              </a>
+            ))
+          }
+        </div>
+      </details>
+    </div>
+  </div>
+</header>

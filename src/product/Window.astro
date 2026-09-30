@@ -1,0 +1,26 @@
+---
+import Changes from "./Changes.astro";
+import Composer from "./Composer.astro";
+import Thread from "./Thread.astro";
+import Topbar from "./Topbar.astro";
+
+interface Props {
+  id: string;
+  stage?: boolean;
+}
+
+const { id, stage = false } = Astro.props;
+---
+
+<div class="product" data-product data-stage={stage ? "" : undefined}>
+  <Topbar id={id} />
+  <div class="body">
+    <div class="chat">
+      <Thread />
+      <Composer />
+    </div>
+    <aside class="code">
+      <Changes />
+    </aside>
+  </div>
+</div>

@@ -1,0 +1,20 @@
+---
+import { tokensOf, type Language } from "../lib/code";
+
+interface Props {
+  code: string;
+  lang: Language;
+}
+
+const { code, lang } = Astro.props;
+const lines = tokensOf(code, lang);
+---
+
+{
+  lines.map((line, at) => (
+    <Fragment>
+      {line.map((token) => (token.color ? <span style={`color:${token.color}`}>{token.content}</span> : token.content))}
+      {at < lines.length - 1 ? "\n" : ""}
+    </Fragment>
+  ))
+}

@@ -1,0 +1,53 @@
+---
+import "../styles/page.css";
+import "../styles/motion.css";
+import Base from "../layouts/Base.astro";
+import Window from "../product/Window.astro";
+import Closing from "../sections/Closing.astro";
+import Demo from "../sections/Demo.astro";
+import Footer from "../sections/Footer.astro";
+import Hero from "../sections/Hero.astro";
+import Nav from "../sections/Nav.astro";
+---
+
+<Base
+  title="Sens · Claude Code, with everything in view"
+  description="A desktop app for Claude Code on Windows. Every step the agent takes on screen, with the project's files, changes, terminal and browser beside it. Open source, MIT."
+>
+  <script is:inline slot="head">
+    (() => {
+      const root = document.documentElement;
+      const asked = new URLSearchParams(location.search).get("motion");
+      const quiet = asked === "reduce" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+      root.dataset.js = "";
+      root.dataset.motion = quiet ? "reduce" : "full";
+      const solid = () => document.querySelector("[data-nav]")?.toggleAttribute("data-solid", scrollY > 8);
+      addEventListener("scroll", solid, { passive: true });
+      addEventListener("DOMContentLoaded", solid);
+    })();
+  </script>
+  <a class="skip" href="#main">Skip to content</a>
+  <Nav />
+  <main id="main">
+    <div class="scene" data-scene>
+      <div class="scene-back" aria-hidden="true" data-back>
+        <span class="focus" data-focus><span class="focus-mark" data-focus-mark></span></span>
+      </div>
+      <div class="scene-layer" aria-hidden="true" inert data-layer>
+        <div class="shot" data-shot>
+          <Window id="stage" stage />
+        </div>
+      </div>
+      <Hero />
+      <Demo />
+    </div>
+    <Closing />
+  </main>
+  <Footer />
+</Base>
+
+<script>
+  import { boot } from "../motion/boot";
+
+  boot();
+</script>

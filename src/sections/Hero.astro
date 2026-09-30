@@ -1,0 +1,64 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import wordmark from "../brand/wordmark.svg?raw";
+import { siteIcons } from "../content/icons";
+import { links } from "../content/site";
+import Crop from "../product/Crop.astro";
+import Window from "../product/Window.astro";
+import Request from "../product/Request.astro";
+import Run from "../product/Run.astro";
+import Answer from "../product/Answer.astro";
+
+const lines = [
+  ["Less", "noise."],
+  ["More", "sense."],
+];
+---
+
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <span class="hero-field" data-field aria-hidden="true"></span>
+  <div class="hero-shot" aria-hidden="true" inert>
+    <Window id="hero" />
+  </div>
+  <span class="scan" aria-hidden="true"></span>
+  <div class="wrap">
+    <div class="hero-copy">
+      <h1 class="display" id="hero-title">
+        {
+          lines.map((words, line) => (
+            <span class="line" style={`--line: ${line}`}>
+              {words.map((word, at) => (
+                <Fragment>
+                  <span class="word" style={`--word: ${line * 2 + at}`}>
+                    <span class="in">{word}</span>
+                  </span>
+                  {at === 0 ? " " : ""}
+                </Fragment>
+              ))}
+            </span>
+          ))
+        }
+      </h1>
+      <p class="lead" data-settle>Claude Code, with everything in view.</p>
+      <p class="label hero-label" data-settle>Open source · MIT · Windows 10 & 11</p>
+      <div class="actions" data-settle>
+        <Download label="Download for Windows" />
+        <a class="link" href={links.repo}>View on GitHub <Icon paths={siteIcons.arrow} size={18} /></a>
+      </div>
+      <p class="only-phone-note">Sens runs on Windows 10 and 11. Open this page on your PC to install it.</p>
+    </div>
+  </div>
+  <p class="sr-only">
+    Beside the headline, the Sens window shows a finished Claude Code session: the request at the top, the agent's work
+    folded into one line, the answer, and the changed files with their diff.
+  </p>
+  <div class="hero-crop" aria-hidden="true" inert>
+    <Crop id="hero" bar>
+      <Request />
+      <Run />
+      <Answer />
+    </Crop>
+  </div>
+  <div class="wordmark" aria-hidden="true" set:html={wordmark} />
+</section>
