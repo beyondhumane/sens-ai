@@ -10,6 +10,7 @@ use crate::task::Task;
 use crate::{git, measure, shell};
 
 pub const CONDITIONS: [Condition; 3] = [Condition::C0, Condition::C1, Condition::C2];
+pub const ISOLATED: &str = "--safe-mode";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Condition {
@@ -108,6 +109,7 @@ impl Plan<'_> {
             effort: self.effort.clone(),
             mode: "bypassPermissions".into(),
             canon: self.condition.canon(),
+            extra: vec![ISOLATED.into()],
             ..Settings::default()
         }
     }
@@ -208,6 +210,29 @@ mod tests {
         assert!("C3".parse::<Condition>().is_err());
         assert_eq!(Condition::C0.canon(), Canon::Off);
         assert_eq!(Condition::C2.canon(), Canon::Full);
+    }
+
+    #[test]
+    fn every_condition_runs_claude_code_without_the_person_s_own_customizations() {
+        let task = crate::task::Task {
+            id: "t".into(),
+            dir: PathBuf::new(),
+            prompt: String::new(),
+            language: String::new(),
+            setup: String::new(),
+            accept: String::new(),
+            check: String::new(),
+            format: String::new(),
+            reuse: Vec::new(),
+            allow: Vec::new(),
+        };
+        for condition in CONDITIONS {
+            let plan = Plan { task: &task, condition, rep: 1, model: "m".into(), effort: "e".into(), scratch: PathBuf::new(), diffs: PathBuf::new(), jscpd: PathBuf::new(), patience: Duration::ZERO };
+            let settings = plan.settings();
+            assert_eq!(settings.extra, [ISOLATED]);
+            assert_eq!(settings.canon, condition.canon());
+            assert_eq!(settings.mode, "bypassPermissions");
+        }
     }
 
     #[test]
