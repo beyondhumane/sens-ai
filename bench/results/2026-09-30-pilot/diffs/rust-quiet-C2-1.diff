@@ -1,0 +1,34 @@
+diff --git a/src/config.rs b/src/config.rs
+index 9c3690a..538a547 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1,6 +1,6 @@
+ use std::path::PathBuf;
+ 
+-const USAGE: &str = "usage: report <input> [--output <file.csv>]";
++const USAGE: &str = "usage: report <input> [--output <file.csv>] [--quiet]";
+ 
+ #[derive(Debug, Default, PartialEq)]
+ pub struct Config {
+@@ -19,6 +19,7 @@ pub fn parse(args: &[String]) -> Result<Config, String> {
+                 let path = rest.next().ok_or("--output needs a path")?;
+                 config.output = Some(PathBuf::from(path));
+             }
++            "--quiet" => config.quiet = true,
+             flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
+             path => input = Some(PathBuf::from(path)),
+         }
+diff --git a/src/main.rs b/src/main.rs
+index a4477ec..17269b8 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -28,6 +28,8 @@ fn run(args: &[String]) -> Result<(), String> {
+             .write_csv(&mut file)
+             .map_err(|error| format!("{}: {error}", path.display()))?;
+     }
+-    println!("{}", summary.line());
++    if !config.quiet {
++        println!("{}", summary.line());
++    }
+     Ok(())
+ }

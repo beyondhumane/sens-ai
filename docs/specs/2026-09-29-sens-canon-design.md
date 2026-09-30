@@ -1,6 +1,6 @@
 # El Canon: el motor que decide qué código entra
 
-Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 4 construidas, falta medir C2.
+Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 4 construidas, C2 del piloto medido, faltan las tareas difíciles.
 Ámbito: `rust/sens-index` (nuevo), `rust/sens-canon` (nuevo), `rust/sens-bench`
 (nuevo), `rust/sens-agent`, `rust/sens-app`, `rust/sens-app/ui`.
 
@@ -569,6 +569,49 @@ Lo que dice el piloto:
 Consecuencia para el plan: antes de medir C2 se añaden tres tareas difíciles sobre
 un repositorio real y grande en un commit fijado, y el piloto de C2 corre sobre
 las seis.
+
+### Piloto de C2 (2026-09-30)
+
+Las mismas tres tareas, el mismo modelo y el mismo aislamiento, con Sens completo.
+
+| Tarea | C2 |
+| --- | --- |
+| `py-slugs` | 3/3 válidas; `unicodedata` 3/3, 2 líneas netas de código y ningún test |
+| `rust-quiet` | 3/3 válidas; `config.quiet` 3/3, 5 líneas netas de código y 4 de test |
+| `ts-attachments` | 3/3 válidas; `formatBytes` 3/3 y `dayjs` 3/3, 9 líneas netas |
+
+Lo que hizo el circuito, leído en el estado de cada carpeta y en las
+transcripciones: en las nueve ejecuciones el modelo recibió el Canon, la ficha del
+proyecto y, con la primera palabra, lo que ya existe relacionado con la petición;
+ninguna escritura se bloqueó, ningún cierre necesitó otra ronda, nada quedó
+retenido y Sens no tuvo que preguntar nada. No había nada que corregir: en tareas
+donde el modelo ya reutiliza sin ayuda, el circuito no estorba.
+
+- Código, ficheros, dependencias y duplicación: idénticos a C0 y C1.
+- Tokens: C2 − C0 = −43 787 [−54 393, −13 960] sumando las tres tareas, el único
+  intervalo del piloto que no toca el cero. La explicación probable es que la
+  lista de lo que ya existe ahorra búsquedas, pero los tokens incluyen lecturas de
+  caché, así que no es todavía un ahorro de coste demostrado.
+- En `py-slugs` C2 no añadió tests (C0 y C1 añadieron 4 líneas). Ni la tarea ni el
+  Canon los piden; se vigila en las tareas difíciles.
+- El banco no guardaba lo que hacía el circuito en cada ejecución; desde aquí cada
+  ejecución lo anota (`circuit`) y el resumen lo cuenta.
+
+### Tareas difíciles
+
+Sobre el propio Sens en `7eb9269`, el commit anterior al trabajo del Canon: 412
+ficheros, 752 tests. Cada tarea parte de ese commit, instala sus dependencias y
+se juzga con tests ocultos que se colocan después del turno; las regresiones se
+comprueban antes, con los tests y los tipos del proyecto.
+
+| Tarea | Qué se pide | Lo que ya existe y dónde |
+| --- | --- | --- |
+| `sens-shelf-size` | El tamaño de cada artefacto en su tarjeta | `weigh` en `shared/format.js`, que escribe tamaños en los seis idiomas; la estantería no lo importa |
+| `sens-file-language` | El lenguaje del fichero en el visor y en el panel de cambios | `languageOf` y `titleOf` en `shared/syntax/languages.ts`, sobre la tabla que el proyecto genera desde `linguist-languages`; hay otra `languageOf` en `shared/i18n.ts` y otra `titleOf` en `bar/choices.ts` |
+| `sens-bar-accents` | Buscar en la barra sin distinguir acentos | `plain` en `features/market/search.js`, que la barra no importa |
+
+Cada una se validó: en la base los tests del proyecto pasan y los ocultos fallan;
+con una solución de referencia de 2 a 7 líneas pasan todos y los tipos compilan.
 
 ## Registro
 

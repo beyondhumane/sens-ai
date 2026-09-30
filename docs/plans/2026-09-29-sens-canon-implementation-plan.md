@@ -446,6 +446,11 @@ planeado:
 - `sens-bench` responde a las preguntas de Sens con la lista `allow` de cada
   tarea y anota los turnos retenidos.
 
+**C2 del piloto, hecho el 2026-09-30.** 9/9 válidas, el circuito actuó en todas
+(Canon, ficha y lo que ya existe) sin bloquear nada; resultados en la spec. Las
+tres tareas difíciles están escritas y validadas sobre Sens en `7eb9269`
+(`base` y `accept_into` en `task.toml`); falta su tanda de C0, C1 y C2.
+
 ## Fase 5 — El revisor
 
 - `sens-canon/src/review.md`: instrucciones del revisor en inglés, con S1–S6, la
