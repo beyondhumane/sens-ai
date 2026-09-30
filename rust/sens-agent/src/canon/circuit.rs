@@ -17,6 +17,7 @@ use super::log::{self, Decision, Entry};
 use super::review::Reviewer;
 use super::state::{self, State};
 use crate::chat::Event;
+use crate::said;
 
 pub const PROMPT: &str = "sens-prompt";
 pub const WRITE: &str = "sens-write";
@@ -401,7 +402,14 @@ impl Circuit {
         };
         let mut state = State::load(&self.work);
         let Some(now) = self.snapshot(&mut state, "close") else {
-            return Audited::Unjudged("Sens could not take a snapshot of the project, so it could not judge this turn.".into());
+            return Audited::Unjudged(said!(
+                en: "Sens could not take a snapshot of the project, so it could not judge these changes.",
+                es: "Sens no pudo hacer una foto del proyecto, así que no pudo juzgar estos cambios.",
+                fr: "Sens n’a pas pu prendre d’instantané du projet et n’a donc pas pu juger ces modifications.",
+                de: "Sens konnte keinen Schnappschuss des Projekts machen und diese Änderungen daher nicht beurteilen.",
+                ja: "Sens はプロジェクトのスナップショットを取れなかったため、これらの変更を判断できませんでした。",
+                zh: "Sens 无法为项目拍摄快照，因此无法评判这些更改。",
+            ));
         };
         let approved = state.approved.clone().unwrap_or_else(|| now.clone());
         let changes = checkpoints.changes(&approved, &now).unwrap_or_default();
@@ -417,7 +425,14 @@ impl Circuit {
         }
         if self.project(INDEX_PATIENCE).is_none() {
             let _ = state.save(&self.work);
-            return Audited::Unjudged("Sens could not finish indexing the project in time, so it could not judge this turn.".into());
+            return Audited::Unjudged(said!(
+                en: "Sens could not finish indexing the project in time, so it could not judge these changes.",
+                es: "Sens no terminó de indexar el proyecto a tiempo, así que no pudo juzgar estos cambios.",
+                fr: "Sens n’a pas fini d’indexer le projet à temps et n’a donc pas pu juger ces modifications.",
+                de: "Sens konnte das Projekt nicht rechtzeitig indizieren und diese Änderungen daher nicht beurteilen.",
+                ja: "Sens はプロジェクトのインデックス作成が間に合わず、これらの変更を判断できませんでした。",
+                zh: "Sens 未能及时完成项目索引，因此无法评判这些更改。",
+            ));
         }
         let project = self.keeper.refresh(&self.work);
         let dead: orphans::Dead = if state.dead_known { state.dead.iter().cloned().collect() } else { orphans::dead(&project.index) };
@@ -432,7 +447,14 @@ impl Circuit {
                 }
                 Err(reason) => {
                     let _ = state.save(&self.work);
-                    return Audited::Unjudged(format!("Sens's reviewer could not judge this turn: {reason}"));
+                    return Audited::Unjudged(said!(
+                        en: "Sens’s reviewer could not judge these changes: {reason}",
+                        es: "El revisor de Sens no pudo juzgar estos cambios: {reason}",
+                        fr: "Le relecteur de Sens n’a pas pu juger ces modifications : {reason}",
+                        de: "Die Prüfung von Sens konnte diese Änderungen nicht beurteilen: {reason}",
+                        ja: "Sens のレビューはこれらの変更を判断できませんでした: {reason}",
+                        zh: "Sens 的审查无法评判这些更改：{reason}",
+                    ));
                 }
             }
         }
@@ -570,7 +592,16 @@ pub fn undo(work: &Path) -> Result<Restored, String> {
     let (Some(approved), Some(end)) = (state.approved.clone(), state.end.clone()) else {
         return Ok(Restored::default());
     };
-    let checkpoints = Checkpoints::open(work).ok_or("git is not available")?;
+    let checkpoints = Checkpoints::open(work).ok_or_else(|| {
+        said!(
+            en: "git is not available, so Sens cannot undo these changes",
+            es: "git no está disponible, así que Sens no puede deshacer estos cambios",
+            fr: "git n’est pas disponible, Sens ne peut donc pas annuler ces modifications",
+            de: "git ist nicht verfügbar, daher kann Sens diese Änderungen nicht rückgängig machen",
+            ja: "git が使えないため、Sens はこれらの変更を元に戻せません",
+            zh: "git 不可用，因此 Sens 无法撤销这些更改",
+        )
+    })?;
     let restored = checkpoints.restore(&approved, &end)?;
     let undone: Vec<Entry> = state.held.iter().flatten().map(|finding| Entry { turn: state.turn, ..log::entry(finding, Decision::Undone) }).collect();
     let _ = log::write(work, &undone);
