@@ -23,6 +23,7 @@ pub enum Rule {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Severity {
     Block,
+    Consider,
     Ask,
     Note,
 }
@@ -63,7 +64,7 @@ impl Verdict {
     pub fn outcome(&self) -> Outcome {
         let worst = self.findings.iter().map(|finding| finding.severity).min();
         match worst {
-            Some(Severity::Block) => Outcome::Deny,
+            Some(Severity::Block | Severity::Consider) => Outcome::Deny,
             Some(Severity::Ask) => Outcome::Ask,
             _ => Outcome::Pass,
         }
@@ -139,6 +140,7 @@ mod tests {
         assert_eq!(Verdict::default().with([finding(Rule::R5, Severity::Note, "n")]).outcome(), Outcome::Pass);
         assert_eq!(Verdict::default().with([finding(Rule::R3, Severity::Ask, "a"), finding(Rule::R5, Severity::Note, "n")]).outcome(), Outcome::Ask);
         assert_eq!(Verdict::default().with([finding(Rule::R3, Severity::Ask, "a"), finding(Rule::R1, Severity::Block, "b")]).outcome(), Outcome::Deny);
+        assert_eq!(Verdict::default().with([finding(Rule::R3, Severity::Ask, "a"), finding(Rule::R2, Severity::Consider, "c")]).outcome(), Outcome::Deny);
     }
 
     #[test]

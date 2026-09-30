@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use sens_canon::verdict::{Exceptions, Finding, ProjectRules};
@@ -60,6 +60,14 @@ pub fn exceptions(work: &Path) -> Exceptions {
 
 pub fn save_exceptions(work: &Path, exceptions: &Exceptions) -> Result<(), String> {
     save(work, "exceptions.json", exceptions)
+}
+
+pub fn considered(work: &Path) -> BTreeSet<String> {
+    load(work, "considered.json")
+}
+
+pub fn save_considered(work: &Path, keys: &BTreeSet<String>) -> Result<(), String> {
+    save(work, "considered.json", keys)
 }
 
 pub fn rules(work: &Path) -> ProjectRules {

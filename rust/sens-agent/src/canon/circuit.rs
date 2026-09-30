@@ -159,6 +159,7 @@ impl Circuit {
 
     fn weigh(&self, voice: &dyn Voice, verdict: Verdict, undo: impl Fn(&Finding) -> bool) -> Judged {
         let mut exceptions = state::exceptions(&self.work);
+        let mut considered = state::considered(&self.work);
         let mut judged = Judged { blocks: Vec::new(), notes: Vec::new(), restored: Vec::new() };
         for finding in verdict.findings {
             match finding.severity {
@@ -177,9 +178,17 @@ impl Circuit {
                     }
                     judged.blocks.push(Finding { message: format!("The person said no. {}", finding.message), severity: Severity::Block, ..finding });
                 }
+                Severity::Consider if considered.contains(&finding.key) => {
+                    judged.notes.push(Finding { message: format!("Kept after Sens showed it. {}", finding.message), severity: Severity::Note, ..finding });
+                }
+                Severity::Consider => {
+                    considered.insert(finding.key.clone());
+                    judged.blocks.push(finding);
+                }
                 Severity::Note => judged.notes.push(finding),
             }
         }
+        let _ = state::save_considered(&self.work, &considered);
         let _ = state::save_exceptions(&self.work, &exceptions);
         judged
     }
@@ -477,6 +486,8 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
+    const PLAIN: &str = r#"export const plain = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();"#;
+
     const TOTALS: &str = "export function totals(rows: Row[], limit: number) {
   let sum = 0;
   let count = 0;
@@ -538,8 +549,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let files = [
             ("package.json", r#"{ "main": "src/index.ts", "dependencies": { "dayjs": "1" } }"#),
-            ("src/index.ts", "import { totals } from './lib/totals.ts';\ntotals([], 1);\n"),
+            ("src/index.ts", "import { totals } from './lib/totals.ts';\nimport { plain } from './lib/text.ts';\ntotals([], 1);\nplain('a');\n"),
             ("src/lib/totals.ts", TOTALS),
+            ("src/lib/text.ts", PLAIN),
         ];
         for (path, content) in files {
             let file = root.join(path);
@@ -603,6 +615,18 @@ mod tests {
         assert!(ear.stages().contains(&"write".to_string()));
         let elsewhere = std::env::temp_dir().join("sens-circuit-outside.ts");
         assert_eq!(circuit.answer(&ear, WRITE, &write(&elsewhere, &copy)), json!({}));
+    }
+
+    #[test]
+    fn a_small_helper_written_again_is_shown_once_and_passes_if_the_model_insists() {
+        let (root, circuit, ear) = started("consider");
+        let again = r#"export const lower = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();"#;
+        let first = circuit.answer(&ear, WRITE, &write(&root.join("src/bar.ts"), again));
+        assert_eq!(decision(&first), "deny");
+        let reason = first["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+        assert!(reason.contains("use `plain`") && reason.contains("src/lib/text.ts"), "{reason}");
+        let second = circuit.answer(&ear, WRITE, &write(&root.join("src/bar.ts"), again));
+        assert_eq!(decision(&second), "allow", "{second}");
     }
 
     #[test]

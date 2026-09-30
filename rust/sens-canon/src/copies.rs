@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use sens_index::build;
-use sens_index::fingerprint::{Likeness, NEAR, Unit, resemblance};
+use sens_index::fingerprint::{Likeness, NEAR, Unit, resemblance, small_likeness};
 use sens_index::index::Index;
 
 use crate::verdict::{Change, Finding, Rule, Severity, Target};
@@ -24,6 +24,12 @@ fn rank(likeness: Likeness) -> f32 {
 }
 
 fn likeness(unit: &Unit, other: &Unit) -> Option<Likeness> {
+    if unit.small() {
+        return other.small().then(|| small_likeness(&unit.print, &other.print)).flatten();
+    }
+    if !other.comparable() {
+        return None;
+    }
     if unit.print.exact == other.print.exact {
         return Some(Likeness::Exact);
     }
@@ -35,14 +41,14 @@ fn likeness(unit: &Unit, other: &Unit) -> Option<Likeness> {
 }
 
 fn best<'a>(index: &'a Index, path: &str, unit: &Unit, siblings: &'a [Unit], text: &'a str) -> Option<Candidate<'a>> {
-    let indexed = index
-        .similar(&unit.print)
+    let matches = if unit.small() { index.small_like(&unit.print) } else { index.similar(&unit.print) };
+    let indexed = matches
         .into_iter()
         .map(|found| Candidate { unit: &index.units[found.unit], likeness: found.likeness, source: None })
         .filter(|candidate| candidate.unit.file != path);
     let nearby = siblings
         .iter()
-        .filter(|other| other.symbol != unit.symbol && other.comparable())
+        .filter(|other| other.symbol != unit.symbol)
         .filter_map(|other| likeness(unit, other).map(|likeness| Candidate { unit: other, likeness, source: Some(text) }));
     indexed
         .chain(nearby)
@@ -58,8 +64,14 @@ fn excerpt(index: &Index, candidate: &Candidate) -> String {
     text.lines().skip(candidate.unit.start_line.saturating_sub(1) as usize).take(EXCERPT_LINES).collect::<Vec<_>>().join("\n")
 }
 
-fn message(path: &str, unit: &Unit, target: &Unit, likeness: Likeness) -> String {
+fn message(path: &str, unit: &Unit, target: &Unit, likeness: Likeness, severity: Severity) -> String {
     let there = format!("`{}` ({}:{})", target.name, target.file, target.start_line);
+    if severity == Severity::Consider {
+        return format!(
+            "`{}` ({path}:{}) looks like {there}, which already exists. If it does the same, use `{}` instead of writing it again (export it if it is not exported yet). If it really does something different, write it again unchanged and Sens will let it through.",
+            unit.name, unit.start_line, target.name
+        );
+    }
     match (unit.whole, likeness) {
         (true, Likeness::Near(share)) => format!(
             "`{}` ({path}:{}) is a near copy of {there}, {:.0}% the same. Reuse or extend `{}` instead of keeping two versions.",
@@ -88,7 +100,7 @@ pub fn copies(index: &Index, change: &Change) -> Vec<Finding> {
     let known: HashSet<u64> = before_units.iter().map(|unit| unit.print.exact).collect();
     let mut reported: HashSet<(String, String)> = HashSet::new();
     let mut findings = Vec::new();
-    let mut fresh: Vec<&Unit> = after_units.iter().filter(|unit| unit.comparable() && !known.contains(&unit.print.exact)).collect();
+    let mut fresh: Vec<&Unit> = after_units.iter().filter(|unit| (unit.comparable() || unit.small()) && !known.contains(&unit.print.exact)).collect();
     fresh.sort_by_key(|unit| !unit.whole);
     for unit in fresh {
         let Some(found) = best(index, &change.path, unit, &after_units, after) else {
@@ -100,7 +112,7 @@ pub fn copies(index: &Index, change: &Change) -> Vec<Finding> {
         }
         let inherited = before_units
             .iter()
-            .filter(|old| old.name == unit.name && old.comparable())
+            .filter(|old| old.name == unit.name && (old.comparable() || old.small()))
             .any(|old| best(index, &change.path, old, &before_units, change.before()).is_some_and(|earlier| earlier.unit.symbol == target.symbol || earlier.unit.name == target.name));
         if inherited {
             continue;
@@ -109,14 +121,18 @@ pub fn copies(index: &Index, change: &Change) -> Vec<Finding> {
             Likeness::Near(_) => Rule::R2,
             _ => Rule::R1,
         };
-        let severity = if !unit.test && unit.print.tokens.min(target.print.tokens) >= BLOCKING_TOKENS { Severity::Block } else { Severity::Note };
+        let severity = match unit.print.tokens.min(target.print.tokens) {
+            _ if unit.test => Severity::Note,
+            tokens if tokens >= BLOCKING_TOKENS => Severity::Block,
+            _ => Severity::Consider,
+        };
         let text = excerpt(index, &found);
         findings.push(Finding {
             rule,
             severity,
             file: change.path.clone(),
             line: unit.start_line,
-            message: message(&change.path, unit, target, found.likeness),
+            message: message(&change.path, unit, target, found.likeness, severity),
             target: Some(Target {
                 symbol: target.symbol.clone(),
                 file: target.file.clone(),
@@ -191,10 +207,26 @@ mod tests {
     }
 
     #[test]
-    fn a_copy_of_a_small_function_is_only_noted() {
+    fn a_copy_below_the_blocking_size_is_put_before_the_model_to_consider() {
         let index = project("small", &[("src/names.ts", SMALL)]);
         let found = copies(&index, &new_file("src/card.ts", &SMALL.replace("label", "fullName").replace("user", "person")));
-        assert_eq!(found.iter().map(|finding| (finding.rule, finding.severity)).collect::<Vec<_>>(), [(Rule::R1, Severity::Note)]);
+        assert_eq!(found.iter().map(|finding| (finding.rule, finding.severity)).collect::<Vec<_>>(), [(Rule::R1, Severity::Consider)]);
+        assert!(found[0].message.contains("write it again unchanged"), "{}", found[0].message);
+    }
+
+    #[test]
+    fn a_one_line_helper_written_again_elsewhere_is_found() {
+        let plain = r#"export const plain = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();"#;
+        let index = project("one-line", &[("src/market/search.js", plain), ("src/market/use.js", "import { plain } from './search.js';
+plain('a');
+")]);
+        let choices = "const lower = (text: string) => text.normalize(\"NFD\").replace(/\\p{M}/gu, \"\").toLocaleLowerCase();
+export const pick = (all: string[], wanted: string) => all.filter((one) => lower(one).includes(lower(wanted)));
+";
+        let found = copies(&index, &new_file("src/bar/choices.ts", choices));
+        assert_eq!(found.iter().map(|finding| (finding.rule, finding.severity)).collect::<Vec<_>>(), [(Rule::R2, Severity::Consider)], "{found:?}");
+        assert_eq!(found[0].target.as_ref().map(|target| target.file.as_str()), Some("src/market/search.js"));
+        assert!(found[0].message.contains("use `plain`"), "{}", found[0].message);
     }
 
     #[test]
