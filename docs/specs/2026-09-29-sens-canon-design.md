@@ -111,7 +111,7 @@ igual para cualquiera.
 ```rust
 struct Verdict { findings: Vec<Finding> }
 enum Outcome { Pass, Ask, Deny }
-enum Severity { Block, Ask, Note }
+enum Severity { Block, Consider, Ask, Note }
 
 struct Finding {
     rule: Rule,
@@ -214,8 +214,8 @@ existía antes del turno no es un hallazgo.
 
 | Regla | Detecta | Veredicto |
 | --- | --- | --- |
-| R1 Reutilizar | Unidad nueva (función, método, clase, componente) con la misma huella de tipo 1 o 2 que una existente, o con el mismo nombre y firma que un símbolo exportado | `Deny` con el objetivo si la unidad más pequeña tiene 80 tokens o más; por debajo, prueba para el revisor |
-| R2 Casi-copia | Unidad o bloque nuevo con similitud de tipo 3 por encima del umbral respecto a código existente, o entre dos bloques nuevos del turno | `Deny` (extraer y compartir) con la misma regla de 80 tokens; por debajo, prueba para el revisor. En tests, nota no bloqueante |
+| R1 Reutilizar | Unidad nueva (función, método, clase, componente) con la misma huella de tipo 1 o 2 que una existente, o con el mismo nombre y firma que un símbolo exportado | `Deny` con el objetivo si la unidad más pequeña tiene 80 tokens o más; por debajo, `Consider`: se para una vez con el objetivo y, si el modelo escribe lo mismo otra vez, pasa y queda como prueba para el revisor |
+| R2 Casi-copia | Unidad o bloque nuevo con similitud de tipo 3 por encima del umbral respecto a código existente, o entre dos bloques nuevos del turno; y funciones pequeñas (12 a 29 tokens) que coinciden en forma y vocabulario con otra | `Deny` (extraer y compartir) con la misma regla de 80 tokens; por debajo, `Consider` como en R1. En tests, nota no bloqueante |
 | R3 Dependencia nueva | Un manifiesto gana una dependencia: `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements*.txt`, `go.mod`, `*.csproj`, `composer.json`, `Gemfile`, `build.gradle(.kts)`, `pom.xml` | `Ask` |
 | R4 Huérfanos | Solo al cierre: símbolo nuevo inalcanzable desde las entradas, o símbolo existente que el turno dejó sin usos | `Deny` si es interno y sin usos reflexivos; nota si es exportado o reflexivo |
 | R5 Crecimiento | Líneas netas y ficheros nuevos | Nunca bloquea; va al revisor |
@@ -443,11 +443,40 @@ Entre la duplicación real hay tres copias que se escribieron en esta misma obra
 (`text`, un generador aleatorio y `entries::leaves` frente a
 `market::strings_in`); las dos primeras ya se corrigieron.
 
-**Consecuencia para R1 y R2**: solo bloquean cuando la unidad más pequeña de la
-pareja tiene al menos 80 tokens. Por debajo, la coincidencia va como prueba al
-revisor, que decide con criterio si es una oportunidad de reutilizar. El umbral de
-parecido queda en 0,80. Cinco parejas no bastan para asegurar el 95 %: la muestra
-se amplía con el repositorio grande de la fase 4.
+**Consecuencia para R1 y R2**: solo bloquean sin vuelta atrás cuando la unidad más
+pequeña de la pareja tiene al menos 80 tokens. El umbral de parecido queda en 0,80.
+Cinco parejas no bastan para asegurar el 95 %: la muestra se amplía con el
+repositorio grande de la fase 4.
+
+**Por debajo de 80 tokens: `Consider`.** La primera tanda de tareas difíciles
+enseñó que una nota que el modelo nunca tiene que leer no sirve: en
+`sens-bar-accents` el modelo reescribió a mano `plain` (quitar acentos, una línea)
+en vez de importarla. Por debajo de 80 tokens la coincidencia se para una vez con
+el código existente delante; si el modelo escribe lo mismo otra vez, pasa y queda
+como nota para el revisor. El modelo puede discrepar, pero no puede no verlo. La
+clave queda en `.sens/canon/considered.json`.
+
+### Funciones pequeñas
+
+Las huellas de 5 tokens no sirven por debajo de 30 tokens, y ahí viven las
+utilidades que más se reescriben: quitar acentos, capitalizar, unir rutas. Con solo
+la forma normalizada, dos setters `set({ x })` o dos `CONST.test(x)` parecen
+gemelos. Lo que identifica una función pequeña es su vocabulario: los métodos que
+llama, los tipos y constantes que nombra, sus literales y números; sin tipos
+primitivos ni palabras como `this` o `null`.
+
+Dos funciones de 12 a 29 tokens, con al menos 4 palabras de vocabulario, son la
+misma cuando coinciden en huella exacta, o cuando su vocabulario se parece al
+menos 0,70 (Jaccard) y además su forma, en trigramas, también lo hace; solo se
+comparan funciones y métodos, no tipos de datos.
+
+| Repositorio | Funciones pequeñas | Parejas | Copias reales |
+| --- | --- | --- | --- |
+| Sens en `7eb9269` | 195 | 6 | 6: `rootOf` e `importable` duplicadas, `set` y `sweep` gemelas entre crates, `load` y `pickTab` iguales salvo el tipo |
+| Sens actual | 228 | 20 | 20: las 6 anteriores y 14 parejas entre los `options()` idénticos de los módulos de lenguaje del índice |
+
+Antes de separar forma y vocabulario había 153 parejas por encima de 0,70, con los
+setters y las rutas `base.join("x")` como falsos positivos.
 
 ## Lo que recibe el modelo
 
@@ -455,14 +484,33 @@ se amplía con el repositorio grande de la fase 4.
 | --- | --- | --- |
 | Inicio de sesión, en `appendSystemPrompt` | Canon y ficha del proyecto: lenguajes, módulos principales con una línea cada uno, entradas y dependencias instaladas | ~60 líneas de ficha |
 | Cada mensaje, en `additionalContext` | Hasta 8 símbolos relacionados: firma, `fichero:línea`, número de usos. Nada si la relevancia no supera el umbral | ~400 tokens |
+| Cada `Consider`, en el motivo | Lo mismo que un bloqueo, y que si escribe lo mismo otra vez pasará | lo justo |
 | Cada bloqueo, en el motivo | Regla, qué hacer y el objetivo exacto: firma, `fichero:línea` y 3–5 líneas del código existente | lo justo |
 | Cuando lo pide | `project_map`, `file_outline`, `find_symbol`, `who_uses`, `already_exists`, `dead_code` por el puente MCP de `sens-app` | respuestas compactas |
 
-La búsqueda por mensaje es léxica: nombres partidos por mayúsculas y guiones,
-rutas y firmas, puntuadas con BM25. Como las peticiones pueden venir en otro
-idioma que el código, lleva un glosario de unos 200 términos de programación en
-los seis idiomas de Sens. Los embeddings lo sustituyen en la spec siguiente. La
-garantía no depende de esta búsqueda: R1 y R2 comparan código con código.
+La búsqueda por mensaje es léxica y describe cada símbolo por lo que hace, no
+solo por su nombre: nombre (peso 3), firma y comentario de encima (peso 2), su
+cuerpo sin literales de texto, las líneas desde donde se le llama fuera de los
+tests y su ruta (peso 1). Cada palabra de la petición es un concepto que cuenta
+una vez aunque case con varias formas (`search`, `searched`), la puntuación es
+BM25 y lo muy usado sube un poco (×(1 + 0,2·ln(1 + usos))). Como las peticiones
+pueden venir en otro idioma que el código, lleva un glosario de 279 términos en
+los seis idiomas de Sens. La garantía no depende de esta búsqueda: R1 y R2
+comparan código con código.
+
+Calibración (`rust/sens-canon/calibration/`, `cargo run --example recall`): 24
+peticiones sobre utilidades de Sens en `7eb9269` distintas de las de las tareas
+difíciles, y aparte las tres tareas difíciles, que no se usaron para ajustar.
+
+| Búsqueda | Calibración, acierto entre 8 | MRR | Tareas difíciles, acierto entre 8 |
+| --- | --- | --- | --- |
+| Solo nombre y ruta, y el nombre tenía que casar | 3/24 | 0,08 | 0/3 |
+| Descripción completa, conceptos, glosario ampliado y uso | 11/24 | 0,22 | 2/3 |
+
+El límite que queda es el vocabulario propio de cada proyecto: «estantería» es
+`shelf` y «artefacto» es `artifact` en Sens, y ningún glosario fijo lo sabe. El
+siguiente paso es buscar también con las palabras del código que el modelo va a
+escribir, que ya están en inglés, en el momento de escribirlo.
 
 El puente MCP de la app se llama `sens`. Si la configuración del usuario trae otro
 servidor con ese nombre, como el `sens-mcp` antiguo, el de `--mcp-config` lo
