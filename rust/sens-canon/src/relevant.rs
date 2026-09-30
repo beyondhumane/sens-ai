@@ -9,9 +9,22 @@ const LIMIT: usize = 8;
 const K1: f32 = 1.2;
 const B: f32 = 0.75;
 const NAME_WEIGHT: usize = 3;
+const SIGNATURE_WEIGHT: usize = 2;
+const COMMENT_WEIGHT: usize = 2;
+const CALLER_WEIGHT: usize = 1;
+const BODY_WEIGHT: usize = 1;
+const PATH_WEIGHT: usize = 1;
+const CALLERS_READ: usize = 24;
+const CALLER_CAP: usize = 3;
+const SUFFIX: usize = 3;
+const CODE_WORDS: [&str; 40] = [
+    "const", "let", "var", "function", "return", "if", "else", "for", "while", "new", "this", "self", "fn", "pub", "def", "class", "true", "false", "null", "undefined",
+    "await", "async", "import", "export", "from", "type", "void", "mut", "impl", "use", "match", "none", "some", "ok", "err", "string", "of", "in", "is", "as",
+];
 const MIN_SCORE: f32 = 0.1;
 const KEEP_SHARE: f32 = 0.3;
 const PREFIX: usize = 4;
+const POPULARITY: f32 = 0.2;
 const KINDS: [&str; 10] = ["function", "method", "class", "interface", "type", "enum", "struct", "trait", "const", "component"];
 const STOP: [&str; 24] = ["the", "and", "for", "with", "that", "this", "from", "each", "into", "when", "los", "las", "del", "que", "una", "para", "con", "por", "cada", "como", "sus", "les", "des", "und"];
 
@@ -26,7 +39,6 @@ struct Doc {
     symbol: usize,
     terms: HashMap<String, usize>,
     length: usize,
-    named: HashSet<String>,
     uses: usize,
 }
 
@@ -95,41 +107,118 @@ fn related(word: &str, form: &str) -> bool {
     shared_prefix(word, form) >= PREFIX.max((shorter * 3).div_ceil(4))
 }
 
-fn query(prompt: &str) -> HashSet<String> {
+fn translated(word: &str) -> impl Iterator<Item = String> + '_ {
+    glossary().iter().filter(move |(_, forms)| forms.iter().any(|form| !cjk(form) && !form.contains(' ') && related(word, form))).map(|(english, _)| stem(english))
+}
+
+fn concepts(prompt: &str) -> Vec<HashSet<String>> {
     let lower = prompt.to_lowercase();
-    let spoken: Vec<&str> = lower.split(|c: char| !c.is_alphanumeric()).filter(|word| !word.is_empty()).collect();
-    let mut terms: HashSet<String> = words(prompt).into_iter().filter(|word| word.chars().count() >= 3 && !STOP.contains(&word.as_str())).collect();
-    for (english, forms) in glossary() {
-        let meant = forms.iter().any(|form| match (cjk(form), form.contains(' ')) {
-            (true, _) | (_, true) => lower.contains(form.as_str()),
-            _ => spoken.iter().any(|word| related(word, form)),
-        });
-        if meant {
-            terms.insert(stem(english));
+    let mut found: Vec<HashSet<String>> = Vec::new();
+    let mut heard: HashSet<&str> = HashSet::new();
+    for word in lower.split(|c: char| !c.is_alphanumeric()).filter(|word| word.chars().count() >= 2 && !STOP.contains(word)) {
+        if !heard.insert(word) {
+            continue;
+        }
+        let meant: HashSet<String> = translated(word).collect();
+        if word.chars().count() >= 3 || !meant.is_empty() {
+            found.push(words(word).into_iter().chain(meant).collect());
         }
     }
+    for (english, forms) in glossary() {
+        if forms.iter().any(|form| (cjk(form) || form.contains(' ')) && lower.contains(form.as_str())) {
+            found.push(HashSet::from([stem(english)]));
+        }
+    }
+    found
+}
+
+fn unquoted(code: &str) -> String {
+    static QUOTED: OnceLock<regex::Regex> = OnceLock::new();
+    let quoted = QUOTED.get_or_init(|| regex::Regex::new(r#""(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`"#).unwrap());
+    quoted.replace_all(&code.replace("\"\"\"", " ").replace("'''", " "), " ").into_owned()
+}
+
+fn remark(line: &str) -> bool {
+    let line = line.trim_start();
+    ["//", "#", "*", "/*", "--", "\"\"\""].iter().any(|mark| line.starts_with(mark)) || line.ends_with("*/")
+}
+
+fn comment_above(lines: &[&str], line: u32) -> String {
+    let mut above: Vec<&str> = lines[..(line as usize).saturating_sub(1).min(lines.len())].iter().rev().take_while(|text| remark(text)).copied().collect();
+    above.reverse();
+    above.join("\n")
+}
+
+fn meaningful(text: &str) -> impl Iterator<Item = String> {
+    words(text).into_iter().filter(|word| word.chars().count() >= 2 && !word.chars().all(|c| c.is_ascii_digit()) && !CODE_WORDS.contains(&word.as_str()))
+}
+
+fn add(terms: &mut HashMap<String, usize>, found: impl IntoIterator<Item = String>, weight: usize) {
+    let distinct: HashSet<String> = found.into_iter().collect();
+    for word in distinct {
+        *terms.entry(word).or_default() += weight;
+    }
+}
+
+struct Sources {
+    root: std::path::PathBuf,
+    read: HashMap<String, String>,
+}
+
+impl Sources {
+    fn text(&mut self, file: &str) -> &str {
+        let root = &self.root;
+        self.read.entry(file.to_string()).or_insert_with(|| std::fs::read_to_string(root.join(file)).unwrap_or_default())
+    }
+}
+
+fn callers(index: &Index, sources: &mut Sources, at: usize, own: &HashSet<String>) -> HashMap<String, usize> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    for &(file, line, _) in index.raw_references(at).iter().take(CALLERS_READ) {
+        let path = index.files[file as usize].path.clone();
+        if is_test_file(&path) {
+            continue;
+        }
+        let Some(text) = sources.text(&path).lines().nth((line as usize).saturating_sub(1)).map(unquoted) else { continue };
+        let words: HashSet<String> = meaningful(&text).filter(|word| !own.contains(word)).collect();
+        for word in words {
+            *seen.entry(word).or_default() += 1;
+        }
+    }
+    seen
+}
+
+fn described(index: &Index, sources: &mut Sources, at: usize) -> HashMap<String, usize> {
+    let symbol = &index.symbols[at];
+    let named: HashSet<String> = words(&symbol.name).into_iter().collect();
+    let mut terms: HashMap<String, usize> = HashMap::new();
+    add(&mut terms, named.iter().cloned(), NAME_WEIGHT);
+    add(&mut terms, meaningful(&unquoted(&symbol.signature)).filter(|word| !named.contains(word)), SIGNATURE_WEIGHT);
+    for (word, sites) in callers(index, sources, at, &named) {
+        *terms.entry(word).or_default() += CALLER_WEIGHT * sites.min(CALLER_CAP);
+    }
+    let text = sources.text(&symbol.file);
+    let lines: Vec<&str> = text.lines().collect();
+    add(&mut terms, meaningful(&comment_above(&lines, symbol.line)), COMMENT_WEIGHT);
+    let body = text.get(symbol.start_byte..symbol.end_byte.min(text.len())).unwrap_or_default();
+    add(&mut terms, meaningful(&unquoted(body)).filter(|word| !named.contains(word)), BODY_WEIGHT);
+    add(&mut terms, meaningful(&symbol.file), PATH_WEIGHT);
     terms
 }
 
 impl Catalog {
     pub fn of(index: &Index) -> Catalog {
         let tested: HashSet<&str> = index.units.iter().filter(|unit| unit.whole && unit.test).map(|unit| unit.symbol.as_str()).collect();
+        let mut sources = Sources { root: index.root.clone(), read: HashMap::new() };
         let docs: Vec<Doc> = index
             .symbols
             .iter()
             .enumerate()
             .filter(|(_, symbol)| KINDS.contains(&symbol.kind.as_str()) && !is_test_file(&symbol.file) && !tested.contains(symbol.id.as_str()))
-            .map(|(at, symbol)| {
-                let named: HashSet<String> = words(&symbol.name).into_iter().collect();
-                let mut terms: HashMap<String, usize> = HashMap::new();
-                for word in &named {
-                    *terms.entry(word.clone()).or_default() += NAME_WEIGHT;
-                }
-                for word in words(&symbol.file) {
-                    *terms.entry(word).or_default() += 1;
-                }
+            .map(|(at, _)| {
+                let terms = described(index, &mut sources, at);
                 let length = terms.values().sum();
-                Doc { symbol: at, terms, length, named, uses: index.raw_references(at).len() }
+                Doc { symbol: at, terms, length, uses: index.raw_references(at).len() }
             })
             .collect();
         let mut frequency: HashMap<String, usize> = HashMap::new();
@@ -145,34 +234,43 @@ impl Catalog {
     fn matches(&self, terms: &HashSet<String>) -> HashSet<String> {
         self.frequency
             .keys()
-            .filter(|known| terms.iter().any(|term| *known == term || (term.chars().count() >= PREFIX && known.starts_with(term.as_str()))))
+            .filter(|known| terms.iter().any(|term| *known == term || (term.chars().count() >= PREFIX && known.starts_with(term.as_str()) && known.len() - term.len() <= SUFFIX)))
             .cloned()
             .collect()
     }
 
+    fn wanted(&self, prompt: &str) -> Vec<HashSet<String>> {
+        let mut groups: Vec<HashSet<String>> = Vec::new();
+        for concept in concepts(prompt) {
+            let matched = self.matches(&concept);
+            if !matched.is_empty() && !groups.contains(&matched) {
+                groups.push(matched);
+            }
+        }
+        groups
+    }
+
+    fn weight(&self, doc: &Doc, term: &str) -> f32 {
+        let Some(&count) = doc.terms.get(term) else {
+            return 0.0;
+        };
+        let seen = self.frequency[term] as f32;
+        let rarity = (1.0 + (self.docs.len() as f32 - seen + 0.5) / (seen + 0.5)).ln();
+        let count = count as f32;
+        rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - B + B * doc.length as f32 / self.average))
+    }
+
     pub fn relevant(&self, prompt: &str) -> Vec<Suggestion> {
-        let wanted = self.matches(&query(prompt));
-        if wanted.is_empty() {
+        let groups = self.wanted(prompt);
+        if groups.is_empty() {
             return Vec::new();
         }
-        let total = self.docs.len() as f32;
         let mut scored: Vec<Suggestion> = self
             .docs
             .iter()
-            .filter(|doc| doc.named.iter().any(|word| wanted.contains(word)))
             .map(|doc| {
-                let score = doc
-                    .terms
-                    .iter()
-                    .filter(|(term, _)| wanted.contains(*term))
-                    .map(|(term, &count)| {
-                        let seen = self.frequency[term] as f32;
-                        let rarity = (1.0 + (total - seen + 0.5) / (seen + 0.5)).ln();
-                        let count = count as f32;
-                        rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - B + B * doc.length as f32 / self.average))
-                    })
-                    .sum();
-                Suggestion { symbol: doc.symbol, score, uses: doc.uses }
+                let matched: f32 = groups.iter().map(|group| group.iter().map(|term| self.weight(doc, term)).fold(0.0, f32::max)).sum();
+                Suggestion { symbol: doc.symbol, score: matched * (1.0 + POPULARITY * (1.0 + doc.uses as f32).ln()), uses: doc.uses }
             })
             .collect();
         scored.sort_by(|a, b| b.score.total_cmp(&a.score).then(b.uses.cmp(&a.uses)).then(a.symbol.cmp(&b.symbol)));

@@ -1,0 +1,97 @@
+base = "7eb9269"
+
+[[query]]
+text = "Muestra cuánto tardó cada paso del agente, en segundos o minutos."
+expect = ["shared/format.js:seconds"]
+
+[[query]]
+text = "Enseña el número de tokens abreviado, como 12,3k."
+expect = ["shared/format.js:compact"]
+
+[[query]]
+text = "Que cada tarea diga cuándo se creó: la hora si fue hoy, «ayer» si fue ayer, o el día."
+expect = ["shared/format.js:ago"]
+
+[[query]]
+text = "En la lista de adjuntos muestra solo el nombre del fichero, sin la carpeta."
+expect = ["shared/format.js:stem"]
+
+[[query]]
+text = "Agrupa los ficheros cambiados por la carpeta que los contiene."
+expect = ["shared/format.js:parentOf"]
+
+[[query]]
+text = "Al leer un markdown, no enseñes la cabecera YAML del principio."
+expect = ["shared/format.js:FRONT_MATTER"]
+
+[[query]]
+text = "Pon el icono de cada fichero según su tipo en las sugerencias del compositor."
+expect = ["shared/FileIcon.tsx:FileIcon", "shared/fileIcons.ts:fileIcon"]
+
+[[query]]
+text = "Quita los códigos de color ANSI de la salida del terminal antes de copiarla."
+expect = ["shared/ansi.ts:plain"]
+
+[[query]]
+text = "Recuerda la última pestaña elegida aunque se cierre la app."
+expect = ["shared/storage.js:stored", "shared/storage.js:store"]
+
+[[query]]
+text = "Abre el enlace en el navegador del sistema en vez de dentro de la app."
+expect = ["shared/outside.ts:openOutside"]
+
+[[query]]
+text = "Muestra la inicial del sitio cuando un conector no tiene favicon."
+expect = ["features/capabilities/faces.ts:monogramOf", "features/capabilities/faces.ts:faceOf"]
+
+[[query]]
+text = "Show the host name of each web page the agent fetched."
+expect = ["features/chat/looks.ts:hostOf", "features/capabilities/faces.ts:siteOfUrl"]
+
+[[query]]
+text = "Cuenta las líneas añadidas y quitadas de un parche."
+expect = ["shared/rows.ts:patchRows", "features/changes/diff.ts:diffedFiles"]
+
+[[query]]
+text = "Traduce los textos del nuevo panel a los seis idiomas de la interfaz."
+expect = ["shared/i18n.ts:copy"]
+
+[[query]]
+text = "Que el menú de opciones se abra pegado al botón que lo abre."
+expect = ["shared/anchorMenu.ts:anchorMenu"]
+
+[[query]]
+text = "Carga la miniatura solo cuando la tarjeta entra en pantalla."
+expect = ["shared/useSeen.ts:useSeen"]
+
+[[query]]
+text = "Clasifica cada skill del mercado en su sección."
+expect = ["features/capabilities/sections.ts:classify", "features/capabilities/sections.ts:sectionOf"]
+
+[[query]]
+text = "Al pasar el ratón por la hora, enseña la fecha completa."
+expect = ["shared/format.js:when"]
+
+[[query]]
+text = "Decide si un fichero adjunto se puede abrir como texto."
+expect = ["shared/format.js:TEXTUAL", "features/artifacts/items.ts:howToOpen"]
+
+[[query]]
+text = "Show a thumbnail only when the attached file is a picture."
+expect = ["shared/format.js:PICTURE"]
+
+[[query]]
+text = "Pinta el código de la vista previa con los colores de su lenguaje."
+expect = ["shared/syntax/code.ts:useCode", "shared/syntax/paint.ts:paint"]
+
+[[query]]
+text = "Resume en una línea lo que hizo cada herramienta en el hilo."
+expect = ["features/chat/looks.ts:describe", "features/chat/looks.ts:oneLine"]
+
+[[query]]
+text = "Mostrar la hora a la que se reinicia el límite de uso del modelo."
+expect = ["features/models/limits.ts:resetsSaid"]
+
+[[query]]
+text = "Pasa un color del tema a sRGB para dibujarlo en el canvas."
+expect = ["shared/look.ts:srgbOf", "shared/look.ts:linearRgb"]

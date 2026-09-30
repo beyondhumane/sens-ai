@@ -241,6 +241,7 @@ name = "sens-canon"
 version = "0.1.0"
 dependencies = [
  "ignore",
+ "regex",
  "sens-index",
  "serde",
  "serde_json",
