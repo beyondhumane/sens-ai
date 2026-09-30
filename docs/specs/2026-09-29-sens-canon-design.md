@@ -275,7 +275,10 @@ Texto en inglés, unas 30 líneas, versionado (`canon v1`), en
    the standard library or platform give it → does an installed dependency give
    it → only then, the smallest correct code.
 3. Never cut: validation at trust boundaries, error handling that prevents data
-   loss, security, accessibility, anything the person asked for.
+   loss, security, accessibility, anything the person asked for, or the tests: a
+   change in behaviour comes with a test that fails without it, and the model runs
+   the tests it touched. Sens judges the shape of the code, not whether it works
+   (desde `canon v1.1`).
 4. Fix causes in shared code, no abstraction without a second use, boring over
    clever, delete what your change leaves unused.
 
@@ -726,6 +729,52 @@ Lo que dicen:
   `medium`: su confianza no es estable y por eso las reglas que deciden si algo
   bloquea no pueden depender solo de ella.
 - **Coste del revisor**: entre 7 y 15 s por cierre con código.
+
+### Por qué C2 no escribía tests
+
+Sumando el piloto y las tareas difíciles, con el Canon v1: C0 añade tests en 14
+de 18 ejecuciones, C1 en 9 y C2 en 2. El circuito no para ninguno: en las 27
+ejecuciones de C2 no hay ni un intento de escribir un test, y las copias entre
+tests ya eran notas. La causa está en lo que se le dice al modelo:
+
+- El Canon decía «Do what the person asked and nothing more» y «the smallest
+  version», y el modelo lee un test que nadie pidió como algo de más. Solo con el
+  texto (C1) los tests caen a la mitad.
+- Con el circuito, además, deja de comprobar: en C2 el modelo termina con «No he
+  ejecutado los tests ni la app», mientras C0 ejecuta los tests del fichero que
+  tocó y añade uno. Que Sens juzgue cada cambio se lee como que alguien ya
+  verificó.
+
+`canon v1.1` dice las dos cosas que faltaban: un test que prueba el cambio es
+parte del cambio, y la aprobación de Sens no es una ejecución de tests. Cada
+ejecución anota la versión del Canon, así que la calibración compara v1.1 con
+estos datos de v1.
+
+### Tareas de calibración
+
+Doce tareas, todas validadas con `sens-bench validate`: en la base los tests del
+proyecto pasan y los ocultos fallan; con la solución de referencia
+(`reference.patch`) pasan los dos.
+
+| Tarea | Proyecto | Qué se pide | Lo que ya existe |
+| --- | --- | --- | --- |
+| `sens-shelf-size` | Sens, TypeScript | El tamaño en la tarjeta del artefacto | `weigh` |
+| `sens-file-language` | Sens, TypeScript | El lenguaje del fichero en el visor y en cambios | `languageOf`, `titleOf` |
+| `sens-bar-accents` | Sens, TypeScript | Buscar en la barra sin acentos | `plain` |
+| `rs-session-ids` | Sens, Rust | Aceptar los identificadores antiguos de 8 hexadecimales | `is_uuid`, `named` |
+| `rs-title-words` | Sens, Rust | Cortar el título en la última palabra entera | `TITLE_LIMIT` |
+| `py-prompt-ansi` | click, Python | El texto de `prompt` sin ANSI cuando no hay terminal | `should_strip_ansi`, `strip_ansi` |
+| `py-ansi-sequences` | click, Python | Quitar todas las secuencias CSI, no solo las de color | `_ansi_re` |
+| `py-style-black` | click, Python | `style(fg=0)` y `bg=0` no se ignoran | — |
+| `py-choice-suggest` | click, Python | «Did you mean» en una opción `Choice` | `_format_possibilities`, `difflib` |
+| `py-path-home` | click, Python | `Path(resolve_path=True)` expande `~` | `os.path` |
+| `py-progress-final` | click, Python | La barra termina en el 100 % aunque `update_min_steps` salte | `make_step` |
+| `py-deprecated-space` | click, Python | Sin espacio delante de `(DEPRECATED)` cuando no hay ayuda | `_format_deprecated_label` |
+
+Las de click salen de commits reales de `pallets/click`, cacheadas en
+`%TEMP%/sens-bench-sources`, con pytest en un entorno propio de cada ejecución
+instalado sin red desde ruedas locales, que se preparan una vez con
+`pip download pytest==9.1.1 -d %TEMP%/sens-bench-sources/wheels`.
 
 ## Registro
 

@@ -11,7 +11,7 @@ pub mod review;
 pub mod verdict;
 
 pub const CANON: &str = include_str!("canon.md");
-pub const VERSION: &str = "v1";
+pub const VERSION: &str = "v1.1";
 
 #[cfg(test)]
 mod tests {
@@ -27,6 +27,13 @@ mod tests {
         let steps = ["Is it needed?", "already have it?", "standard library", "installed dependency", "Only then write new code"];
         let places: Vec<usize> = steps.iter().map(|step| CANON.find(step).unwrap_or_else(|| panic!("missing {step}"))).collect();
         assert!(places.windows(2).all(|pair| pair[0] < pair[1]), "{places:?}");
+    }
+
+    #[test]
+    fn less_code_never_means_fewer_tests_or_trusting_sens_to_run_them() {
+        assert!(CANON.contains("A test that proves the change is part of the change"));
+        assert!(CANON.contains("never means skipping tests"));
+        assert!(CANON.contains("Its approval is not a test run"));
     }
 
     #[test]
