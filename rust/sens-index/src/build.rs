@@ -92,18 +92,16 @@ pub fn build(root: &Path) -> Index {
     index
 }
 
-pub fn analyze(path: &str, source: &str) -> Vec<Unit> {
-    let Some(language) = language_of(Path::new(path)) else {
-        return Vec::new();
-    };
+pub fn parse(path: &str, source: &str) -> Option<(tree_sitter::Tree, Emitted)> {
+    let language = language_of(Path::new(path))?;
     let mut parser = tree_sitter::Parser::new();
-    if parser.set_language(&(language.grammar)(path)).is_err() {
-        return Vec::new();
-    }
-    let Some(tree) = parser.parse(source, None) else {
-        return Vec::new();
-    };
+    parser.set_language(&(language.grammar)(path)).ok()?;
+    let tree = parser.parse(source, None)?;
     let mut emitted = Emitted::default();
     (language.extract)(&tree.root_node(), source, path, &HashSet::new(), &mut emitted);
-    fingerprint::units(&tree.root_node(), source, path, &emitted.symbols, is_test_file(path))
+    Some((tree, emitted))
+}
+
+pub fn analyze(path: &str, source: &str) -> Vec<Unit> {
+    parse(path, source).map_or_else(Vec::new, |(tree, emitted)| fingerprint::units(&tree.root_node(), source, path, &emitted.symbols, is_test_file(path)))
 }

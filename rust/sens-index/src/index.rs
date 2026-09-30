@@ -92,7 +92,11 @@ impl Index {
     }
 
     pub fn similar(&self, print: &Print) -> Vec<Match> {
-        self.clones.similar(&self.units, print, NEAR)
+        self.similar_at(print, NEAR)
+    }
+
+    pub fn similar_at(&self, print: &Print, threshold: f32) -> Vec<Match> {
+        self.clones.similar(&self.units, print, threshold)
     }
 
     pub fn raw_references(&self, symbol: usize) -> &[(u32, u32, u32)] {

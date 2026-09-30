@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Fases 0 y 1 hechas
+- **Estado:** Fases 0, 1 y 2 hechas
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -248,6 +248,22 @@ tamaño de `index.bin`.
 
 **Termina cuando** los fixtures, las parejas y los presupuestos pasan, y la spec
 tiene el primer umbral.
+
+**Hecha el 2026-09-30**, con cambios respecto a lo planeado:
+- Sin fichero de índice: vive en memoria (630 ms para este repositorio).
+- TypeScript y JavaScript los indexa Rust, con su resolución de imports y
+  entradas de `package.json`.
+- El índice es determinista y ancla `crate::` en el crate de cada fichero.
+- La similitud de tipo 3 es el mayor de Jaccard y solapamiento. Los textos
+  largos se conservan al normalizar, y los tests en línea de Rust se reconocen.
+- La calibración se hizo sobre el repositorio real con cobertura sintética y
+  revisión a mano (resultados en la spec). GPTCloneBench queda pendiente: hay
+  que descargarlo.
+- R1 y R2 solo bloquean desde 80 tokens.
+- `sens-bench` ya usa el índice para separar las líneas de test, incluidos los
+  tests en línea de Rust.
+- Pendiente para la fase 6: `entries::leaves` duplica `market::strings_in`;
+  `sens-app` usará la de `sens-index` cuando dependa de él.
 
 ## Fase 3 — Las reglas y el punto de control
 

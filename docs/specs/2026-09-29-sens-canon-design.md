@@ -211,8 +211,8 @@ existía antes del turno no es un hallazgo.
 
 | Regla | Detecta | Veredicto |
 | --- | --- | --- |
-| R1 Reutilizar | Unidad nueva (función, método, clase, componente) con la misma huella de tipo 1 o 2 que una existente, o con el mismo nombre y firma que un símbolo exportado | `Deny` con el objetivo |
-| R2 Casi-copia | Unidad o bloque nuevo con similitud de tipo 3 por encima del umbral respecto a código existente, o entre dos bloques nuevos del turno | `Deny`: extraer y compartir. En ficheros de test, nota no bloqueante |
+| R1 Reutilizar | Unidad nueva (función, método, clase, componente) con la misma huella de tipo 1 o 2 que una existente, o con el mismo nombre y firma que un símbolo exportado | `Deny` con el objetivo si la unidad más pequeña tiene 80 tokens o más; por debajo, prueba para el revisor |
+| R2 Casi-copia | Unidad o bloque nuevo con similitud de tipo 3 por encima del umbral respecto a código existente, o entre dos bloques nuevos del turno | `Deny` (extraer y compartir) con la misma regla de 80 tokens; por debajo, prueba para el revisor. En tests, nota no bloqueante |
 | R3 Dependencia nueva | Un manifiesto gana una dependencia: `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements*.txt`, `go.mod`, `*.csproj`, `composer.json`, `Gemfile`, `build.gradle(.kts)`, `pom.xml` | `Ask` |
 | R4 Huérfanos | Solo al cierre: símbolo nuevo inalcanzable desde las entradas, o símbolo existente que el turno dejó sin usos | `Deny` si es interno y sin usos reflexivos; nota si es exportado o reflexivo |
 | R5 Crecimiento | Líneas netas y ficheros nuevos | Nunca bloquea; va al revisor |
@@ -362,34 +362,89 @@ persona, las excepciones y el banco de pruebas.
 
 ### `sens-index`
 
-- Recupera de `acd058a^:rust/sens-hook/src/` el indexador (`indexer.rs`,
-  `lang/*`, `index.rs`, `binindex.rs`, `refresh.rs`, `freshness.rs`,
-  `reflective.rs`, `testfile.rs`) y las consultas (`query.rs`), sin la parte de
-  hook, CLI ni daemon. Lenguajes: TypeScript y JavaScript, Python, Rust, Go, Java,
-  C#, C, C++, PHP, Ruby y Kotlin.
-- Se guarda en `.sens/canon/index.bin` (formato binario ya medido: 2,3 MB y 6 ms de carga
-  en 1.165 ficheros) y vive en memoria en `sens-app`, uno por proyecto abierto.
-  Se construye al abrir el proyecto y en `chat_warm`, y se refresca por mtime.
+- Recupera de `acd058a^:rust/sens-hook/src/` los extractores de `lang/*`,
+  `reflective.rs`, `testfile.rs`, `query.rs` y `format.rs`, sin hook, CLI, daemon,
+  formato binario ni delegación en Node. Lenguajes: TypeScript y JavaScript,
+  Python, Rust, Go, Java, C#, C, C++, PHP, Ruby y Kotlin.
+- **TypeScript y JavaScript los indexa ahora Rust.** Antes los resolvía `ts-morph`
+  en Node. Resuelve imports relativos, `.js` escrito para un `.ts`, `index.*` de
+  carpeta, re-exportaciones con nombre y `export *`; los alias de `tsconfig` no se
+  resuelven, y en ese caso el índice vuelve a emparejar por nombre. Las entradas
+  salen de los `index.*` y de `main`, `module`, `types`, `bin` y `exports` de cada
+  `package.json`, traducidos a su fichero fuente.
+- **Vive solo en memoria**, sin fichero de índice: este repositorio, 455 ficheros
+  y 8.600 unidades, se indexa en unos 630 ms en release, y buscar las copias de
+  una unidad cuesta un microsegundo. Guardarlo en disco solo se añadirá si un
+  proyecto grande lo pide.
+- **Es determinista**: dos rutas que terminan igual se resuelven siempre a la
+  más corta, y `crate::` se ancla en el crate del propio fichero. Antes el
+  resultado cambiaba entre ejecuciones y, en un repositorio con varios crates,
+  era incorrecto.
+- Sus pruebas fijan el comportamiento de código muerto de los 11 lenguajes con
+  los 29 proyectos de ejemplo recuperados.
 
 ### Huellas
 
-La unidad es cada función, método, clase o componente, y además ventanas de
-sentencias dentro de cada unidad para las copias parciales.
+La unidad es cada función, método o clase, y además cada ventana de 4
+sentencias seguidas dentro de una función, para las copias parciales.
 
-| Tipo | Qué es | Técnica | Estado |
+| Tipo | Qué es | Técnica |
+| --- | --- | --- |
+| 1 | Copia exacta salvo espacios y comentarios | Hash de los tokens sin comentarios |
+| 2 | Copia con otros nombres locales o literales cortos | Hash de los tokens normalizados |
+| 3 | Copia con sentencias añadidas o quitadas | MinHash de 128 funciones sobre tejas de 5 tokens normalizados, LSH de 32 bandas × 4 filas, y sobre los candidatos el mayor de Jaccard y solapamiento |
+| 4 | Mismo comportamiento, código distinto | Embeddings de código con un modelo local; spec siguiente |
+
+La normalización:
+- Se conservan los nombres a los que se llama, los miembros a los que se accede y
+  los tipos: `a.map(f)` y `b.filter(g)` no coinciden.
+- Los demás identificadores pasan a `$1`, `$2`…, y el nombre de la propia unidad
+  a `$self`.
+- Los textos de menos de 12 caracteres pasan a `STR`, y los números y booleanos
+  a su tipo. Los textos más largos se conservan: en una función que es sobre
+  todo mensajes, el contenido es el texto.
+- Una unidad es de test si está en un fichero de test o si ella, o algo que la
+  contiene, lleva un atributo `test` (`#[test]`, `#[cfg(test)]`).
+- Por debajo de 30 tokens normalizados no se compara.
+
+**Por qué el mayor de Jaccard y solapamiento.** Una línea añadida a una función
+de 64 tokens deja el Jaccard en 0,79, pero el 93 % del original sigue dentro de la
+copia. «Copiar y retocar» se mide mejor por cuánto del original contiene lo
+nuevo.
+
+### Calibración (2026-09-30)
+
+`cargo run --release --example calibrate -- <proyecto>` sobre este repositorio
+(2.171 funciones comparables, 400 editadas con semilla fija):
+
+| Umbral | Parejas de funciones distintas | +1 trozo | +2 | +3 | −1 | −1 +1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0,70 | 155 | 100 % | 96 % | 84 % | 90 % | 71 % |
+| 0,80 | 104 | 100 % | 89 % | 73 % | 90 % | 54 % |
+| 0,90 | 52 | 82 % | 60 % | 47 % | 76 % | 28 % |
+
+Las columnas de la derecha son la cobertura sintética: a funciones reales se les
+insertan o quitan trozos de 5 a 12 tokens de otras funciones, y se mide qué
+parte se sigue encontrando. No imita del todo una edición real.
+
+Revisión a mano de las parejas por encima de 0,80, por tamaño de la función
+más pequeña:
+
+| Tokens | Parejas | Duplicación real | Resto |
 | --- | --- | --- | --- |
-| 1 | Copia exacta salvo espacios y comentarios | Hash de la secuencia de tokens normalizada | Esta spec |
-| 2 | Copia con identificadores o literales cambiados | Igual, tras renombrar identificadores locales a marcadores posicionales y literales a su tipo | Esta spec |
-| 3 | Copia con sentencias añadidas o quitadas | MinHash de 128 permutaciones sobre tejas de 5 tokens, LSH de 32 bandas × 4 filas, Jaccard exacto sobre los candidatos | Esta spec |
-| 4 | Mismo comportamiento, código distinto | Embeddings de código con un modelo local | Spec siguiente |
+| 30–49 | 85 | ~31 | Envoltorios que son así por diseño (comandos de Tauri, setters) y gemelos que solo cambian una llamada |
+| 50–79 | 14 | ~8 | Gemelos |
+| 80 o más | 5 | 5 | — |
 
-- Solo se renombran parámetros y variables declaradas dentro de la unidad. Los
-  nombres externos (funciones llamadas, miembros, tipos) se conservan, para que
-  `a.map(f)` y `b.filter(g)` no coincidan.
-- Por debajo de 30 tokens normalizados o 4 sentencias no se compara.
-- Umbral inicial de tipo 3: Jaccard ≥ 0,8. Se calibra para que al menos el 95 % de
-  los bloqueos de R1 y R2 sean copias reales, midiendo cuántas copias se escapan.
-  Datos de calibración: GPTCloneBench y los pares que salgan del banco.
+Entre la duplicación real hay tres copias que se escribieron en esta misma obra
+(`text`, un generador aleatorio y `entries::leaves` frente a
+`market::strings_in`); las dos primeras ya se corrigieron.
+
+**Consecuencia para R1 y R2**: solo bloquean cuando la unidad más pequeña de la
+pareja tiene al menos 80 tokens. Por debajo, la coincidencia va como prueba al
+revisor, que decide con criterio si es una oportunidad de reutilizar. El umbral de
+parecido queda en 0,80. Cinco parejas no bastan para asegurar el 95 %: la muestra
+se amplía con el repositorio grande de la fase 4.
 
 ## Lo que recibe el modelo
 

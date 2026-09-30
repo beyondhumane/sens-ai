@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use tree_sitter::Node;
 
-use crate::lang::treesitter::EmitSymbol;
+use crate::lang::treesitter::{EmitSymbol, text};
 
 pub const MIN_TOKENS: usize = 30;
 pub const SHINGLE: usize = 5;
@@ -12,9 +12,10 @@ pub const PERMUTATIONS: usize = 128;
 pub const BANDS: usize = 32;
 pub const WINDOW: usize = 4;
 pub const NEAR: f32 = 0.8;
+pub const TELLING_TEXT: usize = 12;
 
 const ROWS: usize = PERMUTATIONS / BANDS;
-const UNIT_KINDS: [&str; 3] = ["function", "method", "class"];
+pub const UNIT_KINDS: [&str; 3] = ["function", "method", "class"];
 const KEPT_KINDS: [&str; 9] = ["property_identifier", "field_identifier", "type_identifier", "namespace_identifier", "package_identifier", "primitive_type", "predefined_type", "constant", "scoped_type_identifier"];
 const CALLS: [&str; 4] = ["call", "invocation", "new_expression", "creation"];
 const CALLEES: [&str; 5] = ["function", "method", "name", "constructor", "type"];
@@ -78,10 +79,6 @@ struct Reader<'s> {
     normalized: Vec<String>,
 }
 
-fn text<'s>(node: &Node, source: &'s str) -> &'s str {
-    node.utf8_text(source.as_bytes()).unwrap_or("")
-}
-
 fn is_comment(kind: &str) -> bool {
     kind.contains("comment")
 }
@@ -125,8 +122,9 @@ impl<'s> Reader<'s> {
             return;
         }
         if is_string(kind) {
-            self.raw.push(text(&node, self.source));
-            self.normalized.push("STR".into());
+            let literal = text(&node, self.source);
+            self.raw.push(literal);
+            self.normalized.push(if literal.chars().count() >= TELLING_TEXT { literal.to_string() } else { "STR".into() });
             return;
         }
         if node.child_count() > 0 {
@@ -163,18 +161,32 @@ impl<'s> Reader<'s> {
     }
 
     fn print(self) -> Print {
-        let exact = hash_of(&self.raw);
-        let renamed = hash_of(&self.normalized);
-        let mut shingles: Vec<u64> = match self.normalized.len() {
-            0 => Vec::new(),
-            count if count < SHINGLE => vec![hash_of(&self.normalized)],
-            _ => self.normalized.windows(SHINGLE).map(hash_of).collect(),
-        };
-        shingles.sort_unstable();
-        shingles.dedup();
-        let signature = minhash(&shingles);
-        Print { tokens: self.normalized.len(), exact, renamed, shingles, signature }
+        print_of_tokens(hash_of(&self.raw), &self.normalized)
     }
+}
+
+pub fn print_of_tokens(exact: u64, normalized: &[String]) -> Print {
+    let mut shingles: Vec<u64> = match normalized.len() {
+        0 => Vec::new(),
+        count if count < SHINGLE => vec![hash_of(normalized)],
+        _ => normalized.windows(SHINGLE).map(hash_of).collect(),
+    };
+    shingles.sort_unstable();
+    shingles.dedup();
+    let signature = minhash(&shingles);
+    Print { tokens: normalized.len(), exact, renamed: hash_of(normalized), shingles, signature }
+}
+
+fn reading<'s>(nodes: &[Node], source: &'s str, own_name: Option<(usize, &'s str)>) -> Reader<'s> {
+    let mut reader = Reader::new(source, own_name);
+    for node in nodes {
+        reader.read(*node);
+    }
+    reader
+}
+
+pub fn normalized(node: Node, source: &str, own_name: Option<(usize, &str)>) -> Vec<String> {
+    reading(&[node], source, own_name).normalized
 }
 
 fn hash_of<T: Hash + ?Sized>(value: &T) -> u64 {
@@ -183,7 +195,7 @@ fn hash_of<T: Hash + ?Sized>(value: &T) -> u64 {
     hasher.finish()
 }
 
-fn mix(mut value: u64) -> u64 {
+pub fn mix(mut value: u64) -> u64 {
     value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
     value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -239,17 +251,7 @@ pub fn resemblance(a: &[u64], b: &[u64]) -> f32 {
 }
 
 pub fn print_of(node: Node, source: &str, own_name: Option<(usize, &str)>) -> Print {
-    let mut reader = Reader::new(source, own_name);
-    reader.read(node);
-    reader.print()
-}
-
-fn print_of_all(nodes: &[Node], source: &str) -> Print {
-    let mut reader = Reader::new(source, None);
-    for node in nodes {
-        reader.read(*node);
-    }
-    reader.print()
+    reading(&[node], source, own_name).print()
 }
 
 fn statements<'t>(unit: &Node<'t>) -> Vec<Node<'t>> {
@@ -260,14 +262,30 @@ fn statements<'t>(unit: &Node<'t>) -> Vec<Node<'t>> {
     body.named_children(&mut cursor).filter(|child| !is_comment(child.kind())).collect()
 }
 
+fn tested(node: &Node, source: &str) -> bool {
+    let mut current = Some(*node);
+    while let Some(item) = current {
+        let mut sibling = item.prev_named_sibling();
+        while let Some(attribute) = sibling.filter(|attribute| attribute.kind() == "attribute_item") {
+            if text(&attribute, source).split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|word| word == "test") {
+                return true;
+            }
+            sibling = attribute.prev_named_sibling();
+        }
+        current = item.parent();
+    }
+    false
+}
+
 pub fn units(root: &Node, source: &str, file: &str, symbols: &[EmitSymbol], test: bool) -> Vec<Unit> {
     let mut found = Vec::new();
     for symbol in symbols.iter().filter(|symbol| UNIT_KINDS.contains(&symbol.kind)) {
         let Some(node) = root.descendant_for_byte_range(symbol.start, symbol.end) else {
             continue;
         };
-        let own = text_at(source, symbol.name_start);
+        let own = own_name(source, symbol.name_start);
         let id = format!("{}#{}#{}", file, symbol.name, symbol.line);
+        let test = test || tested(&node, source);
         let line = |at: &Node| at.start_position().row as u32 + 1;
         found.push(Unit {
             symbol: id.clone(),
@@ -277,7 +295,7 @@ pub fn units(root: &Node, source: &str, file: &str, symbols: &[EmitSymbol], test
             end_line: node.end_position().row as u32 + 1,
             whole: true,
             test,
-            print: print_of(node, source, own.map(|own| (symbol.name_start, own))),
+            print: print_of(node, source, own),
         });
         if symbol.kind == "class" {
             continue;
@@ -295,17 +313,17 @@ pub fn units(root: &Node, source: &str, file: &str, symbols: &[EmitSymbol], test
                 end_line: window[WINDOW - 1].end_position().row as u32 + 1,
                 whole: false,
                 test,
-                print: print_of_all(window, source),
+                print: reading(window, source, None).print(),
             });
         }
     }
     found
 }
 
-fn text_at(source: &str, start: usize) -> Option<&str> {
+pub fn own_name(source: &str, start: usize) -> Option<(usize, &str)> {
     let rest = source.get(start..)?;
     let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).unwrap_or(rest.len());
-    (end > 0).then(|| &rest[..end])
+    (end > 0).then(|| (start, &rest[..end]))
 }
 
 #[derive(Debug, Default)]
@@ -416,11 +434,36 @@ mod tests {
     }
 
     #[test]
-    fn literals_are_reduced_to_their_type() {
+    fn short_literals_are_reduced_to_their_type_and_telling_text_is_kept() {
         let one = typescript("function a() { return label(\"KB\", 1024, true); }");
         let other = typescript("function a() { return label(\"MB\", 2048, false); }");
         assert_eq!(one.renamed, other.renamed);
         assert_ne!(one.exact, other.exact);
+        let declined = typescript("function a() { return say(\"The user declined it.\"); }");
+        let stopped = typescript("function a() { return say(\"The user stopped the task.\"); }");
+        assert_ne!(declined.renamed, stopped.renamed);
+    }
+
+    #[test]
+    fn rust_tests_inside_a_source_file_are_known_as_tests() {
+        let source = "fn live() -> u8 { 1 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checks() { assert_eq!(live(), 1); }
+
+    fn helper() {}
+}
+";
+        let tree = parsed(tree_sitter_rust::LANGUAGE.into(), source);
+        let mut emitted = crate::lang::treesitter::Emitted::default();
+        crate::lang::rust::extract(&tree.root_node(), source, "src/lib.rs", &HashSet::new(), &mut emitted);
+        let found = units(&tree.root_node(), source, "src/lib.rs", &emitted.symbols, false);
+        let tested: Vec<(&str, bool)> = found.iter().map(|unit| (unit.name.as_str(), unit.test)).collect();
+        assert_eq!(tested, [("live", false), ("checks", true), ("helper", true)]);
     }
 
     #[test]
