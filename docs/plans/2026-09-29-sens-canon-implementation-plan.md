@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Fases 0, 1 y 2 hechas
+- **Estado:** Fases 0 a 3 hechas
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -322,6 +322,27 @@ y después). Presupuesto: una foto de este repo en menos de 300 ms desde la segu
 
 **Termina cuando** las tablas de las reglas, el contexto, la ficha y el punto de
 control pasan.
+
+**Hecha el 2026-09-30**, con cambios respecto a lo planeado:
+- R1 y R2 viven juntas en `copies.rs`: comparten toda la búsqueda de
+  coincidencias, y separarlas la habría duplicado.
+- Un hallazgo lleva `severity` (`Block`, `Ask` o `Note`) y el veredicto sale del
+  peor; así una nota para el revisor nunca bloquea.
+- R1 no bloquea por coincidir solo en nombre y firma con un símbolo exportado:
+  los nombres repetidos entre módulos son habituales, y la copia real ya la
+  detectan las huellas.
+- R6 solo mira los lenguajes que entiende el índice; CSS, HTML y Markdown
+  quedan fuera por ahora.
+- R3 lee los diez manifiestos: `package.json`, `Cargo.toml`, `pyproject.toml`,
+  `requirements*.txt`, `go.mod`, `.csproj`, `composer.json`, `Gemfile`,
+  Gradle y `pom.xml`.
+- La búsqueda por mensaje también encaja palabras con los términos del código
+  que empiezan por ellas («slug» con `slugify`) y descarta los tests escritos
+  dentro de los ficheros.
+- El punto de control guarda cada foto como un commit bajo `refs/turns/`, para
+  que la limpieza de git no la borre; asegura `.sens/.gitignore`, así el
+  `git status` del proyecto no cambia; y acepta rutas de Windows con el
+  prefijo `\\?\`. Una foto de este repositorio tarda 124 ms desde la segunda.
 
 ## Fase 4 — El circuito
 

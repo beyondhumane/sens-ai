@@ -1,6 +1,6 @@
 # El Canon: el motor que decide qué código entra
 
-Fecha: 2026-09-29 · Estado: diseño aprobado; fase 0 hecha, el resto en construcción.
+Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 3 hechas, el resto en construcción.
 Ámbito: `rust/sens-index` (nuevo), `rust/sens-canon` (nuevo), `rust/sens-bench`
 (nuevo), `rust/sens-agent`, `rust/sens-app`, `rust/sens-app/ui`.
 
@@ -109,21 +109,24 @@ igual para cualquiera.
 ### Tipos
 
 ```rust
-enum Verdict { Pass, Deny(Vec<Finding>), Ask(Vec<Finding>) }
+struct Verdict { findings: Vec<Finding> }
+enum Outcome { Pass, Ask, Deny }
+enum Severity { Block, Ask, Note }
 
 struct Finding {
     rule: Rule,
+    severity: Severity,
     file: String,
     line: u32,
     message: String,
     target: Option<Target>,
-    blocking: bool,
+    key: String,
 }
 
 struct Target { symbol: String, file: String, line: u32, signature: String, excerpt: String }
 ```
 
-`Rule` enumera R1–R8 y S1–S6. `message` y `excerpt` son para el modelo, en inglés;
+`Rule` enumera R1–R8 y S1–S6. El resultado del veredicto es el del hallazgo más grave: un `Block` deniega, un `Ask` pregunta a la persona y las notas nunca bloquean. `key` identifica el hallazgo para las excepciones. `message` y `excerpt` son para el modelo, en inglés;
 la interfaz traduce la regla y el hallazgo a los seis idiomas.
 
 ## Un turno

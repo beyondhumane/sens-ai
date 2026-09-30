@@ -1,4 +1,5 @@
 pub mod account;
+pub mod canon;
 pub mod catalog;
 pub mod chat;
 pub mod language;
