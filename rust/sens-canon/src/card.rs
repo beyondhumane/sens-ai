@@ -30,7 +30,7 @@ fn capped(names: &[String], cap: usize) -> String {
     if names.len() > cap { format!("{shown}, …") } else { shown }
 }
 
-fn installed(index: &Index) -> Vec<String> {
+pub fn manifests(index: &Index) -> Vec<(String, Vec<String>)> {
     let mut manifests: Vec<(String, Vec<String>)> = ignore::WalkBuilder::new(&index.root)
         .hidden(false)
         .require_git(false)
@@ -48,7 +48,11 @@ fn installed(index: &Index) -> Vec<String> {
         })
         .collect();
     manifests.sort();
-    manifests.into_iter().map(|(manifest, names)| format!("- {manifest}: {}", capped(&names, NAMES))).collect()
+    manifests
+}
+
+fn installed(index: &Index) -> Vec<String> {
+    manifests(index).into_iter().map(|(manifest, names)| format!("- {manifest}: {}", capped(&names, NAMES))).collect()
 }
 
 pub fn card(index: &Index) -> String {

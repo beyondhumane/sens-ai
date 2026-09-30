@@ -7,6 +7,7 @@ pub mod judge;
 pub mod orphans;
 pub mod protected;
 pub mod relevant;
+pub mod review;
 pub mod verdict;
 
 pub const CANON: &str = include_str!("canon.md");
