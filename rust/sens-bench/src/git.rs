@@ -15,11 +15,14 @@ pub fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&done.stdout).into_owned())
 }
 
-pub fn export(base: &str, work: &Path) -> Result<(), String> {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+pub fn this_repository() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+pub fn export(source: &Path, base: &str, work: &Path) -> Result<(), String> {
     std::fs::create_dir_all(work).map_err(|error| format!("{}: {error}", work.display()))?;
     let archive = work.with_extension("tar");
-    git(&source, &["archive", "--format=tar", "-o", &archive.to_string_lossy(), base])?;
+    git(source, &["archive", "--format=tar", "-o", &archive.to_string_lossy(), base])?;
     let unpacked = Command::new("tar").arg("-xf").arg(&archive).arg("-C").arg(work).output().map_err(|error| format!("tar: {error}"))?;
     let _ = std::fs::remove_file(&archive);
     if !unpacked.status.success() {
@@ -59,12 +62,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_commit_of_this_repository_can_be_the_start_of_a_task() {
+    fn a_commit_can_be_the_start_of_a_task_without_what_came_after() {
+        let source = std::env::temp_dir().join("sens-bench-export-source");
         let work = std::env::temp_dir().join("sens-bench-export");
+        let _ = std::fs::remove_dir_all(&source);
         let _ = std::fs::remove_dir_all(&work);
-        export("7eb9269", &work).unwrap();
-        assert!(work.join("rust/sens-app/ui/src/shared/format.js").is_file());
-        assert!(!work.join("rust/sens-canon").exists());
+        std::fs::create_dir_all(source.join("ui/src")).unwrap();
+        std::fs::write(source.join("ui/src/format.js"), "export const weigh = 1;
+").unwrap();
+        git(&source, &["init", "-q"]).unwrap();
+        git(&source, &["add", "-A"]).unwrap();
+        git(&source, &["commit", "-q", "-m", "base"]).unwrap();
+        let base = git(&source, &["rev-parse", "--short", "HEAD"]).unwrap();
+        std::fs::create_dir_all(source.join("canon")).unwrap();
+        std::fs::write(source.join("canon/lib.rs"), "pub fn later() {}
+").unwrap();
+        git(&source, &["add", "-A"]).unwrap();
+        git(&source, &["commit", "-q", "-m", "later"]).unwrap();
+        export(&source, base.trim(), &work).unwrap();
+        assert!(work.join("ui/src/format.js").is_file());
+        assert!(!work.join("canon").exists());
     }
 
     #[test]

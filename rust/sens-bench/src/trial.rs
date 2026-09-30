@@ -223,7 +223,7 @@ pub fn judge(task: &Task, work: &Path, diffs: &Path, name: &str, run: &mut Run) 
 fn prepare(task: &Task, work: &Path) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(work);
     match &task.base {
-        Some(base) => git::export(base, work)?,
+        Some(base) => git::export(&git::this_repository(), base, work)?,
         None => copy(&task.repo(), work)?,
     }
     let setup = shell::run(work, &task.setup);
