@@ -73,6 +73,8 @@ pub struct Run {
     pub planted: Vec<String>,
     #[serde(default)]
     pub circuit: Vec<String>,
+    #[serde(default)]
+    pub lingered: bool,
     pub folder: String,
 }
 
@@ -170,6 +172,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     run.asked = turn.asked;
     run.held = turn.held;
     run.circuit = turn.circuit;
+    run.lingered = turn.lingered;
     if !turn.error.is_empty() {
         run.error = turn.error;
     }

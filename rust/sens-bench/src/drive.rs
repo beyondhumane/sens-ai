@@ -10,6 +10,7 @@ use serde_json::Value;
 
 const NOBODY: &str = "No one is available to answer. Decide on your own and carry on.";
 const TICK: Duration = Duration::from_millis(250);
+const LINGER: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Default)]
 pub struct Turn {
@@ -23,6 +24,7 @@ pub struct Turn {
     pub asked: u64,
     pub held: bool,
     pub circuit: Vec<String>,
+    pub lingered: bool,
 }
 
 pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, patience: Duration, allowed: &[String]) -> Result<Turn, String> {
@@ -38,6 +40,7 @@ pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, pat
 
     let until = Instant::now() + patience;
     let mut turn = Turn::default();
+    let mut ended: Option<Instant> = None;
     loop {
         if Instant::now() > until {
             let _ = engine.stop(&id);
@@ -49,8 +52,15 @@ pub fn drive(engine: &Engine, root: &Path, prompt: &str, settings: Settings, pat
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
-        if turn.finished && !engine.busy(&id) && engine.tasks(&id).is_empty() {
-            break;
+        if turn.finished && !engine.busy(&id) {
+            if engine.tasks(&id).is_empty() {
+                break;
+            }
+            if ended.get_or_insert_with(Instant::now).elapsed() > LINGER {
+                let _ = engine.stop(&id);
+                turn.lingered = true;
+                break;
+            }
         }
     }
     engine.forget(&id);
