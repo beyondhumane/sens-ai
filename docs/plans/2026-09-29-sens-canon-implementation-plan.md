@@ -453,13 +453,19 @@ tres tareas difíciles están escritas y validadas sobre Sens en `7eb9269`
 
 ## Fase 5 — El revisor
 
-- `sens-canon/src/review.md`: instrucciones del revisor en inglés, con S1–S6, la
+- `sens-canon/src/review.md`: instrucciones del revisor en inglés, con S1–S7, la
   obligación de citar líneas literales y la de no marcar nada pedido
   explícitamente.
+- Candidatos de S7 en `sens-canon`: la búsqueda de `relevant.rs` con las palabras
+  de las líneas añadidas como consulta, sin glosario, solo símbolos de otros
+  ficheros que el código nuevo no usa ya. Se calibra con las diferencias de las
+  tareas difíciles: en `sens-shelf-size`, un formateador de tamaños escrito a mano
+  debe traer `weigh`.
 - `sens-canon/src/review.rs`: el esquema JSON, la entrada (petición, diff unificado
   con 3 líneas de contexto, datos del índice de cada símbolo tocado, dependencias
   instaladas, `TurnStats`) y la validación de la salida: sin la cita literal, el
-  hallazgo se descarta; una regla desconocida, también; `medium` queda como nota.
+  hallazgo se descarta; una regla desconocida, también; un S7 que cite un símbolo
+  fuera de los candidatos, también; `medium` queda como nota.
 - `sens-agent/src/canon/review.rs`: lo lanza como `title.rs`, pero recibe cómo
   crear el comando, para que las pruebas usen un revisor falso
   (`tests/fixtures/fake-reviewer.mjs`).

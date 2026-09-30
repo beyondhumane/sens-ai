@@ -233,6 +233,7 @@ existía antes del turno no es un hallazgo.
 | S4 | Especulación: opciones, parámetros o ramas que la petición no pide |
 | S5 | Ingenio donde bastaba lo evidente |
 | S6 | **Recorte peligroso**: el cambio quitó validación en un límite de confianza, manejo de errores que evita pérdida de datos, seguridad, accesibilidad o algo pedido explícitamente |
+| S7 | Reinventar lo que ya existe en el proyecto con otra forma: mismo propósito que un símbolo del índice aunque no sea una copia (R1 y R2 no lo ven). Debe citar el símbolo existente, que tiene que estar entre los candidatos que Sens le dio |
 
 S6 es el contrapeso: impide que "menos código" se cumpla quitando lo que protege.
 Nada pedido explícitamente en el mensaje de la persona cuenta como sobrante.
@@ -245,11 +246,15 @@ Nada pedido explícitamente en el mensaje de la persona cuenta como sobrante.
   `--system-prompt` propio.
 - Recibe la petición de la persona, el diff del turno, para cada símbolo tocado lo
   que dice el índice (quién lo usa, qué se le parece) y las dependencias
-  instaladas.
+  instaladas. Además, los candidatos de S7: para cada fichero cambiado, los
+  símbolos de otros ficheros que más se parecen a las líneas añadidas según la
+  búsqueda del índice, usando como consulta las palabras del código nuevo, que ya
+  están en inglés, con firma, `fichero:línea`, usos y 3–5 líneas.
 - Devuelve `{ findings: [{ rule, file, quote, why, fix, confidence }] }`, con
   `rule` en S1–S6 y `confidence` en `high` o `medium`.
 - Sens descarta todo hallazgo cuyo `quote` no aparezca literal en las líneas
-  añadidas de ese fichero (en S6, en las eliminadas). Solo `high` bloquea;
+  añadidas de ese fichero (en S6, en las eliminadas), y todo S7 cuyo símbolo
+  citado no esté entre los candidatos. Solo `high` bloquea;
   `medium` es una nota para la persona.
 - Se lanza una vez por ronda de cierre, solo si las reglas de cambio pasan y el
   turno tocó código.
