@@ -99,6 +99,10 @@ impl Index {
         self.clones.similar(&self.units, print, threshold)
     }
 
+    pub fn small_like(&self, print: &Print) -> Vec<Match> {
+        self.clones.small_like(&self.units, print)
+    }
+
     pub fn raw_references(&self, symbol: usize) -> &[(u32, u32, u32)] {
         self.sites.get(symbol).map_or(&[], Vec::as_slice)
     }
