@@ -66,8 +66,8 @@ pub struct Run {
     pub test_lines_removed: u64,
     pub files_added: Vec<String>,
     pub dependencies_added: Vec<String>,
-    pub duplicated_before: u64,
-    pub duplicated_after: u64,
+    #[serde(default)]
+    pub duplicated_added: u64,
     pub reused: Vec<String>,
     #[serde(default)]
     pub planted: Vec<String>,
@@ -94,7 +94,7 @@ impl Run {
     }
 
     pub fn duplication(&self) -> f64 {
-        self.duplicated_after as f64 - self.duplicated_before as f64
+        self.duplicated_added as f64
     }
 
     pub fn tokens(&self) -> f64 {
@@ -168,7 +168,6 @@ pub fn trial(engine: &Engine, plan: &Plan) -> Run {
 
 fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(), String> {
     prepare(plan.task, work)?;
-    run.duplicated_before = measure::duplicated_lines(work, &plan.jscpd)?;
 
     let turn: Turn = drive::drive(engine, work, &plan.task.prompt, plan.settings(), plan.patience, &plan.task.allow)?;
     run.finished = turn.finished;
@@ -198,7 +197,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     run.files_added = measure::new_files(&statuses);
     run.dependencies_added = measure::dependencies_added(work, &statuses);
     run.reused = measure::reused(&changes.patch, &plan.task.reuse);
-    run.duplicated_after = measure::duplicated_lines(work, &plan.jscpd)?;
+    run.duplicated_added = measure::duplicated_added(work, &plan.jscpd, &changes.patch)?;
 
     judge(plan.task, work, &plan.diffs, &plan.name(), run)
 }

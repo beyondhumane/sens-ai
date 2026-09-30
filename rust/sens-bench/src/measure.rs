@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::process::Command;
 
@@ -9,7 +10,7 @@ use serde_json::Value;
 use crate::git;
 
 const LOCKS: &[&str] = &["package-lock.json", "Cargo.lock", "poetry.lock", "yarn.lock", "pnpm-lock.yaml", "uv.lock"];
-const IGNORED: &str = "**/node_modules/**,**/target/**,**/.sens/**,**/.git/**,**/accept/**,**/__pycache__/**,**/*.lock,**/package-lock.json";
+const IGNORED: &str = "**/node_modules/**,**/target/**,**/.sens/**,**/.git/**,**/accept/**,**/_accept/**,**/__pycache__/**,**/*.lock,**/package-lock.json";
 const MIN_TOKENS: &str = "30";
 
 fn locked(path: &str) -> bool {
@@ -135,7 +136,7 @@ fn mentions(line: &str, symbol: &str) -> bool {
     })
 }
 
-pub fn duplicated_lines(dir: &Path, jscpd: &Path) -> Result<u64, String> {
+fn clones(dir: &Path, jscpd: &Path) -> Result<Value, String> {
     let out = std::env::temp_dir().join(format!("sens-bench-jscpd-{}", std::process::id())).join(dir.file_name().unwrap_or_default());
     let _ = std::fs::remove_dir_all(&out);
     let done = Command::new("node")
@@ -150,11 +151,36 @@ pub fn duplicated_lines(dir: &Path, jscpd: &Path) -> Result<u64, String> {
     }
     let report = out.join("jscpd-report.json");
     if !report.is_file() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_str(&std::fs::read_to_string(&report).map_err(|error| format!("jscpd: {error}"))?).map_err(|error| format!("jscpd: {error}"))
+}
+
+fn inside(dir: &Path, name: &str) -> String {
+    let flat = |text: &str| text.replace('\\', "/");
+    let (name, dir) = (flat(name), flat(&dir.to_string_lossy()));
+    let folder = dir.rsplit('/').next().unwrap_or_default();
+    match name.find(&format!("{folder}/")) {
+        Some(at) if name.starts_with(&dir) || name[..at].ends_with('/') || at == 0 => name[at + folder.len() + 1..].to_string(),
+        _ => name.trim_start_matches("./").to_string(),
+    }
+}
+
+pub fn duplicated_added(dir: &Path, jscpd: &Path, patch: &str) -> Result<u64, String> {
+    let added: HashSet<(String, u32)> = sens_canon::review::sides(patch).into_iter().flat_map(|(file, sides)| sides.added.into_iter().map(move |(line, _)| (file.clone(), line))).collect();
+    if added.is_empty() {
         return Ok(0);
     }
-    let parsed: Value = serde_json::from_str(&std::fs::read_to_string(&report).map_err(|error| format!("jscpd: {error}"))?)
-        .map_err(|error| format!("jscpd: {error}"))?;
-    Ok(parsed["statistics"]["total"]["duplicatedLines"].as_u64().unwrap_or(0))
+    let found = clones(dir, jscpd)?;
+    let mut copied: HashSet<(String, u32)> = HashSet::new();
+    for clone in found["duplicates"].as_array().into_iter().flatten() {
+        for side in [&clone["firstFile"], &clone["secondFile"]] {
+            let file = inside(dir, side["name"].as_str().unwrap_or_default());
+            let (start, end) = (side["start"].as_u64().unwrap_or(0) as u32, side["end"].as_u64().unwrap_or(0) as u32);
+            copied.extend((start..=end).map(|line| (file.clone(), line)).filter(|place| added.contains(place)));
+        }
+    }
+    Ok(copied.len() as u64)
 }
 
 #[cfg(test)]
@@ -240,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn jscpd_finds_a_renamed_copy() {
+    fn only_added_lines_that_repeat_code_count_as_added_duplication() {
         let dir = std::env::temp_dir().join("sens-bench-dup");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -248,8 +274,19 @@ mod tests {
         std::fs::write(dir.join("one.js"), body).unwrap();
         std::fs::write(dir.join("two.js"), body.replace("sum", "add")).unwrap();
         let jscpd = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../node_modules/jscpd/run-jscpd.js");
-        assert!(duplicated_lines(&dir, &jscpd).unwrap() > 0);
-        std::fs::remove_file(dir.join("two.js")).unwrap();
-        assert_eq!(duplicated_lines(&dir, &jscpd).unwrap(), 0);
+        let written: String = body.replace("sum", "add").lines().map(|line| format!("+{line}\n")).collect();
+        let copy = format!("+++ b/two.js\n@@ -0,0 +1,11 @@\n{written}");
+        assert!(duplicated_added(&dir, &jscpd, &copy).unwrap() >= 8);
+        let elsewhere = "+++ b/three.js\n@@ -0,0 +1 @@\n+export const three = 3;\n";
+        std::fs::write(dir.join("three.js"), "export const three = 3;\n").unwrap();
+        assert_eq!(duplicated_added(&dir, &jscpd, elsewhere).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_clone_is_matched_to_the_run_folder_whatever_path_jscpd_prints() {
+        let dir = Path::new("C:/Temp/sens-bench/hard/task-C0-1");
+        assert_eq!(inside(dir, "C:\\Temp\\sens-bench\\hard\\task-C0-1\\src\\a.ts"), "src/a.ts");
+        assert_eq!(inside(dir, "task-C0-1\\src\\a.ts"), "src/a.ts");
+        assert_eq!(inside(dir, "src\\a.ts"), "src/a.ts");
     }
 }

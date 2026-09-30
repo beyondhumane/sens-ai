@@ -93,6 +93,7 @@ fn run(args: &[String]) -> Result<(), String> {
 fn recheck(args: &[String]) -> Result<(), String> {
     let tasks = task::all(Path::new(&flag(args, "--tasks").ok_or(USAGE)?), None)?;
     let out = PathBuf::from(args.last().ok_or(USAGE)?);
+    let jscpd = jscpd()?;
     let mut runs = report::read(&out)?;
     for run in &mut runs {
         let (Some(task), Some(condition)) = (tasks.iter().find(|task| task.id == run.task), run.condition) else {
@@ -109,6 +110,7 @@ fn recheck(args: &[String]) -> Result<(), String> {
             let tests = measure::test_lines(&patch, |path| sens_bench::git::at_base(&folder, path), |path| std::fs::read_to_string(folder.join(path)).unwrap_or_default());
             run.test_lines_added = tests.added;
             run.test_lines_removed = tests.removed;
+            run.duplicated_added = measure::duplicated_added(&folder, &jscpd, &patch)?;
         }
         trial::judge(task, &folder, &out.join("diffs"), &name, run)?;
         eprintln!("{} {condition:?} #{}: {}", run.task, run.rep, if run.valid() { "válida" } else { "no válida" });
