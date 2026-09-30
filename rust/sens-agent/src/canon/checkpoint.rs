@@ -21,7 +21,8 @@ pub enum Status {
     Deleted,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Restored {
     pub restored: Vec<String>,
     pub skipped: Vec<String>,

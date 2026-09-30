@@ -7,3 +7,6 @@ pub mod process;
 pub mod session;
 pub mod title;
 pub mod transcript;
+
+pub use sens_canon;
+pub use sens_index;
