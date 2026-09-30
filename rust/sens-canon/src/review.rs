@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+use sens_index::build;
 use sens_index::index::Index;
 use sens_index::testfile::is_test_file;
 use serde_json::{Value, json};
@@ -10,7 +11,7 @@ use crate::relevant::Catalog;
 use crate::verdict::{Finding, Rule, Severity, Target};
 
 pub const BRIEF: &str = include_str!("review.md");
-const CANDIDATES: usize = 3;
+const CANDIDATES: usize = 5;
 const EXCERPT_LINES: usize = 5;
 const DIFF_CAP: usize = 80_000;
 const KEY_CAP: usize = 80;
@@ -140,32 +141,59 @@ fn installed(index: &Index) -> Vec<String> {
     card::manifests(index).into_iter().flat_map(|(manifest, names)| names.into_iter().map(move |name| format!("{name} ({manifest})"))).collect()
 }
 
+fn pieces(index: &Index, file: &str, side: &Sides) -> Vec<String> {
+    let text = std::fs::read_to_string(index.root.join(file)).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    let added: BTreeSet<u32> = side.added.iter().map(|(line, _)| *line).collect();
+    let said = |numbers: &BTreeSet<u32>| numbers.iter().filter_map(|line| lines.get(*line as usize - 1)).map(|line| format!("{line}
+")).collect::<String>();
+    let mut covered: BTreeSet<u32> = BTreeSet::new();
+    let mut found: Vec<String> = Vec::new();
+    for unit in build::analyze(file, &text).iter().filter(|unit| unit.whole) {
+        let inside: BTreeSet<u32> = added.range(unit.start_line..=unit.end_line).copied().collect();
+        if !inside.is_empty() {
+            found.push(said(&inside));
+            covered.extend(inside);
+        }
+    }
+    let rest: BTreeSet<u32> = added.difference(&covered).copied().collect();
+    if !rest.is_empty() {
+        found.push(said(&rest));
+    }
+    if found.iter().all(|piece| piece.trim().is_empty()) {
+        return vec![side.added.iter().map(|(_, text)| format!("{text}
+")).collect()];
+    }
+    found
+}
+
+fn candidates(index: &Index, catalog: &Catalog, file: &str, side: &Sides) -> Vec<Candidate> {
+    let mut best: BTreeMap<usize, f32> = BTreeMap::new();
+    for piece in pieces(index, file, side) {
+        for suggestion in catalog.like_code(&piece, file) {
+            let score = best.entry(suggestion.symbol).or_default();
+            *score = score.max(suggestion.score);
+        }
+    }
+    let mut ranked: Vec<(usize, f32)> = best.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    ranked
+        .into_iter()
+        .take(CANDIDATES)
+        .map(|(at, _)| {
+            let symbol = &index.symbols[at];
+            Candidate { name: symbol.name.clone(), file: symbol.file.clone(), line: symbol.line, signature: symbol.signature.clone(), uses: index.raw_references(at).len(), excerpt: excerpt(index, &symbol.file, symbol.line) }
+        })
+        .collect()
+}
+
 impl Review {
     pub fn of(index: &Index, catalog: &Catalog, request: &str, diff: &str) -> Review {
         let sides = sides(diff);
         let candidates = sides
             .iter()
             .filter(|(file, side)| !is_test_file(file) && !side.added.is_empty())
-            .map(|(file, side)| {
-                let code: String = side.added.iter().map(|(_, text)| format!("{text}\n")).collect();
-                let found: Vec<Candidate> = catalog
-                    .like_code(&code, file)
-                    .into_iter()
-                    .take(CANDIDATES)
-                    .map(|suggestion| {
-                        let symbol = &index.symbols[suggestion.symbol];
-                        Candidate {
-                            name: symbol.name.clone(),
-                            file: symbol.file.clone(),
-                            line: symbol.line,
-                            signature: symbol.signature.clone(),
-                            uses: suggestion.uses,
-                            excerpt: excerpt(index, &symbol.file, symbol.line),
-                        }
-                    })
-                    .collect();
-                (file.clone(), found)
-            })
+            .map(|(file, side)| (file.clone(), candidates(index, catalog, file, side)))
             .filter(|(_, found)| !found.is_empty())
             .collect();
         Review { request: request.to_string(), diff: diff.to_string(), sides, candidates, installed: installed(index) }
@@ -331,6 +359,55 @@ deleted file mode 100644
     }
 
     #[test]
+    fn a_hand_made_helper_brings_the_one_the_project_uses_even_among_other_new_lines() {
+        let root = std::env::temp_dir().join("sens-canon-review-size");
+        let _ = std::fs::remove_dir_all(&root);
+        let weigh = "export const weigh = (bytes) => {
+  if (bytes < 1024) return units.bytes(String(bytes));
+  if (bytes < 1024 * 1024) return units.kilobytes(String(Math.round(bytes / 1024)));
+  return units.megabytes(tenths(bytes / 1024 / 1024));
+};
+";
+        let shelf = "export const sizeOf = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+export const card = (item: Item) => `${item.project} · ${sizeOf(item.bytes)} · ${item.name} · ${item.kind}`;
+";
+        for (path, content) in [
+            ("src/shared/format.js", weigh),
+            ("src/clip.ts", "import { weigh } from './shared/format.js';
+export const meta = (file) => weigh(file.bytes);
+"),
+            ("src/detail.ts", "import { weigh } from './shared/format.js';
+export const row = (entry) => weigh(entry.size);
+"),
+            ("src/items.ts", "export const kindOf = (item: Item) => item.kind;
+export const nameOf = (item: Item) => item.name;
+export const projectOf = (item: Item) => item.project;
+"),
+            ("src/shelf.ts", shelf),
+        ] {
+            let file = root.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, content).unwrap();
+        }
+        let index = build::build(&root);
+        let catalog = Catalog::of(&index);
+        let added: String = shelf.lines().map(|line| format!("+{line}
+")).collect();
+        let diff = format!("diff --git a/src/shelf.ts b/src/shelf.ts
+--- /dev/null
++++ b/src/shelf.ts
+@@ -0,0 +1,6 @@
+{added}");
+        let review = Review::of(&index, &catalog, "Show the size.", &diff);
+        let named: Vec<&str> = review.candidates.get("src/shelf.ts").into_iter().flatten().map(|candidate| candidate.name.as_str()).collect();
+        assert!(named.contains(&"weigh"), "{named:?}");
+    }
+
+    #[test]
     fn candidates_come_from_what_the_new_lines_resemble_elsewhere() {
         let root = std::env::temp_dir().join("sens-canon-review");
         let _ = std::fs::remove_dir_all(&root);
@@ -347,6 +424,7 @@ deleted file mode 100644
         let index = build::build(&root);
         let catalog = Catalog::of(&index);
         let diff = "diff --git a/src/bar.ts b/src/bar.ts\n--- a/src/bar.ts\n+++ b/src/bar.ts\n@@ -1 +1,2 @@\n+const lower = (text: string) => text.normalize(\"NFD\").replace(/\\p{M}/gu, \"\").toLocaleLowerCase();\n export const pick = (all: string[]) => all;\n";
+        std::fs::write(root.join("src/bar.ts"), "const lower = (text: string) => text.normalize(\"NFD\").replace(/\\p{M}/gu, \"\").toLocaleLowerCase();\nexport const pick = (all: string[]) => all;\n").unwrap();
         let review = Review::of(&index, &catalog, "Ignore accents.", diff);
         let named: Vec<&str> = review.candidates.get("src/bar.ts").into_iter().flatten().map(|candidate| candidate.name.as_str()).collect();
         assert_eq!(named.first(), Some(&"plain"), "{named:?}");

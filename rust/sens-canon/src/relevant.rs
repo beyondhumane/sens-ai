@@ -8,6 +8,7 @@ const GLOSSARY: &str = include_str!("glossary.toml");
 const LIMIT: usize = 8;
 const K1: f32 = 1.2;
 const B: f32 = 0.75;
+const B_CODE: f32 = 0.3;
 const NAME_WEIGHT: usize = 3;
 const SIGNATURE_WEIGHT: usize = 2;
 const COMMENT_WEIGHT: usize = 2;
@@ -134,10 +135,24 @@ fn concepts(prompt: &str) -> Vec<HashSet<String>> {
     found
 }
 
-fn unquoted(code: &str) -> String {
+fn quoted() -> &'static regex::Regex {
     static QUOTED: OnceLock<regex::Regex> = OnceLock::new();
-    let quoted = QUOTED.get_or_init(|| regex::Regex::new(r#""(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`"#).unwrap());
-    quoted.replace_all(&code.replace("\"\"\"", " ").replace("'''", " "), " ").into_owned()
+    QUOTED.get_or_init(|| regex::Regex::new(r#""(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`"#).unwrap())
+}
+
+fn unquoted(code: &str) -> String {
+    quoted().replace_all(&code.replace("\"\"\"", " ").replace("'''", " "), " ").into_owned()
+}
+
+fn spoken_code(code: &str) -> String {
+    quoted().replace_all(code, |found: &regex::Captures| interpolated(&found[0])).into_owned()
+}
+
+fn interpolated(literal: &str) -> String {
+    static INSIDE: OnceLock<regex::Regex> = OnceLock::new();
+    let inside = INSIDE.get_or_init(|| regex::Regex::new(r"\$\{([^{}]*)\}").unwrap());
+    let kept: Vec<&str> = if literal.starts_with('`') { inside.captures_iter(literal).filter_map(|found| found.get(1)).map(|found| found.as_str()).collect() } else { Vec::new() };
+    format!(" {} ", kept.join(" "))
 }
 
 fn remark(line: &str) -> bool {
@@ -252,17 +267,17 @@ impl Catalog {
         groups
     }
 
-    fn weight(&self, doc: &Doc, term: &str) -> f32 {
+    fn weighed(&self, doc: &Doc, term: &str, flatten: f32) -> f32 {
         let Some(&count) = doc.terms.get(term) else {
             return 0.0;
         };
         let seen = self.frequency[term] as f32;
         let rarity = (1.0 + (self.docs.len() as f32 - seen + 0.5) / (seen + 0.5)).ln();
         let count = count as f32;
-        rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - B + B * doc.length as f32 / self.average))
+        rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - flatten + flatten * doc.length as f32 / self.average))
     }
 
-    fn ranked(&self, groups: &[HashSet<String>], keep: impl Fn(&Doc) -> bool) -> Vec<Suggestion> {
+    fn ranked(&self, groups: &[HashSet<String>], flatten: f32, keep: impl Fn(&Doc) -> bool) -> Vec<Suggestion> {
         if groups.is_empty() {
             return Vec::new();
         }
@@ -271,7 +286,7 @@ impl Catalog {
             .iter()
             .filter(|doc| keep(doc))
             .map(|doc| {
-                let matched: f32 = groups.iter().map(|group| group.iter().map(|term| self.weight(doc, term)).fold(0.0, f32::max)).sum();
+                let matched: f32 = groups.iter().map(|group| group.iter().map(|term| self.weighed(doc, term, flatten)).fold(0.0, f32::max)).sum();
                 Suggestion { symbol: doc.symbol, score: matched * (1.0 + POPULARITY * (1.0 + doc.uses as f32).ln()), uses: doc.uses }
             })
             .collect();
@@ -281,11 +296,11 @@ impl Catalog {
     }
 
     pub fn relevant(&self, prompt: &str) -> Vec<Suggestion> {
-        self.ranked(&self.wanted(prompt), |_| true)
+        self.ranked(&self.wanted(prompt), B, |_| true)
     }
 
     pub fn like_code(&self, code: &str, file: &str) -> Vec<Suggestion> {
-        let spoken = unquoted(code);
+        let spoken = spoken_code(code);
         let named: HashSet<&str> = spoken.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).filter(|name| !name.is_empty()).collect();
         let mut groups: Vec<HashSet<String>> = Vec::new();
         for word in meaningful(&spoken).collect::<HashSet<String>>() {
@@ -294,7 +309,7 @@ impl Catalog {
                 groups.push(matched);
             }
         }
-        self.ranked(&groups, |doc| doc.file != file && !named.contains(doc.name.as_str()))
+        self.ranked(&groups, B_CODE, |doc| doc.file != file && !named.contains(doc.name.as_str()))
     }
 }
 
