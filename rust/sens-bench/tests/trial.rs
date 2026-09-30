@@ -52,6 +52,7 @@ fn a_trial_prepares_the_repo_drives_the_engine_and_measures_what_changed() {
         diffs: base.join("out").join("diffs"),
         jscpd: root().join("../../node_modules/jscpd/run-jscpd.js"),
         patience: Duration::from_secs(60),
+        variant: String::new(),
     };
 
     let run = trial::trial(&engine, &plan);

@@ -30,6 +30,7 @@ fn every_pilot_task_prepares_measures_and_fails_acceptance_when_nothing_changes(
             diffs: base.join("diffs"),
             jscpd: root().join("../../node_modules/jscpd/run-jscpd.js"),
             patience: Duration::from_secs(120),
+            variant: String::new(),
         };
         let run = trial::trial(&engine, &plan);
         assert!(run.error.is_empty(), "{}: {}", task.id, run.error);

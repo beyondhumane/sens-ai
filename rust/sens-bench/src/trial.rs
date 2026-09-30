@@ -75,6 +75,8 @@ pub struct Run {
     pub circuit: Vec<String>,
     #[serde(default)]
     pub lingered: bool,
+    #[serde(default)]
+    pub variant: String,
     pub folder: String,
 }
 
@@ -114,15 +116,19 @@ pub struct Plan<'a> {
     pub diffs: PathBuf,
     pub jscpd: PathBuf,
     pub patience: Duration,
+    pub variant: String,
 }
 
-pub fn name(task: &str, condition: Condition, rep: u32) -> String {
-    format!("{task}-{condition:?}-{rep}")
+pub fn name(task: &str, condition: Condition, variant: &str, rep: u32) -> String {
+    match variant {
+        "" => format!("{task}-{condition:?}-{rep}"),
+        _ => format!("{task}-{condition:?}-{variant}-{rep}"),
+    }
 }
 
 impl Plan<'_> {
     fn name(&self) -> String {
-        name(&self.task.id, self.condition, self.rep)
+        name(&self.task.id, self.condition, &self.variant, self.rep)
     }
 
     fn settings(&self) -> Settings {
@@ -151,6 +157,7 @@ pub fn trial(engine: &Engine, plan: &Plan) -> Run {
         },
         folder: work.to_string_lossy().into_owned(),
         planted: plan.task.reuse.clone(),
+        variant: plan.variant.clone(),
         ..Run::default()
     };
     if let Err(error) = attempt(engine, plan, &work, &mut run) {
@@ -268,7 +275,7 @@ mod tests {
             allow: Vec::new(),
         };
         for condition in CONDITIONS {
-            let plan = Plan { task: &task, condition, rep: 1, model: "m".into(), effort: "e".into(), scratch: PathBuf::new(), diffs: PathBuf::new(), jscpd: PathBuf::new(), patience: Duration::ZERO };
+            let plan = Plan { task: &task, condition, rep: 1, model: "m".into(), effort: "e".into(), scratch: PathBuf::new(), diffs: PathBuf::new(), jscpd: PathBuf::new(), patience: Duration::ZERO, variant: String::new() };
             let settings = plan.settings();
             assert_eq!(settings.extra, [ISOLATED]);
             assert_eq!(settings.canon, condition.canon());

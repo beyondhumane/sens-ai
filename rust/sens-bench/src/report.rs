@@ -37,8 +37,27 @@ pub fn rewrite(dir: &Path, runs: &[Run]) -> Result<(), String> {
     std::fs::write(dir.join(RUNS), lines.join("\n") + "\n").map_err(|error| error.to_string())
 }
 
-fn cell<'a>(runs: &'a [Run], task: &str, condition: Condition) -> Vec<&'a Run> {
-    runs.iter().filter(|run| run.task == task && run.condition == Some(condition)).collect()
+type Arm = (Condition, String);
+
+fn arm(run: &Run) -> Arm {
+    (run.condition.unwrap_or(Condition::C0), run.variant.clone())
+}
+
+fn arms(runs: &[Run]) -> Vec<Arm> {
+    let mut found: Vec<Arm> = runs.iter().map(arm).collect::<BTreeSet<_>>().into_iter().collect();
+    found.sort_by_key(|(condition, variant)| (CONDITIONS.iter().position(|one| one == condition), variant.clone()));
+    found
+}
+
+fn label((condition, variant): &Arm) -> String {
+    match variant.as_str() {
+        "" => format!("{condition:?}"),
+        _ => format!("{condition:?}·{variant}"),
+    }
+}
+
+fn cell<'a>(runs: &'a [Run], task: &str, wanted: &Arm) -> Vec<&'a Run> {
+    runs.iter().filter(|run| run.task == task && arm(run) == *wanted).collect()
 }
 
 fn valid(runs: &[&Run], metric: fn(&Run) -> f64) -> Vec<f64> {
@@ -88,16 +107,20 @@ pub fn summary(runs: &[Run]) -> String {
     let _ = writeln!(out, "## Por tarea\n");
     let _ = writeln!(out, "| Tarea | Condición | Válidas | Aceptadas | Regresiones | Código neto | Tests netos | Ficheros nuevos | Dependencias | Duplicación añadida | Reutilizó | Tokens | Segundos |");
     let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+    let arms = arms(runs);
+    let base: Arm = (Condition::C0, String::new());
+    let others: Vec<&Arm> = arms.iter().filter(|one| **one != base).collect();
     for task in &tasks {
-        for condition in CONDITIONS {
-            let here = cell(runs, task, condition);
+        for one in &arms {
+            let here = cell(runs, task, one);
             if here.is_empty() {
                 continue;
             }
             let count = |test: fn(&Run) -> bool| here.iter().filter(|run| test(run)).count();
             let _ = writeln!(
                 out,
-                "| {task} | {condition:?} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+                "| {task} | {} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+                label(one),
                 count(|run| run.valid()),
                 here.len(),
                 count(|run| run.accepted),
@@ -116,30 +139,32 @@ pub fn summary(runs: &[Run]) -> String {
 
     let _ = writeln!(out, "\n## Diferencias frente a C0\n");
     let _ = writeln!(out, "Diferencia de medianas, con intervalo al 95 % por bootstrap ({} remuestreos, semilla fija). «Todas» promedia las diferencias de cada tarea. Con menos de dos ejecuciones válidas en una celda no hay estimación.\n", stats::DRAWS);
-    let _ = writeln!(out, "| Métrica | Tarea | C1 − C0 | C2 − C0 |");
-    let _ = writeln!(out, "| --- | --- | --- | --- |");
-    for (label, metric) in COMPARED {
-        let versus = |task: &str, condition: Condition| (valid(&cell(runs, task, Condition::C0), metric), valid(&cell(runs, task, condition), metric));
+    let heading: Vec<String> = others.iter().map(|one| format!("{} − C0", label(one))).collect();
+    let _ = writeln!(out, "| Métrica | Tarea | {} |", heading.join(" | "));
+    let _ = writeln!(out, "| --- | --- |{}", " --- |".repeat(others.len()));
+    for (name, metric) in COMPARED {
+        let versus = |task: &str, one: &Arm| (valid(&cell(runs, task, &base), metric), valid(&cell(runs, task, one), metric));
         for task in &tasks {
-            let (c1, c2) = (versus(task, Condition::C1), versus(task, Condition::C2));
-            let _ = writeln!(out, "| {label} | {task} | {} | {} |", estimate(stats::difference(&c1.0, &c1.1)), estimate(stats::difference(&c2.0, &c2.1)));
+            let columns: Vec<String> = others.iter().map(|one| versus(task, one)).map(|(before, after)| estimate(stats::difference(&before, &after))).collect();
+            let _ = writeln!(out, "| {name} | {task} | {} |", columns.join(" | "));
         }
-        let all = |condition: Condition| {
-            let pairs: Vec<(Vec<f64>, Vec<f64>)> = tasks.iter().map(|task| versus(task, condition)).collect();
-            let cells: Vec<(&[f64], &[f64])> = pairs.iter().map(|(base, other)| (base.as_slice(), other.as_slice())).collect();
+        let all = |one: &Arm| {
+            let pairs: Vec<(Vec<f64>, Vec<f64>)> = tasks.iter().map(|task| versus(task, one)).collect();
+            let cells: Vec<(&[f64], &[f64])> = pairs.iter().map(|(before, after)| (before.as_slice(), after.as_slice())).collect();
             estimate(stats::pooled(&cells))
         };
-        let _ = writeln!(out, "| {label} | Todas | {} | {} |", all(Condition::C1), all(Condition::C2));
+        let columns: Vec<String> = others.iter().map(|one| all(one)).collect();
+        let _ = writeln!(out, "| {name} | Todas | {} |", columns.join(" | "));
     }
 
-    let watched: Vec<&str> = tasks.iter().copied().filter(|task| cell(runs, task, Condition::C2).iter().any(|run| !run.circuit.is_empty())).collect();
+    let watched: Vec<(&str, &Arm)> = tasks.iter().flat_map(|task| others.iter().map(move |one| (*task, *one))).filter(|(task, one)| cell(runs, task, one).iter().any(|run| !run.circuit.is_empty())).collect();
     if !watched.is_empty() {
-        let _ = writeln!(out, "\n## Circuito en C2\n");
+        let _ = writeln!(out, "\n## Circuito\n");
         let _ = writeln!(out, "En cuántas ejecuciones apareció cada etapa del circuito o cada regla que saltó (`etapa:regla`).\n");
-        let _ = writeln!(out, "| Tarea | Circuito |");
-        let _ = writeln!(out, "| --- | --- |");
-        for task in watched {
-            let _ = writeln!(out, "| {task} | {} |", circuit(&cell(runs, task, Condition::C2)));
+        let _ = writeln!(out, "| Tarea | Condición | Circuito |");
+        let _ = writeln!(out, "| --- | --- | --- |");
+        for (task, one) in watched {
+            let _ = writeln!(out, "| {task} | {} | {} |", label(one), circuit(&cell(runs, task, one)));
         }
     }
 
@@ -147,7 +172,7 @@ pub fn summary(runs: &[Run]) -> String {
     if !failed.is_empty() {
         let _ = writeln!(out, "\n## Errores\n");
         for run in failed {
-            let _ = writeln!(out, "- {} {:?} #{}: {}", run.task, run.condition.unwrap_or(Condition::C0), run.rep, run.error.lines().next().unwrap_or_default());
+            let _ = writeln!(out, "- {} {} #{}: {}", run.task, label(&arm(run)), run.rep, run.error.lines().next().unwrap_or_default());
         }
     }
     out
@@ -176,14 +201,24 @@ mod tests {
         assert!(text.contains("| dayjs 1/3 |"), "{text}");
         assert!(text.contains("| Líneas netas de código | t | -11 ["), "{text}");
         assert!(text.contains("| Líneas netas de código | Todas | -11 ["), "{text}");
-        assert!(!text.contains("Circuito en C2"), "{text}");
+        assert!(!text.contains("## Circuito"), "{text}");
+        assert!(text.contains("| Métrica | Tarea | C1 − C0 |\n"), "{text}");
     }
 
     #[test]
     fn the_summary_says_how_often_each_part_of_the_circuit_acted() {
         let watched = |steps: &[&str]| Run { circuit: steps.iter().map(|step| step.to_string()).collect(), ..run("t", Condition::C2, 5, true) };
         let text = summary(&[watched(&["anticipated·3", "write:R1", "passed"]), watched(&["anticipated·2", "passed"])]);
-        assert!(text.contains("| t | anticipated 2/2 · passed 2/2 · write:R1 1/2 |"), "{text}");
+        assert!(text.contains("| t | C2 | anticipated 2/2 · passed 2/2 · write:R1 1/2 |"), "{text}");
+    }
+
+    #[test]
+    fn a_variant_of_a_condition_is_its_own_row_and_column() {
+        let newer = |net: u64| Run { variant: "v2".into(), ..run("t", Condition::C2, net, true) };
+        let text = summary(&[run("t", Condition::C0, 30, true), run("t", Condition::C0, 34, true), run("t", Condition::C2, 30, true), run("t", Condition::C2, 32, true), newer(10), newer(12)]);
+        assert!(text.contains("| t | C2·v2 | 2/2 |"), "{text}");
+        assert!(text.contains("| Métrica | Tarea | C2 − C0 | C2·v2 − C0 |"), "{text}");
+        assert!(text.contains("| Líneas netas de código | t | -1 ["), "{text}");
     }
 
     #[test]

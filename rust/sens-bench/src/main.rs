@@ -5,7 +5,7 @@ use sens_agent::chat::Engine;
 use sens_bench::trial::{Condition, Plan};
 use sens_bench::{measure, report, task, trial};
 
-const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>[,<tarea>]] [--minutes 30]
+const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>[,<tarea>]] [--minutes 30] [--variant v2]
 sens-bench recheck --tasks <carpeta> <carpeta de resultados>
 sens-bench report <carpeta>";
 
@@ -52,6 +52,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let patience = Duration::from_secs(number(args, "--minutes", 30)? * 60);
     let model = flag(args, "--model").unwrap_or_else(|| "claude-sonnet-5-5".into());
     let effort = flag(args, "--effort").unwrap_or_else(|| "medium".into());
+    let variant = flag(args, "--variant").unwrap_or_default();
     let jscpd = jscpd()?;
     let scratch = std::env::temp_dir().join("sens-bench").join(out.file_name().unwrap_or_default());
 
@@ -69,6 +70,7 @@ fn run(args: &[String]) -> Result<(), String> {
                     diffs: out.join("diffs"),
                     jscpd: jscpd.clone(),
                     patience,
+                    variant: variant.clone(),
                 };
                 eprintln!("{} {condition:?} #{rep}…", task.id);
                 let done = trial::trial(&engine, &plan);
@@ -101,7 +103,7 @@ fn recheck(args: &[String]) -> Result<(), String> {
             eprintln!("{} {condition:?} #{}: falta {}", run.task, run.rep, folder.display());
             continue;
         }
-        let name = trial::name(&run.task, condition, run.rep);
+        let name = trial::name(&run.task, condition, &run.variant, run.rep);
         run.planted = task.reuse.clone();
         if let Ok(patch) = std::fs::read_to_string(out.join("diffs").join(format!("{name}.diff"))) {
             let tests = measure::test_lines(&patch, |path| sens_bench::git::at_base(&folder, path), |path| std::fs::read_to_string(folder.join(path)).unwrap_or_default());
