@@ -8,6 +8,7 @@ use tree_sitter::{Node, Parser, Tree};
 use crate::index::{FileInfo, ImportEdge, Reference, SymbolInfo};
 
 pub struct Contribution {
+    pub units: Vec<crate::fingerprint::Unit>,
     pub symbols: Vec<SymbolInfo>,
     pub files: Vec<FileInfo>,
     pub imports: Vec<ImportEdge>,
@@ -212,7 +213,7 @@ pub fn build(
     let rel_set: HashSet<String> = files.iter().map(|(rel, _)| rel.clone()).collect();
     let mut timer = std::time::Instant::now();
 
-    let per_file: Vec<(String, PathBuf, String, Tree, Emitted)> = files
+    let per_file: Vec<(String, PathBuf, String, Tree, Emitted, Vec<crate::fingerprint::Unit>)> = files
         .par_iter()
         .map_init(
             Parser::new,
@@ -222,13 +223,15 @@ pub fn build(
                 let tree = parser.parse(&source, None)?;
                 let mut emitted = Emitted::default();
                 extract(&tree.root_node(), &source, rel, &rel_set, &mut emitted);
-                Some((rel.clone(), abs.clone(), source, tree, emitted))
+                let units = crate::fingerprint::units(&tree.root_node(), &source, rel, &emitted.symbols, crate::testfile::is_test_file(rel));
+                Some((rel.clone(), abs.clone(), source, tree, emitted, units))
             },
         )
         .flatten()
         .collect();
 
     let mut contribution = Contribution {
+        units: Vec::new(),
         symbols: Vec::new(),
         files: Vec::new(),
         imports: Vec::new(),
@@ -238,7 +241,8 @@ pub fn build(
     let mut ranges_by_file: HashMap<String, Vec<SymbolRange>> = HashMap::new();
     let mut parsed: Vec<Parsed> = Vec::new();
 
-    for (rel, abs, source, tree, emitted) in per_file {
+    for (rel, abs, source, tree, emitted, units) in per_file {
+        contribution.units.extend(units);
         let mut skip: HashSet<usize> = HashSet::new();
         let mut exports: Vec<String> = Vec::new();
         let mut ranges: Vec<SymbolRange> = Vec::new();

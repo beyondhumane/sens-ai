@@ -17,9 +17,10 @@ fn indexing_this_repository_stays_within_budget() {
     let queried = started.elapsed();
     let sites: usize = (0..index.symbols.len()).map(|at| index.raw_references(at).len()).sum();
     eprintln!(
-        "{} files · {} symbols · {} references · {} imports · {} entry files · {} dead candidates · build {} ms · engine and dead code {} ms",
+        "{} files · {} symbols · {} units · {} references · {} imports · {} entry files · {} dead candidates · build {} ms · engine and dead code {} ms",
         index.files.len(),
         index.symbols.len(),
+        index.units.len(),
         sites,
         index.imports.len(),
         index.entry_points.len(),
@@ -27,6 +28,12 @@ fn indexing_this_repository_stays_within_budget() {
         built.as_millis(),
         queried.as_millis()
     );
+    let probe = index.units.iter().find(|unit| unit.comparable()).unwrap().print.clone();
+    let started = Instant::now();
+    for _ in 0..1_000 {
+        assert!(!index.similar(&probe).is_empty());
+    }
+    eprintln!("similar: {} µs per lookup", started.elapsed().as_micros() / 1_000);
     assert!(index.files.len() > 100);
     assert!(built.as_millis() < 5_000, "{} ms", built.as_millis());
 }

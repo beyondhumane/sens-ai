@@ -1,7 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use crate::entries;
+use crate::fingerprint::{self, Unit};
+use crate::lang::treesitter::Emitted;
+use crate::testfile::is_test_file;
 use crate::index::Index;
 use crate::lang::treesitter::{self, Extract, Grammar, Options};
 use crate::lang::{cfamily, csharp, go, java, kotlin, php, python, ruby, rust, typescript};
@@ -71,7 +74,7 @@ pub fn build(root: &Path) -> Index {
         }
     }
 
-    let (mut files, mut symbols, mut imports, mut references) = (Vec::new(), Vec::new(), Vec::new(), HashMap::new());
+    let (mut files, mut symbols, mut imports, mut references, mut units) = (Vec::new(), Vec::new(), Vec::new(), HashMap::new(), Vec::new());
     for language in &LANGUAGES {
         let Some(found) = grouped.get(language.name) else {
             continue;
@@ -81,9 +84,26 @@ pub fn build(root: &Path) -> Index {
         files.extend(contribution.files);
         imports.extend(contribution.imports);
         references.extend(contribution.references);
+        units.extend(contribution.units);
     }
     files.sort_by(|a: &crate::index::FileInfo, b| a.path.cmp(&b.path));
-    let mut index = Index::assemble(root.to_path_buf(), files, symbols, imports, references);
+    let mut index = Index::assemble(root.to_path_buf(), files, symbols, imports, references, units);
     index.entry_points = entries::find(root, &index);
     index
+}
+
+pub fn analyze(path: &str, source: &str) -> Vec<Unit> {
+    let Some(language) = language_of(Path::new(path)) else {
+        return Vec::new();
+    };
+    let mut parser = tree_sitter::Parser::new();
+    if parser.set_language(&(language.grammar)(path)).is_err() {
+        return Vec::new();
+    }
+    let Some(tree) = parser.parse(source, None) else {
+        return Vec::new();
+    };
+    let mut emitted = Emitted::default();
+    (language.extract)(&tree.root_node(), source, path, &HashSet::new(), &mut emitted);
+    fingerprint::units(&tree.root_node(), source, path, &emitted.symbols, is_test_file(path))
 }

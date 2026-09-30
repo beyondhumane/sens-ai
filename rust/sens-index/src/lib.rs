@@ -1,5 +1,6 @@
 pub mod build;
 pub mod entries;
+pub mod fingerprint;
 pub mod format;
 pub mod index;
 pub mod lang;

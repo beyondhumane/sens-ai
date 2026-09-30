@@ -98,7 +98,7 @@ mod tests {
         std::fs::write(root.join("package.json"), r#"{ "main": "./dist/server.js", "exports": { ".": { "import": "./dist/api.mjs" } } }"#).unwrap();
         std::fs::write(root.join("packages/cli/package.json"), r#"{ "bin": { "tool": "./build/main.js" } }"#).unwrap();
         let files = ["src/server.ts", "src/api.ts", "src/helper.ts", "src/ui/index.tsx", "packages/cli/src/main.ts", "src/main.ts"].map(file).to_vec();
-        let index = Index::assemble(root.clone(), files, Vec::new(), Vec::new(), Default::default());
+        let index = Index::assemble(root.clone(), files, Vec::new(), Vec::new(), Default::default(), Vec::new());
         assert_eq!(find(&root, &index), ["packages/cli/src/main.ts", "src/api.ts", "src/server.ts", "src/ui/index.tsx"]);
     }
 }

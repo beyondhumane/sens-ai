@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::fingerprint::{Clones, Match, NEAR, Print, Unit};
+
 pub const NOBODY: u32 = u32::MAX;
 pub const EVERYTHING: &str = "*";
 
@@ -50,12 +52,14 @@ pub struct Index {
     pub symbols: Vec<SymbolInfo>,
     pub imports: Vec<ImportEdge>,
     pub entry_points: Vec<String>,
+    pub units: Vec<Unit>,
+    clones: Clones,
     sites: Vec<Vec<(u32, u32, u32)>>,
     by_id: HashMap<String, usize>,
 }
 
 impl Index {
-    pub fn assemble(root: PathBuf, files: Vec<FileInfo>, symbols: Vec<SymbolInfo>, imports: Vec<ImportEdge>, mut references: HashMap<String, Vec<Reference>>) -> Index {
+    pub fn assemble(root: PathBuf, files: Vec<FileInfo>, symbols: Vec<SymbolInfo>, imports: Vec<ImportEdge>, mut references: HashMap<String, Vec<Reference>>, units: Vec<Unit>) -> Index {
         let file_slot: HashMap<&str, u32> = files.iter().enumerate().map(|(at, file)| (file.path.as_str(), at as u32)).collect();
         let by_id: HashMap<String, usize> = symbols.iter().enumerate().map(|(at, symbol)| (symbol.id.clone(), at)).collect();
         let mut sites: Vec<Vec<(u32, u32, u32)>> = symbols
@@ -83,7 +87,12 @@ impl Index {
                 }
             }
         }
-        Index { root, files, symbols, imports, entry_points: Vec::new(), sites, by_id }
+        let clones = Clones::of(&units);
+        Index { root, files, symbols, imports, entry_points: Vec::new(), units, clones, sites, by_id }
+    }
+
+    pub fn similar(&self, print: &Print) -> Vec<Match> {
+        self.clones.similar(&self.units, print, NEAR)
     }
 
     pub fn raw_references(&self, symbol: usize) -> &[(u32, u32, u32)] {
