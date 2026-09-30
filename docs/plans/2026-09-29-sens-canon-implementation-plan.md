@@ -552,6 +552,24 @@ acentos.
 **Termina cuando** `npm run typecheck`, `npm test`, las pruebas de los cuatro crates
 y las capturas están bien.
 
+**Estado el 2026-09-30.** Construida; falta que CI compile `sens-app`, que no
+compila en esta máquina (whisper necesita libclang).
+- La lógica está en `sens-agent`, que sí se prueba aquí: `canon/tools.rs` (las
+  seis herramientas del índice; `already_exists` usa la búsqueda calibrada y
+  entiende los seis idiomas), `canon/log.rs` (registro y lo evitado) y en
+  `circuit.rs` `fix_request`, `retry`, `exceptions` y `retract`.
+- En `sens-app`, el puente MCP despacha esas herramientas con el índice de la
+  carpeta de la sesión, y `src/canon.rs` tiene los diez comandos. Los dos se
+  compilaron, se pasaron por clippy y se probaron en un crate aparte con
+  `tauri`, sin la voz.
+- Interfaz: pasos de Sens en el trabajo, recuento en la línea plegada, barra del
+  turno retenido, preguntas de dependencia y tests, pestaña Proyecto en ajustes,
+  textos en seis idiomas y `?canon` en el simulador. Una escritura que Sens paró
+  se ve detenida, no fallida; una revisión sin nada que decir no se muestra.
+- 770 pruebas de vitest y los dos typecheck en verde; capturas en oscuro con
+  Señal y en claro con Neutro.
+- Se quitaron los comentarios de cada fichero tocado, como pide `CLAUDE.md`.
+
 ## Fase 7 — Calibración y las 12 tareas
 
 - Nueve tareas más, hasta cubrir en TS, Python y Rust cada cosa escondida de la
