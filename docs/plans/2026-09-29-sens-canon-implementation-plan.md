@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Fases 0 a 3 hechas
+- **Estado:** Fases 0 a 3 hechas; fase 4 construida y probada sin modelo, falta medirla
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -423,6 +423,28 @@ Nueve ejecuciones. **Se piden antes.** Resumen actualizado.
 
 **Termina cuando** las pruebas del circuito pasan y existe el primer resultado de
 C2.
+
+**Estado el 2026-09-30.** Construidos y probados 4.1 a 4.8; faltan las tareas
+difíciles y la tanda de C2 (4.9), que gastan cuota. Cambios respecto a lo
+planeado:
+- El índice no se reconstruye tras cada herramienta: juzgar las copias con el
+  índice previo es correcto porque R1 y R2 excluyen el propio fichero, y
+  reconstruirlo cuesta unos 600 ms. Se reconstruye al cerrar el turno, que es
+  cuando R4 lo necesita.
+- Las escrituras de `Write` y `Edit` se juzgan antes de ocurrir y no se vuelven
+  a juzgar después; `sens-landed` juzga lo que dejan las demás herramientas
+  (terminal, MCP, `NotebookEdit`).
+- Un cierre sin cambios en el código no emite nada.
+- Cada subagente tiene su propio contador de rondas; al agotarlo se le deja
+  terminar y el `Stop` principal lo juzga todo.
+- El trabajo en una carpeta va por turnos: un candado por carpeta en `Keeper`
+  evita que dos callbacks simultáneos se pisen el estado.
+- Sin git instalado el cierre no puede comparar fotos y deja pasar; queda como
+  límite conocido.
+- El Claude simulado llama a los hooks que recibe, y ocho escenarios recorren
+  el motor entero sin modelo.
+- `sens-bench` responde a las preguntas de Sens con la lista `allow` de cada
+  tarea y anota los turnos retenidos.
 
 ## Fase 5 — El revisor
 

@@ -1,6 +1,6 @@
 # El Canon: el motor que decide qué código entra
 
-Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 3 hechas, el resto en construcción.
+Fecha: 2026-09-29 · Estado: diseño aprobado; fases 0 a 4 construidas, falta medir C2.
 Ámbito: `rust/sens-index` (nuevo), `rust/sens-canon` (nuevo), `rust/sens-bench`
 (nuevo), `rust/sens-agent`, `rust/sens-app`, `rust/sens-app/ui`.
 
