@@ -479,6 +479,39 @@ C2 no pierde ninguna tarea frente a C0, mejora en duplicación y reutilización,
 menos del 5 % de sus bloqueos son injustos a juicio de una persona que revisa una
 muestra.
 
+### Piloto de C0 y C1 (2026-09-30)
+
+Sonnet 5.5 con esfuerzo medio, Claude Code aislado con `--safe-mode`, tres
+repeticiones por tarea y condición, C0 y C1 alternadas. Resultados en
+`bench/results/2026-09-30-pilot/`.
+
+| Tarea | C0 | C1 |
+| --- | --- | --- |
+| `py-slugs` | 3/3 válidas; arreglo en `slugify` con `unicodedata`, 2 líneas netas de código y 4 de test | Igual |
+| `rust-quiet` | 3/3 válidas; usa `config.quiet`, 9 líneas netas (incluye un test dentro de `config.rs`) | Igual, una ejecución en 3 líneas |
+| `ts-attachments` | 3/3 válidas; `formatBytes` 3/3, `dayjs` 2/3: una ejecución escribió a mano el «hace 3 horas» (30 líneas frente a 10) | `formatBytes` 3/3, `dayjs` 3/3 |
+
+Ninguna condición añadió dependencias, ficheros ni duplicación. Las diferencias de
+líneas, duplicación y tokens tienen intervalos que incluyen el cero.
+
+Lo que dice el piloto:
+
+- **Estas tareas no discriminan.** En repositorios de cinco ficheros lo reutilizable
+  está a la vista, y Sonnet 5.5 ya lo usa sin ayuda. El único fallo de C0 (reinventar
+  lo que da una dependencia instalada) es justo el tipo de falta que cubre el Canon,
+  pero una ejecución no es evidencia.
+- **El valor de Sens tiene que medirse donde el modelo no ve lo que existe:**
+  repositorios de cientos de ficheros, la pieza reutilizable lejos del sitio que se
+  edita, nombres parecidos pero no iguales y tareas que tocan varios ficheros.
+- **Límites de la medición encontrados:** los tests en línea de Rust
+  (`#[cfg(test)]`) cuentan como código porque la separación se hace por ruta, y
+  se corregirá con las regiones de test del índice; y los tokens suman lecturas
+  de caché, así que no son todavía una medida de coste.
+
+Consecuencia para el plan: antes de medir C2 se añaden tres tareas difíciles sobre
+un repositorio real y grande en un commit fijado, y el piloto de C2 corre sobre
+las seis.
+
 ## Registro
 
 `.sens/canon/log.jsonl`, local: por cada veredicto, turno, versión del Canon, fase,

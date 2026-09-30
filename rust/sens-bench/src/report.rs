@@ -47,6 +47,18 @@ fn valid(runs: &[&Run], metric: fn(&Run) -> f64) -> Vec<f64> {
     runs.iter().filter(|run| run.valid()).map(|run| metric(run)).collect()
 }
 
+fn reuse(runs: &[&Run]) -> String {
+    let planted: BTreeSet<&str> = runs.iter().flat_map(|run| run.planted.iter().map(String::as_str)).collect();
+    if planted.is_empty() {
+        return "—".into();
+    }
+    planted
+        .iter()
+        .map(|symbol| format!("{symbol} {}/{}", runs.iter().filter(|run| run.reused.iter().any(|used| used == symbol)).count(), runs.len()))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
 fn number(value: Option<f64>) -> String {
     value.map_or("—".into(), |value| format!("{value:.0}"))
 }
@@ -61,10 +73,11 @@ pub fn summary(runs: &[Run]) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "# SensBench\n");
     let _ = writeln!(out, "Modelo: {}. Ejecuciones: {}.\n", models.into_iter().collect::<Vec<_>>().join(", "), runs.len());
+    let _ = writeln!(out, "Claude Code corre aislado (`--safe-mode`): sin el CLAUDE.md, las skills, los plugins, los hooks ni los MCP de la persona.\n");
     let _ = writeln!(out, "Las medianas y diferencias usan solo las ejecuciones válidas: aceptadas, sin regresiones y sin error.\n");
 
     let _ = writeln!(out, "## Por tarea\n");
-    let _ = writeln!(out, "| Tarea | Condición | Válidas | Aceptadas | Regresiones | Código neto | Tests netos | Ficheros nuevos | Dependencias | Duplicación añadida | Reutilizó | Tokens | Minutos |");
+    let _ = writeln!(out, "| Tarea | Condición | Válidas | Aceptadas | Regresiones | Código neto | Tests netos | Ficheros nuevos | Dependencias | Duplicación añadida | Reutilizó | Tokens | Segundos |");
     let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     for task in &tasks {
         for condition in CONDITIONS {
@@ -85,9 +98,9 @@ pub fn summary(runs: &[Run]) -> String {
                 number(stats::median(&valid(&here, |run| run.files_added.len() as f64))),
                 count(|run| !run.dependencies_added.is_empty()),
                 number(stats::median(&valid(&here, Run::duplication))),
-                count(|run| !run.reused.is_empty()),
+                reuse(&here),
                 number(stats::median(&valid(&here, Run::tokens))),
-                number(stats::median(&valid(&here, |run| run.millis as f64 / 60_000.0))),
+                number(stats::median(&valid(&here, |run| run.millis as f64 / 1_000.0))),
             );
         }
     }
@@ -125,7 +138,7 @@ mod tests {
     use super::*;
 
     fn run(task: &str, condition: Condition, net: u64, accepted: bool) -> Run {
-        Run { task: task.into(), condition: Some(condition), accepted, lines_added: net, model: "m".into(), effort: "e".into(), ..Run::default() }
+        Run { task: task.into(), condition: Some(condition), accepted, lines_added: net, model: "m".into(), effort: "e".into(), planted: vec!["dayjs".into()], reused: if net < 32 { vec!["dayjs".into()] } else { Vec::new() }, ..Run::default() }
     }
 
     #[test]
@@ -139,6 +152,8 @@ mod tests {
         ];
         let text = summary(&runs);
         assert!(text.contains("| t | C0 | 2/3 | 2 | 0 | 32 | 0 |"), "{text}");
+        assert!(text.contains("--safe-mode"), "{text}");
+        assert!(text.contains("| dayjs 1/3 |"), "{text}");
         assert!(text.contains("| Líneas netas de código | t | -11 ["), "{text}");
         assert!(text.contains("| Líneas netas de código | Todas | -11 ["), "{text}");
     }

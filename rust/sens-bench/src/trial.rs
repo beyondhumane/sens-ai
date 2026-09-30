@@ -69,6 +69,8 @@ pub struct Run {
     pub duplicated_before: u64,
     pub duplicated_after: u64,
     pub reused: Vec<String>,
+    #[serde(default)]
+    pub planted: Vec<String>,
     pub folder: String,
 }
 
@@ -144,6 +146,7 @@ pub fn trial(engine: &Engine, plan: &Plan) -> Run {
             _ => sens_canon::VERSION.into(),
         },
         folder: work.to_string_lossy().into_owned(),
+        planted: plan.task.reuse.clone(),
         ..Run::default()
     };
     if let Err(error) = attempt(engine, plan, &work, &mut run) {

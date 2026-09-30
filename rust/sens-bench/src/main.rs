@@ -102,6 +102,7 @@ fn recheck(args: &[String]) -> Result<(), String> {
             continue;
         }
         let name = trial::name(&run.task, condition, run.rep);
+        run.planted = task.reuse.clone();
         if let Ok(patch) = std::fs::read_to_string(out.join("diffs").join(format!("{name}.diff"))) {
             let tests = measure::test_lines(&patch);
             run.test_lines_added = tests.added;

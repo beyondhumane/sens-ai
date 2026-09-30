@@ -1,0 +1,52 @@
+diff --git a/src/attachments.ts b/src/attachments.ts
+index cfe0b62..7d5a088 100644
+--- a/src/attachments.ts
++++ b/src/attachments.ts
+@@ -1,9 +1,14 @@
+ import type { Attachment } from "./types.ts";
++import { formatAgo, formatBytes } from "./lib/format.ts";
+ 
+-export function describe(attachment: Attachment): string {
+-  return attachment.name;
++export function describe(attachment: Attachment, now?: Date): string {
++  return [
++    attachment.name,
++    formatBytes(attachment.bytes),
++    formatAgo(attachment.addedAt, now),
++  ].join(" · ");
+ }
+ 
+ export function listing(attachments: Attachment[]): string {
+-  return attachments.map(describe).join("\n");
++  return attachments.map((a) => describe(a)).join("\n");
+ }
+diff --git a/src/lib/format.ts b/src/lib/format.ts
+index 7f60227..9db65dd 100644
+--- a/src/lib/format.ts
++++ b/src/lib/format.ts
+@@ -9,3 +9,25 @@ export function formatBytes(bytes: number): string {
+   }
+   return `${Number.isInteger(size) ? size : size.toFixed(1)} ${UNITS[unit]}`;
+ }
++
++const TIME_UNITS: [number, string, string][] = [
++  [365 * 24 * 3600, "año", "años"],
++  [30 * 24 * 3600, "mes", "meses"],
++  [24 * 3600, "día", "días"],
++  [3600, "hora", "horas"],
++  [60, "minuto", "minutos"],
++];
++
++export function formatAgo(date: Date, now: Date = new Date()): string {
++  const seconds = Math.max(
++    0,
++    Math.floor((now.getTime() - date.getTime()) / 1000),
++  );
++  for (const [size, singular, plural] of TIME_UNITS) {
++    if (seconds >= size) {
++      const n = Math.floor(seconds / size);
++      return `hace ${n} ${n === 1 ? singular : plural}`;
++    }
++  }
++  return "hace unos segundos";
++}

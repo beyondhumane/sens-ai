@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Fase 0 hecha
+- **Estado:** Fases 0 y 1 hechas
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -152,6 +152,24 @@ tarea mínima de principio a fin con `fake-claude.mjs`.
 Resultados en `bench/results/2026-…/` con su `summary.md`.
 
 **Termina cuando** existen los resultados de C0 y C1 del piloto.
+
+**Hecha el 2026-09-30.** 18 de 18 ejecuciones válidas; C0 y C1 no se distinguen en
+estas tareas (detalle en la spec, *Piloto de C0 y C1*). Cambios respecto a lo
+planeado:
+
+- El banco lanza Claude Code con `--safe-mode`: sin él, el CLAUDE.md, las skills,
+  los hooks y los MCP de quien lo ejecuta contaminaban C0. Una comprobación en
+  vivo confirmó que los callbacks y el Canon siguen funcionando; el MCP de Sens,
+  en cambio, se apaga, y la fase 4 tiene que igualar el aislamiento de C2 de otra
+  forma.
+- Las líneas de tests se cuentan aparte de las de código, desde el diff que se
+  guarda antes de la aceptación.
+- `sens-bench recheck` vuelve a pasar los tests sobre las carpetas de una tanda
+  sin llamar al modelo.
+- Las tareas se guardan byte a byte (`.gitattributes`), el diff ignora los CR y
+  los comandos de las tareas no heredan `CARGO_TARGET_DIR`.
+- **Antes de C2 hacen falta tres tareas difíciles** sobre un repositorio grande y
+  real; se añaden como paso 4.9, antes del piloto de C2.
 
 ## Fase 2 — `sens-index` y las huellas
 
@@ -358,6 +376,11 @@ pendientes.
 contra el motor real, con Haiku, para detectar cambios de Claude Code.
 
 ### 4.9 C2 del piloto
+
+Antes, tres tareas difíciles sobre un repositorio real de cientos de ficheros en
+un commit fijado: una utilidad reutilizable lejos del sitio que se edita, una
+dependencia instalada que no es evidente y un cambio en varios ficheros con un
+nombre parecido al de algo que ya existe. Cada una validada como las del piloto.
 
 Nueve ejecuciones. **Se piden antes.** Resumen actualizado.
 

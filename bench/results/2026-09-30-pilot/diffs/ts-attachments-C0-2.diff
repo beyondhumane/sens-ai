@@ -1,0 +1,22 @@
+diff --git a/src/attachments.ts b/src/attachments.ts
+index cfe0b62..c25f222 100644
+--- a/src/attachments.ts
++++ b/src/attachments.ts
+@@ -1,7 +1,16 @@
++import dayjs from "dayjs";
++import "dayjs/locale/es.js";
++import relativeTime from "dayjs/plugin/relativeTime.js";
++
++import { formatBytes } from "./lib/format.ts";
+ import type { Attachment } from "./types.ts";
+ 
++dayjs.extend(relativeTime);
++
+ export function describe(attachment: Attachment): string {
+-  return attachment.name;
++  const size = formatBytes(attachment.bytes);
++  const added = dayjs(attachment.addedAt).locale("es").fromNow();
++  return `${attachment.name} · ${size} · ${added}`;
+ }
+ 
+ export function listing(attachments: Attachment[]): string {
