@@ -78,7 +78,7 @@ pub fn all(tasks: &Path, only: Option<&str>) -> Result<Vec<Task>, String> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|dir| dir.join("task.toml").is_file())
-        .filter(|dir| only.is_none_or(|wanted| dir.file_name().is_some_and(|name| name == wanted)))
+        .filter(|dir| only.is_none_or(|wanted| dir.file_name().is_some_and(|name| wanted.split(',').any(|one| name == one.trim()))))
         .collect();
     dirs.sort();
     dirs.iter().map(|dir| load(dir)).collect()
@@ -109,6 +109,18 @@ mod tests {
         assert_eq!(task.repo(), dir.join("repo"));
         let based = load(&written("based", "language = \"typescript\"\naccept = \"npx vitest run\"\nbase = \"7eb9269\"\naccept_into = \"ui/_accept\"\n")).unwrap();
         assert_eq!((based.base.as_deref(), based.accept_into.as_str()), (Some("7eb9269"), "ui/_accept"));
+    }
+
+    #[test]
+    fn several_tasks_can_be_chosen_by_name() {
+        let root = std::env::temp_dir().join("sens-bench-task");
+        for name in ["elegida-a", "elegida-b", "no-elegida"] {
+            written(name, "language = \"rust\"
+accept = \"cargo test\"
+");
+        }
+        let chosen: Vec<String> = all(&root, Some("elegida-a, elegida-b")).unwrap().into_iter().map(|task| task.id).collect();
+        assert_eq!(chosen, ["elegida-a", "elegida-b"]);
     }
 
     #[test]

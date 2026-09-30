@@ -5,7 +5,7 @@ use sens_agent::chat::Engine;
 use sens_bench::trial::{Condition, Plan};
 use sens_bench::{measure, report, task, trial};
 
-const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>] [--minutes 30]
+const USAGE: &str = "sens-bench run --tasks <carpeta> --condition C0[,C1,C2] --out <carpeta> [--reps 3] [--model claude-sonnet-5-5] [--effort medium] [--only <tarea>[,<tarea>]] [--minutes 30]
 sens-bench recheck --tasks <carpeta> <carpeta de resultados>
 sens-bench report <carpeta>";
 
