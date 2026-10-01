@@ -1,6 +1,6 @@
 # Horizonte: un proyecto después de 30 tareas, con Sens y sin él
 
-Fecha: 2026-10-01 · Estado: propuesta, pendiente de aprobar.
+Fecha: 2026-10-01 · Estado: aprobada; pasos 1 y 2 hechos, falta el piloto.
 Ámbito: `rust/sens-bench`, `bench/sequences/` (nuevo).
 
 ## Por qué
@@ -40,10 +40,12 @@ contar; las demás lo explican.
 ### El proyecto
 
 Un proyecto propio y pequeño en TypeScript, **Cuentas**: una librería y una línea
-de comandos para llevar gastos personales. Empieza con unas 300 líneas: el modelo
-de datos, la lectura de un CSV, `formatMoney` y sus tests con vitest. TypeScript
-porque es el lenguaje más usado con Claude Code y donde el índice de Sens está
-más probado.
+de comandos para llevar gastos personales. Empieza con 100 líneas en
+`bench/sequences/cuentas/base`: el gasto, la lectura del CSV, `formatMoney`, la
+entrada y salida (`memoryIo` para los tests), las órdenes `lista` y `total` y sus
+tests con vitest. TypeScript porque es el lenguaje más usado con Claude Code y
+donde el índice de Sens está más probado. Las dependencias se instalan sin red,
+con un lockfile sacado del de Sens.
 
 Es propio para poder escribir 30 tareas que dependan unas de otras y juzgarlas
 con tests ocultos. El riesgo es diseñarlo a favor de Sens; para evitarlo, las 30
@@ -56,17 +58,22 @@ Peticiones de producto como las haría una persona, en español, en un orden fij
 Cada una añade algo que se ve (un informe, un filtro, una exportación, un aviso)
 y algunas cambian algo que ya existía.
 
-Por debajo, siete **conceptos sembrados** que varias tareas necesitan sin decirlo:
+Por debajo, ocho **conceptos sembrados** que varias tareas necesitan sin decirlo:
 
-| Concepto | Lo necesitan | ¿Existe al empezar? |
+| Concepto | Tareas que lo necesitan | ¿Existe al empezar? |
 | --- | --- | --- |
-| Escribir dinero | 6 tareas | Sí, `formatMoney` |
-| Escribir fechas | 6 tareas | No |
-| Rangos de fechas (mes, semana) | 5 tareas | No |
-| Sumar y agrupar por categoría | 5 tareas | No |
-| Buscar sin acentos | 3 tareas | No |
-| Validar lo que escribe la persona | 4 tareas | No |
-| Leer y escribir CSV | 4 tareas | A medias: solo leer |
+| Escribir dinero | Casi todas | Sí, `formatMoney` |
+| Escribir fechas como 01/03/2026 | 1, 4, 5, 7, 13, 19, 20, 23, 25, 30 | No |
+| Meses, semanas y rangos de fechas | 3, 6, 7, 9, 13, 17, 18, 21, 24, 27, 29 | No |
+| Sumar y agrupar | 2, 6, 12, 13, 18, 21, 27, 28, 29 | No |
+| Comparar sin mayúsculas ni acentos | 4, 10, 11, 12, 14, 20, 22, 30 | No |
+| Validar fechas e importes | 3, 5, 7, 11, 13, 15, 16, 18, 19, 23, 26 | No |
+| Leer y escribir CSV, con comillas | 5, 8, 9, 11, 16, 22, 23, 28 | A medias: solo leer, sin comillas |
+| Leer las opciones de una orden | 3, 6, 7, 9, 12, 14, 17, 18, 19, 21, 23, 24, 28, 29, 30 | No |
+
+Cada tarea tiene una solución de referencia (`reference.patch`) escrita como lo
+haría alguien que reutiliza: cada concepto vive en un solo sitio y las órdenes lo
+llaman. La referencia termina en 514 líneas repartidas en 12 ficheros.
 
 La primera vez que hace falta un concepto que no existe, la IA lo escribe. Las
 siguientes, lo correcto es reutilizar lo que escribió ella misma antes. Así se
@@ -94,10 +101,10 @@ Después de cada tarea, sobre **todo el proyecto** y no solo sobre lo añadido:
 | Medida | Cómo |
 | --- | --- |
 | Líneas duplicadas | jscpd sobre `src/`, independiente de Sens |
-| Copias que ve Sens | Las huellas de tipo 1 a 3 del índice sobre `src/` |
-| Implementaciones por concepto | Funciones que llaman directamente a la primitiva de cada concepto (`Intl.NumberFormat`, `Intl.DateTimeFormat`, `normalize("NFD")`…); lo ideal es 1 |
-| Tamaño | Líneas de código sin tests, ficheros y funciones |
-| Código muerto | `dead_code` del índice |
+| Casi-copias que ve Sens | Funciones de `src/` con otra muy parecida según las huellas del índice (tipos 1 a 3 y pequeñas) |
+| Sitios por concepto | Sondas de `sequence.toml`: cuántas funciones (o líneas sueltas) hacen cada cosa con su primitiva (`Intl.NumberFormat`, la tabla de meses, `normalize(`, el mensaje `Importe no válido`…); lo ideal es 1 |
+| Tamaño | Líneas sin blancos de `src/` sin tests, ficheros y funciones |
+| Código sin usar | Los candidatos de `dead_code` del índice dentro de `src/` |
 | Acierto | Test oculto de la tarea; además, los ocultos de todas las anteriores (regresiones acumuladas) |
 | Coste | Tokens y tiempo de la tarea |
 | Lo que hizo Sens | Paradas, notas y aprobaciones del circuito (solo C2) |
@@ -119,13 +126,17 @@ Después de cada tarea, sobre **todo el proyecto** y no solo sobre lo añadido:
 - **Secuencias:** `bench/sequences/cuentas/` con el proyecto base, `sequence.toml`
   (instalación, tests, sondas de conceptos) y una carpeta por tarea con
   `prompt.md`, `accept/` y `reference.patch`.
-- **`sens-bench sequence validate`:** aplica las referencias en orden y comprueba,
-  en cada paso, que el test oculto de la tarea falla antes y pasa después, y que
-  los de todas las anteriores siguen pasando.
-- **`sens-bench sequence run --condition C0,C2 --sequences 3`:** cada paso parte
-  del resultado del paso anterior del mismo brazo y secuencia; guarda las medidas
-  de la tabla de arriba en `steps.jsonl`; se reanuda sin repetir lo hecho.
-- **`sens-bench sequence report`:** las curvas y las diferencias en un resumen.
+- **`sens-bench sequence validate <secuencia>`:** aplica las referencias en orden
+  y comprueba, en cada paso, que el test oculto de la tarea falla antes y pasa
+  después, y que los de todas las anteriores siguen pasando. Al final mide la
+  referencia con las mismas medidas, como punto de comparación.
+- **`sens-bench sequence run <secuencia> --condition C0,C2 --reps 3`:** cada paso
+  parte del resultado del paso anterior del mismo brazo y repetición. Avanza paso
+  a paso en todos los brazos a la vez, para que una tanda cortada deje a todos en
+  el mismo punto; guarda las medidas en `steps.jsonl` con el commit de cada paso
+  y se reanuda desde ahí sin repetir lo hecho. `--steps` limita los pasos.
+- **`sens-bench sequence report <carpeta>`:** la tabla paso a paso, las
+  diferencias en el último paso al que llegaron todos y la pendiente del coste.
 
 ## Coste
 
@@ -140,8 +151,8 @@ Las ejecuciones gastan cuota del plan: el piloto y el resto se piden antes.
 
 | Paso | Contenido | Termina cuando |
 | --- | --- | --- |
-| 1 | Cuentas, las 30 tareas, sus tests ocultos y referencias, en un commit | `sequence validate` pasa las 30 |
-| 2 | Modo secuencia en `sens-bench`, con sus pruebas | Pruebas en verde con un modelo falso |
+| 1 | Cuentas, las 30 tareas, sus tests ocultos y referencias, en un commit | Hecho: `sequence validate` pasa las 30 |
+| 2 | Modo secuencia en `sens-bench`, con sus pruebas | Hecho: pruebas en verde con un modelo falso |
 | 3 | Piloto: 1 secuencia por brazo | Curvas del piloto; decisión de seguir o rediseñar |
 | 4 | Resto: 2 secuencias más por brazo | Resultado frente a las hipótesis, en esta spec |
 
