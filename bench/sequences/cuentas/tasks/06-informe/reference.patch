@@ -1,0 +1,43 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 6acf022..f459a76 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { appended, parseExpenses } from "./csv";
+-import { formatDate, monthOf, parseDay, parseMonth } from "./dates";
++import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney, parseAmount } from "./money";
+@@ -54,6 +54,13 @@ const commands: Record<string, Command> = {
+     io.write(path, appended(io.read(path), expense));
+     return `Añadido: ${line(expense)}`;
+   },
++  informe: (args, io) => {
++    const { expenses, flags } = selected(args, io, ["mes"]);
++    if (!flags.has("mes")) throw new Error("Falta --mes");
++    const month = flags.get("mes")!;
++    const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`);
++    return [`${capitalized(monthName(month))} de ${month.slice(0, 4)}`, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
++  },
+ };
+ 
+ export function run(argv: string[], io: Io): Ran {
+diff --git a/src/dates.ts b/src/dates.ts
+index 317cc00..41a3e57 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -17,3 +17,13 @@ export function parseMonth(text: string): string {
+ export function monthOf(iso: string): string {
+   return iso.slice(0, 7);
+ }
++
++const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
++
++export function monthName(month: string): string {
++  return MONTHS[Number(month.slice(5, 7)) - 1];
++}
++
++export function capitalized(text: string): string {
++  return text.charAt(0).toLocaleUpperCase() + text.slice(1);
++}

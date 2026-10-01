@@ -1,0 +1,37 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 5cf6640..c9c7796 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { formatBudgets, parseBudgets, withBudget } from "./budgets";
++import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+@@ -41,6 +41,12 @@ function line(expense: Expense): string {
+   return [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
+ }
+ 
++function spent(cents: number, budget: Budget | undefined): string {
++  if (!budget) return formatMoney(cents);
++  const left = budget.cents - cents;
++  return `${formatMoney(cents)} de ${formatMoney(budget.cents)} (${left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`})`;
++}
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) => selected(args, io, ["desde", "hasta"]).expenses.map(line).join("\n"),
+   total: (args, io) => `Total: ${formatMoney(sum(selected(args, io, ["mes"]).expenses))}`,
+@@ -77,10 +83,11 @@ const commands: Record<string, Command> = {
+     return `Exportados ${expenses.length} gastos a ${positional[1]}`;
+   },
+   informe: (args, io) => {
+-    const { expenses, flags } = selected(args, io, ["mes"]);
++    const { expenses, flags } = selected(args, io, ["mes", "presupuestos"]);
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+     const month = flags.get("mes")!;
+-    const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`);
++    const budgets = flags.has("presupuestos") ? parseBudgets(io.read(flags.get("presupuestos")!)) : [];
++    const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${spent(cents, budgetFor(budgets, category))}`);
+     return [`${capitalized(monthName(month))} de ${month.slice(0, 4)}`, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
+   },
+ };

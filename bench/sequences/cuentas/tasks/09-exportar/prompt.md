@@ -1,0 +1,1 @@
+Orden nueva: `exportar <fichero> <salida> --mes 2026-03`. Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y el mismo formato que el fichero original, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos.

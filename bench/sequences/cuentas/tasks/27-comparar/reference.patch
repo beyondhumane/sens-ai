@@ -1,0 +1,49 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2cf3fce..c677cd4 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -4,7 +4,7 @@ import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, daysInMonth, formatDate, monthAndYear, monthName, monthOf, parseDay, parseMonth, parseYear, weekdayName, weekOf } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+-import { formatMoney, parseAmount } from "./money";
++import { formatMoney, parseAmount, signed } from "./money";
+ import { parseOptions } from "./options";
+ import { plain, squeezed } from "./text";
+ import { biggestFirst, byKey, sum, totalsBy } from "./totals";
+@@ -163,6 +163,20 @@ const commands: Record<string, Command> = {
+       `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
+     ].join("\n");
+   },
++  comparar: (args, io) => {
++    const { expenses, positional } = selected(args, io, []);
++    if (positional[2] === undefined) throw new Error("Faltan datos: comparar <fichero> <mes> <mes>");
++    const [before, after] = [parseMonth(positional[1]), parseMonth(positional[2])].map((month) =>
++      totalsBy(expenses.filter((expense) => monthOf(expense.date) === month), (expense) => expense.category),
++    );
++    const categories = byKey(new Map([...before, ...after]));
++    return categories
++      .map(([category]) => {
++        const [then, now] = [before.get(category) ?? 0, after.get(category) ?? 0];
++        return `${category}: ${formatMoney(then)} → ${formatMoney(now)} (${signed(now - then)})`;
++      })
++      .join("\n");
++  },
+   media: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes"]);
+     const month = required(flags, "mes");
+diff --git a/src/money.ts b/src/money.ts
+index a9dbf42..aa65f30 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -10,6 +10,10 @@ function decimal(text: string): string | undefined {
+   return undefined;
+ }
+ 
++export function signed(cents: number): string {
++  return `${cents >= 0 ? "+" : ""}${formatMoney(cents)}`;
++}
++
+ export function parseAmount(text: string): number {
+   const number = decimal(text);
+   const cents = number === undefined ? 0 : Math.round(Number(number) * 100);

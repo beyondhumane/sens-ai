@@ -1,0 +1,20 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a995c47..eef2b47 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -95,6 +95,15 @@ const commands: Record<string, Command> = {
+     io.write(path, imported.reduce(appended, io.read(path)));
+     return `Importados ${imported.length} gastos`;
+   },
++  renombrar: (args, io) => {
++    const [path, from, to] = parseOptions(args, []).positional;
++    if (to === undefined) throw new Error("Faltan datos: renombrar <fichero> <categoría> <nueva>");
++    const old = plain(from);
++    const expenses = load(path, io);
++    const renamed = expenses.filter((expense) => plain(expense.category) === old).length;
++    io.write(path, formatExpenses(expenses.map((expense) => (plain(expense.category) === old ? { ...expense, category: to } : expense))));
++    return `Renombrados ${renamed} gastos`;
++  },
+   presupuesto: (args, io) => {
+     const [path, category, amount] = parseOptions(args, []).positional;
+     if (amount === undefined) throw new Error("Faltan datos: presupuesto <fichero> <categoría> <importe>");

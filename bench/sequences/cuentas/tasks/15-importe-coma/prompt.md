@@ -1,0 +1,1 @@
+`añadir` y `presupuesto` tienen que aceptar también el importe con coma, que es como lo escribimos aquí: `4,20`. Con coma, los puntos son de miles (`1.234,56`). Sin coma, el punto sigue siendo el decimal, como hasta ahora.

@@ -1,0 +1,59 @@
+diff --git a/src/bank.ts b/src/bank.ts
+index 74d4191..e0d9b54 100644
+--- a/src/bank.ts
++++ b/src/bank.ts
+@@ -1,10 +1,15 @@
+-import { rows, splitFields } from "./csv";
+-import { parseSpanishDate } from "./dates";
++import { quoted, rows, splitFields } from "./csv";
++import { formatDate, parseSpanishDate } from "./dates";
+ import type { Expense } from "./expense";
+-import { parseAmount } from "./money";
++import { amountWithComma, parseAmount } from "./money";
+ 
+ export const BANK_HEADER = "Fecha;Concepto;Importe";
+ 
++export function formatBank(expenses: Expense[]): string {
++  const lines = expenses.map((expense) => [formatDate(expense.date), quoted(expense.description, ";"), `-${amountWithComma(expense.cents)}`].join(";"));
++  return [BANK_HEADER, ...lines].join("\n") + "\n";
++}
++
+ export function bankExpenses(text: string): Expense[] {
+   return rows(text, BANK_HEADER).flatMap((row, at) => {
+     const [date, concept, amount] = splitFields(row, ";");
+diff --git a/src/cli.ts b/src/cli.ts
+index eef2b47..f1b28fe 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { bankExpenses } from "./bank";
++import { bankExpenses, formatBank } from "./bank";
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, daysInMonth, formatDate, monthAndYear, monthName, monthOf, parseDay, parseMonth, parseYear, weekdayName, weekOf } from "./dates";
+@@ -113,9 +113,11 @@ const commands: Record<string, Command> = {
+     return `Presupuesto de ${category}: ${formatMoney(budget.cents)} al mes`;
+   },
+   exportar: (args, io) => {
+-    const { expenses, positional } = selected(args, io, ["mes"]);
++    const { expenses, positional, flags } = selected(args, io, ["mes", "formato"]);
+     if (positional[1] === undefined) throw new Error("Falta el fichero de salida");
+-    io.write(positional[1], formatExpenses(expenses));
++    const format = flags.get("formato");
++    if (format !== undefined && format !== "banco") throw new Error(`Formato no válido: ${format}`);
++    io.write(positional[1], format === "banco" ? formatBank(expenses) : formatExpenses(expenses));
+     return `Exportados ${expenses.length} gastos a ${positional[1]}`;
+   },
+   semana: (args, io) => {
+diff --git a/src/money.ts b/src/money.ts
+index 11f946c..a9dbf42 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -20,3 +20,7 @@ export function parseAmount(text: string): number {
+ export function amountInFile(cents: number): string {
+   return (cents / 100).toFixed(2);
+ }
++
++export function amountWithComma(cents: number): string {
++  return amountInFile(cents).replace(".", ",");
++}

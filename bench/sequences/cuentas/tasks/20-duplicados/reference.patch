@@ -1,0 +1,42 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index adbfb14..7b2991e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -6,7 +6,7 @@ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney, parseAmount } from "./money";
+ import { parseOptions } from "./options";
+-import { plain } from "./text";
++import { plain, squeezed } from "./text";
+ import { biggestFirst, byKey, sum, totalsBy } from "./totals";
+ 
+ export interface Ran {
+@@ -111,6 +111,16 @@ const commands: Record<string, Command> = {
+     const rows = byKey(totalsBy(week, (expense) => expense.date)).map(([day, cents]) => `${capitalized(weekdayName(day))} ${formatDate(day)}: ${formatMoney(cents)}`);
+     return [...rows, `Total: ${formatMoney(sum(week))}`].join("\n");
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, Expense[]>();
++    for (const expense of selected(args, io, []).expenses) {
++      const key = [expense.date, expense.cents, squeezed(expense.description)].join("|");
++      groups.set(key, [...(groups.get(key) ?? []), expense]);
++    }
++    const repeated = [...groups.values()].filter((group) => group.length > 1);
++    if (!repeated.length) return "Sin duplicados";
++    return repeated.map(([first, ...rest]) => `${rest.length + 1} veces: ${[formatDate(first.date), formatMoney(first.cents), first.description].join("  ")}`).join("\n");
++  },
+   media: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes"]);
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+diff --git a/src/text.ts b/src/text.ts
+index 7d2349c..2cdf0df 100644
+--- a/src/text.ts
++++ b/src/text.ts
+@@ -1,3 +1,7 @@
+ export function plain(text: string): string {
+   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+ }
++
++export function squeezed(text: string): string {
++  return plain(text).replace(/\s+/g, " ").trim();
++}

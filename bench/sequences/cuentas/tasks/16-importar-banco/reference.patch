@@ -1,0 +1,65 @@
+diff --git a/src/bank.ts b/src/bank.ts
+new file mode 100644
+index 0000000..74d4191
+--- /dev/null
++++ b/src/bank.ts
+@@ -0,0 +1,19 @@
++import { rows, splitFields } from "./csv";
++import { parseSpanishDate } from "./dates";
++import type { Expense } from "./expense";
++import { parseAmount } from "./money";
++
++export const BANK_HEADER = "Fecha;Concepto;Importe";
++
++export function bankExpenses(text: string): Expense[] {
++  return rows(text, BANK_HEADER).flatMap((row, at) => {
++    const [date, concept, amount] = splitFields(row, ";");
++    try {
++      const day = parseSpanishDate(date);
++      const cents = parseAmount(amount.replace(/^-/, ""));
++      return amount.startsWith("-") ? [{ date: day, cents, category: "Sin categoría", description: concept }] : [];
++    } catch {
++      throw new Error(`Línea ${at + 2} del banco no válida`);
++    }
++  });
++}
+diff --git a/src/cli.ts b/src/cli.ts
+index 937d040..911fa13 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,3 +1,4 @@
++import { bankExpenses } from "./bank";
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth, weekdayName, weekOf } from "./dates";
+@@ -70,6 +71,13 @@ const commands: Record<string, Command> = {
+     io.write(path, appended(io.read(path), expense));
+     return `Añadido: ${line(expense)}`;
+   },
++  importar: (args, io) => {
++    const [bank, path] = parseOptions(args, []).positional;
++    if (path === undefined) throw new Error("Faltan datos: importar <fichero-del-banco> <fichero>");
++    const imported = bankExpenses(io.read(bank));
++    io.write(path, imported.reduce(appended, io.read(path)));
++    return `Importados ${imported.length} gastos`;
++  },
+   presupuesto: (args, io) => {
+     const [path, category, amount] = parseOptions(args, []).positional;
+     if (amount === undefined) throw new Error("Faltan datos: presupuesto <fichero> <categoría> <importe>");
+diff --git a/src/dates.ts b/src/dates.ts
+index 7c84600..6bbb656 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -9,6 +9,12 @@ export function parseDay(text: string): string {
+   return text;
+ }
+ 
++export function parseSpanishDate(text: string): string {
++  const parts = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
++  if (!parts) throw new Error(`Fecha no válida: ${text}`);
++  return parseDay(`${parts[3]}-${parts[2]}-${parts[1]}`);
++}
++
+ export function parseMonth(text: string): string {
+   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw new Error(`Mes no válido: ${text}`);
+   return text;

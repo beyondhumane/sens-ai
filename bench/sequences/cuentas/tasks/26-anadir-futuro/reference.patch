@@ -1,0 +1,15 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 00bb1dd..2cf3fce 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -84,7 +84,9 @@ const commands: Record<string, Command> = {
+   añadir: (args, io) => {
+     const [path, date, amount, category, description] = parseOptions(args, []).positional;
+     if (description === undefined) throw new Error("Faltan datos: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+-    const expense = { date: parseDay(date), cents: parseAmount(amount), category, description };
++    const day = parseDay(date);
++    if (day > io.today) throw new Error(`La fecha ${day} es futura`);
++    const expense = { date: day, cents: parseAmount(amount), category, description };
+     io.write(path, appended(io.read(path), expense));
+     return `Añadido: ${line(expense)}`;
+   },

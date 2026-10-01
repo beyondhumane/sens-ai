@@ -1,0 +1,28 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index dcf87e8..937d040 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -24,11 +24,13 @@ function chosen(expenses: Expense[], flags: Map<string, string>): Expense[] {
+   const month = flags.has("mes") ? parseMonth(flags.get("mes")!) : undefined;
+   const from = flags.has("desde") ? parseDay(flags.get("desde")!) : undefined;
+   const to = flags.has("hasta") ? parseDay(flags.get("hasta")!) : undefined;
++  const category = flags.has("categoria") ? plain(flags.get("categoria")!) : undefined;
+   return expenses.filter(
+     (expense) =>
+       (month === undefined || monthOf(expense.date) === month) &&
+       (from === undefined || expense.date >= from) &&
+-      (to === undefined || expense.date <= to),
++      (to === undefined || expense.date <= to) &&
++      (category === undefined || plain(expense.category) === category),
+   );
+ }
+ 
+@@ -49,7 +51,7 @@ function spent(cents: number, budget: Budget | undefined): string {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => selected(args, io, ["desde", "hasta"]).expenses.map(line).join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(sum(selected(args, io, ["mes"]).expenses))}`,
++  total: (args, io) => `Total: ${formatMoney(sum(selected(args, io, ["mes", "categoria"]).expenses))}`,
+   categorias: (args, io) =>
+     biggestFirst(totalsBy(selected(args, io, []).expenses, (expense) => expense.category))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)

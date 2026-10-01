@@ -1,0 +1,36 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c677cd4..a6a8c7a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,10 +1,10 @@
+ import { bankExpenses, formatBank } from "./bank";
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+-import { appended, formatExpenses, parseExpenses } from "./csv";
++import { appended, formatExpenses, parseExpenses, quoted } from "./csv";
+ import { capitalized, daysInMonth, formatDate, monthAndYear, monthName, monthOf, parseDay, parseMonth, parseYear, weekdayName, weekOf } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+-import { formatMoney, parseAmount, signed } from "./money";
++import { amountInFile, formatMoney, parseAmount, signed } from "./money";
+ import { parseOptions } from "./options";
+ import { plain, squeezed } from "./text";
+ import { biggestFirst, byKey, sum, totalsBy } from "./totals";
+@@ -183,14 +183,16 @@ const commands: Record<string, Command> = {
+     return `Media diaria en ${monthAndYear(month)}: ${formatMoney(Math.round(sum(expenses) / daysInMonth(month)))}`;
+   },
+   informe: (args, io) => {
+-    const { expenses, flags } = selected(args, io, ["mes", "presupuestos", "anio"]);
++    const { expenses, flags } = selected(args, io, ["mes", "presupuestos", "anio", "csv"]);
+     if (flags.has("anio")) {
+       const rows = byKey(totalsBy(expenses, (expense) => monthOf(expense.date))).map(([month, cents]) => `  ${capitalized(monthName(month))}: ${formatMoney(cents)}`);
+       return [flags.get("anio")!, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
+     }
+     const month = required(flags, "mes");
+     const budgets = flags.has("presupuestos") ? parseBudgets(io.read(flags.get("presupuestos")!)) : [];
+-    const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${spent(cents, budgetFor(budgets, category))}`);
++    const categories = biggestFirst(totalsBy(expenses, (expense) => expense.category));
++    if (flags.has("csv")) io.write(flags.get("csv")!, ["categoria,total", ...categories.map(([category, cents]) => `${quoted(category)},${amountInFile(cents)}`)].join("\n") + "\n");
++    const rows = categories.map(([category, cents]) => `  ${category}: ${spent(cents, budgetFor(budgets, category))}`);
+     return [capitalized(monthAndYear(month)), ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
+   },
+ };

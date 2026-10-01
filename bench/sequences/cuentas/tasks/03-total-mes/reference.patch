@@ -1,0 +1,89 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 1854752..b80fc7c 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,8 +1,9 @@
+ import { parseExpenses } from "./csv";
+-import { formatDate } from "./dates";
++import { formatDate, monthOf, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
++import { parseOptions } from "./options";
+ import { biggestFirst, sum, totalsBy } from "./totals";
+ 
+ export interface Ran {
+@@ -17,15 +18,25 @@ function load(path: string | undefined, io: Io): Expense[] {
+   return parseExpenses(io.read(path));
+ }
+ 
++function chosen(expenses: Expense[], flags: Map<string, string>): Expense[] {
++  const month = flags.has("mes") ? parseMonth(flags.get("mes")!) : undefined;
++  return expenses.filter((expense) => month === undefined || monthOf(expense.date) === month);
++}
++
++function selected(args: string[], io: Io, allowed: string[]): { expenses: Expense[]; positional: string[]; flags: Map<string, string> } {
++  const { positional, flags } = parseOptions(args, allowed);
++  return { expenses: chosen(load(positional[0], io), flags), positional, flags };
++}
++
+ function line(expense: Expense): string {
+   return [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
+ }
+ 
+ const commands: Record<string, Command> = {
+-  lista: (args, io) => load(args[0], io).map(line).join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(sum(load(args[0], io)))}`,
++  lista: (args, io) => selected(args, io, []).expenses.map(line).join("\n"),
++  total: (args, io) => `Total: ${formatMoney(sum(selected(args, io, ["mes"]).expenses))}`,
+   categorias: (args, io) =>
+-    biggestFirst(totalsBy(load(args[0], io), (expense) => expense.category))
++    biggestFirst(totalsBy(selected(args, io, []).expenses, (expense) => expense.category))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n"),
+ };
+diff --git a/src/dates.ts b/src/dates.ts
+index 5140cf5..7585015 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -2,3 +2,12 @@ export function formatDate(iso: string): string {
+   const [year, month, day] = iso.split("-");
+   return `${day}/${month}/${year}`;
+ }
++
++export function parseMonth(text: string): string {
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw new Error(`Mes no válido: ${text}`);
++  return text;
++}
++
++export function monthOf(iso: string): string {
++  return iso.slice(0, 7);
++}
+diff --git a/src/options.ts b/src/options.ts
+new file mode 100644
+index 0000000..999eff4
+--- /dev/null
++++ b/src/options.ts
+@@ -0,0 +1,22 @@
++export interface Options {
++  positional: string[];
++  flags: Map<string, string>;
++}
++
++export function parseOptions(args: string[], allowed: string[]): Options {
++  const positional: string[] = [];
++  const flags = new Map<string, string>();
++  for (let at = 0; at < args.length; at++) {
++    const arg = args[at];
++    if (!arg.startsWith("--")) {
++      positional.push(arg);
++      continue;
++    }
++    const name = arg.slice(2);
++    if (!allowed.includes(name)) throw new Error(`Opción desconocida: ${arg}`);
++    const value = args[++at];
++    if (value === undefined) throw new Error(`Falta el valor de ${arg}`);
++    flags.set(name, value);
++  }
++  return { positional, flags };
++}

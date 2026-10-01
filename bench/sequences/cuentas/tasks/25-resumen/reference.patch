@@ -1,0 +1,23 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 0bbc480..00bb1dd 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -149,6 +149,18 @@ const commands: Record<string, Command> = {
+     if (!over.length) return "Todo en orden";
+     return biggestFirst(new Map(over)).map(([category, cents]) => `${category}: te pasas ${formatMoney(cents)}`).join("\n");
+   },
++  resumen: (args, io) => {
++    const expenses = selected(args, io, []).expenses;
++    if (!expenses.length) return "Sin gastos";
++    const days = sorted(expenses).map((expense) => expense.date);
++    const biggest = expenses.reduce((top, expense) => (expense.cents > top.cents ? expense : top));
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(days[0])} hasta ${formatDate(days[days.length - 1])}`,
++      `Total: ${formatMoney(sum(expenses))}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   media: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes"]);
+     const month = required(flags, "mes");
