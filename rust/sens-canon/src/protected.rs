@@ -7,11 +7,17 @@ use crate::verdict::{Change, Finding, Rule, Severity};
 
 const CHECKS: [&str; 7] = ["assert", "expect(", ".should", "t.Error", "t.Fatal", "Assert.", "verify("];
 
+fn spanned<'a>(lines: &[&'a str], unit: &sens_index::fingerprint::Unit) -> Vec<&'a str> {
+    lines.iter().skip(unit.start_line.saturating_sub(1) as usize).take((unit.end_line + 1 - unit.start_line) as usize).copied().collect()
+}
+
 fn tested_names(path: &str, source: &str) -> BTreeSet<String> {
     let whole_file = is_test_file(path);
+    let lines: Vec<&str> = source.lines().collect();
     build::analyze(path, source)
         .into_iter()
         .filter(|unit| unit.whole && unit.test && (whole_file || !unit.name.contains('.')))
+        .filter(|unit| checks(&spanned(&lines, unit).join("\n")) > 0)
         .map(|unit| unit.name)
         .collect()
 }
@@ -24,8 +30,7 @@ fn tested_text(path: &str, source: &str) -> String {
     build::analyze(path, source)
         .iter()
         .filter(|unit| unit.whole && unit.test)
-        .flat_map(|unit| lines.iter().skip(unit.start_line.saturating_sub(1) as usize).take((unit.end_line + 1 - unit.start_line) as usize))
-        .copied()
+        .flat_map(|unit| spanned(&lines, unit))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -101,6 +106,14 @@ mod tests {
         assert_eq!(findings(&change("test/add.test.ts", SPEC, Some(&weaker))).len(), 1);
         let stronger = SPEC.replace("});", "  assert.equal(add(3), 4);\n});");
         assert!(findings(&change("test/add.test.ts", SPEC, Some(&stronger))).is_empty());
+    }
+
+    #[test]
+    fn a_helper_in_a_test_file_that_checks_nothing_is_not_a_test() {
+        let with_helper = format!("const shown = (output: string) => output.replace(/\\u00a0/g, \" \");\n\n{SPEC}");
+        assert!(findings(&change("test/add.test.ts", &with_helper, Some(SPEC))).is_empty());
+        let without_test = with_helper.replace("test('adds', () => {\n  assert.equal(add(1), 2);\n  assert.equal(add(2), 3);\n});\n", "");
+        assert!(!findings(&change("test/add.test.ts", &with_helper, Some(&without_test))).is_empty());
     }
 
     #[test]
