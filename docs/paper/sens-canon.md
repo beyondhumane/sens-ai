@@ -197,10 +197,23 @@ de una línea para quitar acentos en vez de importar la del proyecto.
 
 La unidad de comparación es cada función, método o clase, y además cada ventana
 de cuatro sentencias seguidas dentro de una función, para encontrar copias
-parciales. El índice está escrito en Rust sobre tree-sitter, resuelve los
-*imports* y entradas de TypeScript y JavaScript, cubre once lenguajes y vive en
-memoria: este repositorio, con 455 ficheros y 8 600 unidades, se indexa en unos
-630 ms, y buscar las copias de una unidad cuesta del orden de un microsegundo.
+parciales. El índice está escrito en Rust sobre tree-sitter y vive en memoria:
+este repositorio, con 556 ficheros y 10 000 unidades, se indexa en menos de dos
+segundos, y buscar las copias de una unidad cuesta del orden de un microsegundo.
+
+Lee treinta lenguajes en dos niveles. En el **nivel completo**, el índice sabe
+qué es privado, de modo que una definición privada que nadie usa es código
+muerto que bloquea, y, donde el lenguaje importa ficheros, qué importa cada uno.
+Son diecinueve: TypeScript y JavaScript, con los componentes de Vue y Svelte,
+Python, Go, Rust, Java, Kotlin, C#, PHP, Ruby, C y C++, y además Swift, Dart,
+Scala, F#, Lua, Elixir, Gleam y Zig, que leen la privacidad de su propia
+sintaxis (`private`, el guion bajo de Dart, `local`, `defp`, la falta de `pub`).
+En el **nivel básico**, los once restantes (Bash, PowerShell, Haskell, R,
+Objective-C, OCaml, Erlang, Julia, Solidity, Elm y Groovy) sacan funciones,
+métodos y clases de la consulta de definiciones que trae su gramática o, si no
+trae ninguna, de la forma de sus nodos; las copias y los comentarios nuevos se
+detectan igual, pero todo cuenta como público, así que el código sin usar es una
+nota y nunca bloquea.
 
 | Tipo | Qué es | Técnica |
 | --- | --- | --- |
@@ -634,6 +647,11 @@ modelo, con la información correcta delante, ya hace lo correcto.
   criterio confirmatorio se fijó antes de medirlo.
 - **Sin herramientas MCP en el banco.** C2 se midió sin las consultas al índice
   que ofrece la aplicación.
+- **Diecinueve lenguajes, sin medir en el banco.** Los experimentos se hicieron
+  con los once primeros; Vue, Svelte y los diecinueve añadidos después están
+  cubiertos por tests, no por ejecuciones del agente. En Bash, además, las
+  variables viven dentro de cadenas y una copia con las variables renombradas no
+  se reconoce.
 - **Los tokens incluyen lecturas de caché**: miden volumen de trabajo, no coste
   exacto.
 - **El revisor tiene poca precisión.** De las siete notas y bloqueos suyos
@@ -651,8 +669,9 @@ modelo, con la información correcta delante, ya hace lo correcto.
 - **Copias de tipo 4** con *embeddings* de código locales.
 - **Un revisor más preciso**, o reglas fijas que sustituyan las notas en que más
   falla.
-- **Más modelos, más lenguajes y proyectos más grandes**, y Horizonte con las
-  herramientas MCP activas.
+- **Más modelos y proyectos más grandes**, Horizonte con las herramientas MCP
+  activas y en los lenguajes añadidos, y el nivel completo para los once que hoy
+  se leen en el básico.
 - **Otros agentes conectados** además de Claude Code, con su propio adaptador y
   las mismas reglas.
 
