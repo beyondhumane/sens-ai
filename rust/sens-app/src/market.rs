@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use sens_agent::sens_index::entries::leaves;
 use sens_agent::{said, session};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -925,20 +926,11 @@ fn placeholders(text: &str) -> Vec<(String, Option<String>)> {
     found
 }
 
-fn strings_in(value: &Value, into: &mut Vec<String>) {
-    match value {
-        Value::String(text) => into.push(text.clone()),
-        Value::Array(items) => items.iter().for_each(|item| strings_in(item, into)),
-        Value::Object(map) => map.values().for_each(|item| strings_in(item, into)),
-        _ => {}
-    }
-}
-
 fn server_needs(servers: &BTreeMap<String, Value>) -> Vec<Need> {
     let mut needs: Vec<Need> = Vec::new();
     for (server, config) in servers {
         let mut texts = Vec::new();
-        strings_in(config, &mut texts);
+        leaves(config, &mut texts);
         for (name, default) in texts.iter().flat_map(|text| placeholders(text)) {
             if needs.iter().any(|need| need.name == name) {
                 continue;

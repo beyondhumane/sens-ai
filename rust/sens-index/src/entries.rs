@@ -34,7 +34,7 @@ fn ends_as(inside: &str, tail: &str) -> bool {
     SOURCE.contains(&extension) && (stem == tail || stem.ends_with(&format!("/{tail}")))
 }
 
-fn leaves(value: &Value, out: &mut Vec<String>) {
+pub fn leaves(value: &Value, out: &mut Vec<String>) {
     match value {
         Value::String(text) => out.push(text.clone()),
         Value::Array(items) => items.iter().for_each(|item| leaves(item, out)),
