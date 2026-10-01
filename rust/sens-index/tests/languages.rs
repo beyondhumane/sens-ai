@@ -5,25 +5,25 @@ use sens_index::index::Index;
 use sens_index::query::{Engine, Tier};
 
 const SAMPLES: [(&str, &str, &[&str]); 19] = [
-    ("Shelf.swift", "class Shelf {\n    func size() -> Int {\n        return 1\n    }\n}\n\nfunc helper() -> Int {\n    return 2\n}\n", &["Shelf:class", "Shelf.size:method", "helper:function"]),
-    ("shelf.dart", "class Shelf {\n  int size() {\n    return 1;\n  }\n}\n\nint helper() {\n  return 2;\n}\n", &["Shelf:class", "Shelf.size:method", "helper:function"]),
-    ("Shelf.scala", "class Shelf {\n  def size(): Int = 1\n}\n\nobject Tools {\n  def helper(): Int = 2\n}\n", &["Shelf:class", "Shelf.size:method", "Tools:class", "Tools.helper:method"]),
-    ("shelf.lua", "local Shelf = {}\n\nfunction Shelf.size()\n  return 1\nend\n\nlocal function helper()\n  return 2\nend\n", &["size:function", "helper:function"]),
-    ("shelf.sh", "helper() {\n  echo 2\n}\n\nfunction size {\n  echo 1\n}\n", &["helper:function", "size:function"]),
-    ("Shelf.ps1", "function Get-Size {\n  return 1\n}\n\nclass Shelf {\n  [int] Size() {\n    return 1\n  }\n}\n", &["Get-Size:function", "Shelf:class", "Shelf.Size:method"]),
-    ("shelf.ex", "defmodule Shelf do\n  def size do\n    1\n  end\n\n  defp helper do\n    2\n  end\nend\n", &["Shelf:class", "Shelf.size:method", "Shelf.helper:method"]),
-    ("Shelf.hs", "module Shelf where\n\nhelper :: Int -> Int\nhelper x = x + 2\n", &["helper:function"]),
-    ("shelf.zig", "const Shelf = struct {\n    pub fn size(self: Shelf) u32 {\n        return 1;\n    }\n};\n\nfn helper() u32 {\n    return 2;\n}\n", &["size:function", "helper:function"]),
-    ("shelf.R", "size <- function() {\n  1\n}\n\nhelper <- function(x) {\n  x + 2\n}\n", &["size:function", "helper:function"]),
-    ("Shelf.m", "@implementation Shelf\n- (int)size {\n  return 1;\n}\n@end\n\nint helper(void) {\n  return 2;\n}\n", &["Shelf:class", "Shelf.size:method", "helper:function"]),
-    ("shelf.ml", "let size () = 1\n\nlet helper x = x + 2\n\nmodule Shelf = struct\n  let count () = 3\nend\n", &["size:function", "helper:function", "Shelf:class", "Shelf.count:method"]),
-    ("Shelf.fs", "module Shelf\n\nlet size () = 1\n\nlet helper x = x + 2\n", &["Shelf:class", "Shelf.size:method", "Shelf.helper:method"]),
-    ("shelf.erl", "-module(shelf).\n-export([size/0]).\n\nsize() -> 1.\n\nhelper(X) -> X + 2.\n", &["size:function", "helper:function"]),
-    ("shelf.jl", "function size()\n    return 1\nend\n\nstruct Shelf\n    count::Int\nend\n", &["size:function", "Shelf:class"]),
-    ("Shelf.sol", "contract Shelf {\n    function size() public pure returns (uint) {\n        return 1;\n    }\n}\n", &["Shelf:class", "Shelf.size:method"]),
-    ("Shelf.elm", "module Shelf exposing (size)\n\nsize : Int\nsize =\n    1\n\nhelper : Int -> Int\nhelper x =\n    x + 2\n", &["Shelf:class", "size:function", "helper:function"]),
-    ("shelf.gleam", "pub fn size() -> Int {\n  1\n}\n\nfn helper(x: Int) -> Int {\n  x + 2\n}\n", &["size:function", "helper:function"]),
-    ("Shelf.groovy", "class Shelf {\n    int size() {\n        return 1\n    }\n}\n\ndef helper() {\n    return 2\n}\n", &["Shelf:class", "Shelf.size:method", "helper:function"]),
+    ("Shelf.swift", "class Shelf {\n    func size() -> Int {\n        return 1\n    }\n}\n\nfunc helper() -> Int {\n    return 2\n}\n", &["Shelf:class@1-5", "Shelf.size:method@2-4", "helper:function@7-9"]),
+    ("shelf.dart", "class Shelf {\n  int size() {\n    return 1;\n  }\n}\n\nint helper() {\n  return 2;\n}\n", &["Shelf:class@1-5", "Shelf.size:method@2-4", "helper:function@7-9"]),
+    ("Shelf.scala", "class Shelf {\n  def size(): Int = 1\n}\n\nobject Tools {\n  def helper(): Int = 2\n}\n", &["Shelf:class@1-3", "Shelf.size:method@2-2", "Tools:class@5-7", "Tools.helper:method@6-6"]),
+    ("shelf.lua", "local Shelf = {}\n\nfunction Shelf.size()\n  return 1\nend\n\nlocal function helper()\n  return 2\nend\n", &["size:function@3-5", "helper:function@7-9"]),
+    ("shelf.sh", "helper() {\n  echo 2\n}\n\nfunction size {\n  echo 1\n}\n", &["helper:function@1-3", "size:function@5-7"]),
+    ("Shelf.ps1", "function Get-Size {\n  return 1\n}\n\nclass Shelf {\n  [int] Size() {\n    return 1\n  }\n}\n", &["Get-Size:function@1-3", "Shelf:class@5-9", "Shelf.Size:method@6-8"]),
+    ("shelf.ex", "defmodule Shelf do\n  def size do\n    1\n  end\n\n  defp helper do\n    2\n  end\nend\n", &["Shelf:class@1-9", "Shelf.size:function@2-4", "Shelf.helper:function@6-8"]),
+    ("Shelf.hs", "module Shelf where\n\nhelper :: Int -> Int\nhelper x = x + 2\n", &["helper:function@4-4"]),
+    ("shelf.zig", "const Shelf = struct {\n    pub fn size(self: Shelf) u32 {\n        return 1;\n    }\n};\n\nfn helper() u32 {\n    return 2;\n}\n", &["size:function@2-4", "helper:function@7-9"]),
+    ("shelf.R", "size <- function() {\n  1\n}\n\nhelper <- function(x) {\n  x + 2\n}\n", &["size:function@1-3", "helper:function@5-7"]),
+    ("Shelf.m", "@implementation Shelf\n- (int)size {\n  return 1;\n}\n@end\n\nint helper(void) {\n  return 2;\n}\n", &["Shelf:class@1-5", "Shelf.size:method@2-4", "helper:function@7-9"]),
+    ("shelf.ml", "let size () = 1\n\nlet helper x = x + 2\n\nmodule Shelf = struct\n  let count () = 3\nend\n", &["size:function@1-1", "helper:function@3-3", "Shelf:class@5-7", "Shelf.count:function@6-6"]),
+    ("Shelf.fs", "module Shelf\n\nlet size () = 1\n\nlet helper x = x + 2\n", &["Shelf:class@1-5", "Shelf.size:function@3-3", "Shelf.helper:function@5-5"]),
+    ("shelf.erl", "-module(shelf).\n-export([size/0]).\n\nsize() -> 1.\n\nhelper(X) -> X + 2.\n", &["size:function@4-4", "helper:function@6-6"]),
+    ("shelf.jl", "function size()\n    return 1\nend\n\nstruct Shelf\n    count::Int\nend\n", &["size:function@1-3", "Shelf:class@5-7"]),
+    ("Shelf.sol", "contract Shelf {\n    function size() public pure returns (uint) {\n        return 1;\n    }\n}\n", &["Shelf:class@1-5", "Shelf.size:method@2-4"]),
+    ("Shelf.elm", "module Shelf exposing (size)\n\nsize : Int\nsize =\n    1\n\nhelper : Int -> Int\nhelper x =\n    x + 2\n", &["Shelf:class@1-1", "size:function@4-5", "helper:function@8-9"]),
+    ("shelf.gleam", "pub fn size() -> Int {\n  1\n}\n\nfn helper(x: Int) -> Int {\n  x + 2\n}\n", &["size:function@1-3", "helper:function@5-7"]),
+    ("Shelf.groovy", "class Shelf {\n    int size() {\n        return 1\n    }\n}\n\ndef helper() {\n    return 2\n}\n", &["Shelf:class@1-5", "Shelf.size:method@2-4", "helper:function@7-9"]),
 ];
 
 const SWIFT_TOTALS: &str = "func totals(rows: [Row]) -> (Int, Int) {\n    var sum = 0\n    var count = 0\n    for row in rows {\n        if row.active {\n            sum += row.amount\n            count += 1\n        }\n    }\n    return (sum, count)\n}\n";
@@ -48,7 +48,7 @@ fn every_new_language_names_its_functions_and_classes() {
     let files: Vec<(&str, &str)> = SAMPLES.iter().map(|&(file, source, _)| (file, source)).collect();
     let index = project("names", &files);
     for (file, _, expected) in SAMPLES {
-        let found: Vec<String> = index.symbols.iter().filter(|symbol| symbol.file == file).map(|symbol| format!("{}:{}", symbol.name, symbol.kind)).collect();
+        let found: Vec<String> = index.symbols.iter().filter(|symbol| symbol.file == file).map(|symbol| format!("{}:{}@{}-{}", symbol.name, symbol.kind, symbol.line, symbol.end_line)).collect();
         assert_eq!(found, expected, "{file}");
     }
 }
@@ -76,4 +76,25 @@ fn an_unused_function_in_a_new_language_is_never_more_than_a_note() {
     let report = engine.dead_code_report(None);
     assert!(!report.candidates.is_empty());
     assert!(report.candidates.iter().all(|candidate| candidate.tier == Tier::Low));
+}
+
+const PRIVATE: [(&str, &str, &str); 8] = [
+    ("Shelf.swift", "func run() -> Int {\n    return used()\n}\n\nprivate func used() -> Int {\n    return 1\n}\n\nfileprivate func unused() -> Int {\n    return 2\n}\n", "unused"),
+    ("shelf.dart", "int run() {\n  return _used();\n}\n\nint _used() {\n  return 1;\n}\n\nint _unused() {\n  return 2;\n}\n", "_unused"),
+    ("shelf.lua", "local function used()\n  return 1\nend\n\nlocal function unused()\n  return 2\nend\n\nfunction run()\n  return used()\nend\n", "unused"),
+    ("shelf.ex", "defmodule Shelf do\n  def run, do: used()\n\n  defp used, do: 1\n\n  defp unused, do: 2\nend\n", "Shelf.unused"),
+    ("shelf.gleam", "pub fn run() -> Int {\n  used()\n}\n\nfn used() -> Int {\n  1\n}\n\nfn unused() -> Int {\n  2\n}\n", "unused"),
+    ("shelf.zig", "pub fn run() u32 {\n    return used();\n}\n\nfn used() u32 {\n    return 1;\n}\n\nfn unused() u32 {\n    return 2;\n}\n", "unused"),
+    ("Shelf.scala", "def run(): Int = used()\n\nprivate def used(): Int = 1\n\nprivate def unused(): Int = 2\n", "unused"),
+    ("Shelf.fs", "module Shelf\n\nlet private used () = 1\n\nlet private unused () = 2\n\nlet run () = used ()\n", "Shelf.unused"),
+];
+
+#[test]
+fn an_unused_private_function_is_dead_where_the_language_says_what_is_private() {
+    for (file, source, dead) in PRIVATE {
+        let index = project(&format!("private-{file}"), &[(file, source)]);
+        let engine = Engine::new(&index, &index.entry_points);
+        let blocking: Vec<&str> = engine.dead_code_report(None).candidates.iter().filter(|candidate| candidate.tier != Tier::Low).map(|candidate| candidate.symbol.name.as_str()).collect();
+        assert_eq!(blocking, [dead], "{file}");
+    }
 }

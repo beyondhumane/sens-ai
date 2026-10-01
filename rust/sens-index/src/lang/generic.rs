@@ -5,9 +5,13 @@ use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
 use super::treesitter::{Emitted, Extra, Options, Scope, declare, field, never_qualified, text};
 
+pub type Private = fn(&str, &str) -> bool;
+
 const CALLABLE: [&str; 5] = ["function", "method", "fun_", "procedure", "subroutine"];
-const HOLDING: [&str; 9] = ["class", "struct", "interface", "trait", "module", "object", "protocol", "enum", "impl"];
-const DEFINING: [&str; 7] = ["definition", "declaration", "_def", "_decl", "statement", "item", "implementation"];
+const GROUPING: [&str; 2] = ["module", "namespace"];
+const HOLDING: [&str; 8] = ["class", "struct", "interface", "trait", "object", "protocol", "enum", "impl"];
+const DEFINING: [&str; 5] = ["definition", "declaration", "statement", "item", "implementation"];
+const ENDINGS: [&str; 3] = ["_def", "_decl", "_defn"];
 const BARE: [&str; 4] = ["function", "method", "class", "module"];
 const ARGUMENTS: [&str; 2] = ["argument", "parameter"];
 
@@ -18,6 +22,7 @@ static QUERIES: LazyLock<Mutex<Compiled>> = LazyLock::new(Mutex::default);
 #[derive(Clone, Copy, PartialEq)]
 enum Role {
     Callable,
+    Grouping,
     Holding,
 }
 
@@ -30,6 +35,8 @@ struct Found<'t> {
 fn role(kind: &str) -> Option<Role> {
     if CALLABLE.iter().any(|word| kind.contains(word)) {
         Some(Role::Callable)
+    } else if GROUPING.iter().any(|word| kind.contains(word)) {
+        Some(Role::Grouping)
     } else if HOLDING.iter().any(|word| kind.contains(word)) {
         Some(Role::Holding)
     } else {
@@ -39,7 +46,7 @@ fn role(kind: &str) -> Option<Role> {
 
 fn shaped(node: &Node) -> Option<Role> {
     let kind = node.kind();
-    let defining = DEFINING.iter().any(|word| kind.contains(word)) || (BARE.contains(&kind) && field(node, "name").is_some());
+    let defining = DEFINING.iter().any(|word| kind.contains(word)) || ENDINGS.iter().any(|ending| kind.ends_with(ending)) || (BARE.contains(&kind) && field(node, "name").is_some());
     defining.then(|| role(kind)).flatten()
 }
 
@@ -79,7 +86,7 @@ fn name_of<'t>(node: &Node<'t>, source: &str) -> Option<Node<'t>> {
     match field(node, "name").or_else(|| node.named_children(&mut cursor).find(|child| named_like(child.kind()))) {
         Some(written) if plain(text(&written, source)) => Some(written),
         Some(written) => last_plain_leaf(written, source),
-        None => first_plain_leaf(node.named_child(0)?, source),
+        None => first_plain_leaf(field(node, "declarator").or_else(|| node.named_child(0))?, source),
     }
 }
 
@@ -115,6 +122,23 @@ fn child_holding<'t>(node: Node<'t>, name: Node<'t>) -> Node<'t> {
     node
 }
 
+fn named_after<'t>(name: Node<'t>) -> Node<'t> {
+    let mut next = Some(name);
+    while let Some(candidate) = next {
+        if named_like(candidate.kind()) {
+            return candidate;
+        }
+        next = candidate.next_named_sibling();
+    }
+    name
+}
+
+fn widened<'t>(node: Node<'t>) -> Node<'t> {
+    node.parent()
+        .filter(|parent| field(parent, "body").is_some() && field(parent, "signature").is_some_and(|signature| signature.id() == node.id()))
+        .unwrap_or(node)
+}
+
 fn tagged<'t>(root: &Node<'t>, source: &str, query: &Query) -> Vec<Found<'t>> {
     let labels = query.capture_names();
     let mut raw = Vec::new();
@@ -126,7 +150,7 @@ fn tagged<'t>(root: &Node<'t>, source: &str, query: &Query) -> Vec<Found<'t>> {
         for capture in matched.captures() {
             let label = labels[capture.index as usize];
             if label == "name" {
-                name = Some(capture.node);
+                name = Some(named_after(capture.node));
             } else if let Some(role) = label.strip_prefix("definition.").and_then(role) {
                 defined = Some((capture.node, role));
             }
@@ -146,7 +170,8 @@ fn tagged<'t>(root: &Node<'t>, source: &str, query: &Query) -> Vec<Found<'t>> {
         .map(|found| {
             let shared = found.node.parent().is_none() || names_by_node[&found.node.id()].len() > 1;
             let owns_name = found.name.parent().is_some_and(|parent| parent.id() == found.node.id());
-            if shared && !owns_name { Found { node: child_holding(found.node, found.name), ..found } } else { found }
+            let node = if shared && !owns_name { child_holding(found.node, found.name) } else { found.node };
+            Found { node: widened(node), ..found }
         })
         .collect();
     narrowed.sort_by_key(|found| found.node.end_byte() - found.node.start_byte());
@@ -158,12 +183,12 @@ fn tagged<'t>(root: &Node<'t>, source: &str, query: &Query) -> Vec<Found<'t>> {
 fn holder_of<'a>(found: &'a [Found], inner: &Found) -> Option<&'a Found<'a>> {
     found
         .iter()
-        .filter(|outer| outer.role == Role::Holding && outer.node.id() != inner.node.id())
+        .filter(|outer| outer.role != Role::Callable && outer.node.id() != inner.node.id())
         .filter(|outer| outer.node.start_byte() <= inner.node.start_byte() && inner.node.end_byte() <= outer.node.end_byte())
         .max_by_key(|outer| outer.node.start_byte())
 }
 
-pub fn extract(root: &Node, source: &str, definitions: &'static str, out: &mut Emitted) {
+pub fn extract(root: &Node, source: &str, definitions: &'static str, private: Private, out: &mut Emitted) {
     let mut found = match compiled(root, definitions) {
         Some(query) => tagged(root, source, &query),
         None => {
@@ -175,13 +200,16 @@ pub fn extract(root: &Node, source: &str, definitions: &'static str, out: &mut E
     found.sort_by_key(|definition| definition.node.start_byte());
     for definition in &found {
         let simple = text(&definition.name, source).to_string();
-        let holder = holder_of(&found, definition).map(|outer| text(&outer.name, source));
-        match (definition.role, holder) {
-            (Role::Callable, Some(holder)) => {
-                declare(out, source, format!("{holder}.{simple}"), "method", &definition.node, &definition.name, Extra { simple_name: Some(simple), ..Extra::default() })
+        let before = source.get(definition.node.start_byte()..definition.name.start_byte()).unwrap_or_default();
+        let exported = !private(before, &simple);
+        let (node, name) = (&definition.node, &definition.name);
+        match (definition.role, holder_of(&found, definition)) {
+            (Role::Callable, Some(outer)) => {
+                let (kind, exported) = if outer.role == Role::Holding { ("method", false) } else { ("function", exported) };
+                declare(out, source, format!("{}.{simple}", text(&outer.name, source)), kind, node, name, Extra { exported, simple_name: Some(simple), ..Extra::default() })
             }
-            (Role::Callable, None) => declare(out, source, simple, "function", &definition.node, &definition.name, Extra { exported: true, ..Extra::default() }),
-            (Role::Holding, _) => declare(out, source, simple, "class", &definition.node, &definition.name, Extra { exported: true, ..Extra::default() }),
+            (Role::Callable, None) => declare(out, source, simple, "function", node, name, Extra { exported, ..Extra::default() }),
+            _ => declare(out, source, simple, "class", node, name, Extra { exported, ..Extra::default() }),
         }
     }
 }
@@ -201,13 +229,14 @@ pub fn options() -> Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lang::visibility::public;
 
     fn symbols(grammar: Language, definitions: &'static str, source: &str) -> Vec<(String, &'static str)> {
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(&grammar).unwrap();
         let tree = parser.parse(source, None).unwrap();
         let mut out = Emitted::default();
-        extract(&tree.root_node(), source, definitions, &mut out);
+        extract(&tree.root_node(), source, definitions, public, &mut out);
         out.symbols.into_iter().map(|symbol| (symbol.name, symbol.kind)).collect()
     }
 
