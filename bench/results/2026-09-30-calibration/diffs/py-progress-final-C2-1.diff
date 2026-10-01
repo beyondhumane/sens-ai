@@ -1,0 +1,54 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index d4912ee..7bb2f03 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -137,6 +137,9 @@ class ProgressBar(t.Generic[V]):
+         exc_value: BaseException | None,
+         tb: TracebackType | None,
+     ) -> None:
++        if self._completed_intervals:
++            self._flush_pending_steps()
++            self.render_progress()
+         self.render_finish()
+ 
+     def __iter__(self) -> cabc.Iterator[V]:
+@@ -347,7 +350,13 @@ class ProgressBar(t.Generic[V]):
+             self.render_progress()
+             self._completed_intervals = 0
+ 
++    def _flush_pending_steps(self) -> None:
++        if self._completed_intervals:
++            self.make_step(self._completed_intervals)
++            self._completed_intervals = 0
++
+     def finish(self) -> None:
++        self._flush_pending_steps()
+         self.eta_known = False
+         self.current_item = None
+         self.finished = True
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index eef91e0..1776da5 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -350,6 +350,21 @@ def test_progress_bar_update_min_steps(runner):
+     assert bar.pos == 5
+ 
+ 
++def test_progress_bar_update_min_steps_flushes_on_exit(runner, monkeypatch):
++    monkeypatch.setattr(click._termui_impl, "isatty", lambda _: True)
++    with click.progressbar(length=20, update_min_steps=7, show_pos=True) as bar:
++        for _ in range(20):
++            bar.update(1)
++        assert bar.pos == 14
++    assert bar.pos == 20
++    assert bar._completed_intervals == 0
++
++    with click.progressbar(range(20), update_min_steps=7, show_pos=True) as bar:
++        for _ in bar:
++            pass
++    assert bar.pos == 20
++
++
+ @pytest.mark.parametrize("key_char", ("h", "H", "é", "À", " ", "字", "àH", "àR"))
+ @pytest.mark.parametrize("echo", [True, False])
+ @pytest.mark.skipif(not WIN, reason="Tests user-input using the msvcrt module.")

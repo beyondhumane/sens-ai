@@ -1,0 +1,37 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index d4912ee..1936c21 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -348,6 +348,10 @@ class ProgressBar(t.Generic[V]):
+             self._completed_intervals = 0
+ 
+     def finish(self) -> None:
++        if self._completed_intervals:
++            self.make_step(self._completed_intervals)
++            self._completed_intervals = 0
++
+         self.eta_known = False
+         self.current_item = None
+         self.finished = True
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index eef91e0..bd1b72e 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -350,6 +350,17 @@ def test_progress_bar_update_min_steps(runner):
+     assert bar.pos == 5
+ 
+ 
++def test_progress_bar_update_min_steps_reaches_length(runner):
++    with click.progressbar(
++        range(20), update_min_steps=7, show_pos=True
++    ) as bar:
++        bar._is_atty = True
++        for _ in bar:
++            pass
++
++    assert bar.pos == 20
++
++
+ @pytest.mark.parametrize("key_char", ("h", "H", "é", "À", " ", "字", "àH", "àR"))
+ @pytest.mark.parametrize("echo", [True, False])
+ @pytest.mark.skipif(not WIN, reason="Tests user-input using the msvcrt module.")

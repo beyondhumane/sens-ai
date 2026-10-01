@@ -1,0 +1,42 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..9c294ec 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -195,12 +195,16 @@ fn uncreated(folder: &Path, error: std::io::Error) -> String {
+ }
+ 
+ fn named(id: &str) -> Result<(), String> {
+-    if is_uuid(id) {
++    if is_uuid(id) || is_legacy(id) {
+         return Ok(());
+     }
+     Err(invalid(id))
+ }
+ 
++fn is_legacy(id: &str) -> bool {
++    id.len() == 8 && id.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
++}
++
+ fn plain(id: &str) -> Result<(), String> {
+     let inside = !id.is_empty()
+         && !id.contains(['/', '\\', ':'])
+@@ -837,6 +841,19 @@ mod tests {
+         assert!(open_as(&root, "../fuera").is_err());
+     }
+ 
++    #[test]
++    fn sessions_from_old_versions_keep_opening_under_their_eight_hex_id() {
++        let root = temp_root("legacy");
++        assert_eq!(open_as(&root, "ab12cd34").unwrap(), "ab12cd34");
++        assert!(create(&root, "0f0f0f0f", &[]).is_ok());
++        let isolation = Isolation { path: "p".into(), branch: "b".into(), base: "c".into() };
++        assert!(isolate(&root, "ab12cd34", &isolation).is_ok());
++        assert!(!is_uuid("ab12cd34"));
++        for other in ["AB12CD34", "ab12cd3", "ab12cd345", "ab12cd3g", "ab12cd3/"] {
++            assert!(open_as(&root, other).is_err(), "{other}");
++        }
++    }
++
+     #[test]
+     fn only_the_canonical_uuid_shape_counts_as_one() {
+         assert!(is_uuid("819e8d71-4433-4aff-ac86-07939fe6241c"));

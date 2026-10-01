@@ -1,0 +1,35 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..bdc9039 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -512,7 +512,12 @@ pub fn shorten(text: &str) -> String {
+         return clean;
+     }
+     let cut: String = clean.chars().take(TITLE_LIMIT).collect();
+-    format!("{}…", cut.trim_end())
++    let ends_word = clean.chars().nth(TITLE_LIMIT) == Some(' ');
++    let kept = match cut.rsplit_once(' ') {
++        Some((words, _)) if !ends_word => words,
++        _ => &cut,
++    };
++    format!("{}…", kept.trim_end())
+ }
+ 
+ #[cfg(test)]
+@@ -795,6 +800,16 @@ mod tests {
+         assert!(matches!(&entries[0], Entry::Task { text, .. } if text.len() == 200));
+     }
+ 
++    #[test]
++    fn a_long_title_is_cut_at_the_last_whole_word_that_fits() {
++        let text = format!("{} {}", "word ".repeat(10).trim_end(), "extraordinarily".repeat(3));
++        let title = shorten(&text);
++        assert_eq!(title, format!("{}…", "word ".repeat(10).trim_end()));
++
++        let exact = format!("{} tail", "a".repeat(TITLE_LIMIT));
++        assert_eq!(shorten(&exact), format!("{}…", "a".repeat(TITLE_LIMIT)));
++    }
++
+     #[test]
+     fn a_session_that_does_not_exist_reads_as_empty_instead_of_failing() {
+         let root = temp_root("missing");

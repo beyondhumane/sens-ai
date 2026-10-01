@@ -1,0 +1,49 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..21f96d6 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -194,8 +194,12 @@ fn uncreated(folder: &Path, error: std::io::Error) -> String {
+     )
+ }
+ 
+-fn named(id: &str) -> Result<(), String> {
+-    if is_uuid(id) {
++fn is_legacy(text: &str) -> bool {
++    text.len() == 8 && text.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
++}
++
++pub fn named(id: &str) -> Result<(), String> {
++    if is_uuid(id) || is_legacy(id) {
+         return Ok(());
+     }
+     Err(invalid(id))
+@@ -845,6 +849,14 @@ mod tests {
+         assert!(!is_uuid("819e8d71x4433-4aff-ac86-07939fe6241c"));
+     }
+ 
++    #[test]
++    fn old_eight_character_ids_are_accepted_but_nothing_else_is() {
++        assert!(named("ab12cd34").is_ok());
++        for bad in ["AB12CD34", "ab12cd3", "ab12cd345", "ab12cd3g", "../ab12c", "s1758620000000", ""] {
++            assert!(named(bad).is_err(), "{bad}");
++        }
++    }
++
+     #[test]
+     fn a_session_has_begun_once_claude_code_answered_it() {
+         let root = temp_root("begun");
+diff --git a/rust/sens-app/src/worktree.rs b/rust/sens-app/src/worktree.rs
+index 7cdecf3..3581096 100644
+--- a/rust/sens-app/src/worktree.rs
++++ b/rust/sens-app/src/worktree.rs
+@@ -9,9 +9,7 @@ const FOLDER: &str = "worktrees";
+ const SHORT: usize = 8;
+ 
+ pub fn isolate(root: &Path, id: &str) -> Result<Isolation, String> {
+-    if !session::is_uuid(id) {
+-        return Err(session::invalid(id));
+-    }
++    session::named(id)?;
+     if let Some(known) = session::isolation(root, id) {
+         return Ok(known);
+     }

@@ -1,0 +1,23 @@
+diff --git a/src/click/_compat.py b/src/click/_compat.py
+index 90e328b..92f92b2 100644
+--- a/src/click/_compat.py
++++ b/src/click/_compat.py
+@@ -12,7 +12,17 @@ from weakref import WeakKeyDictionary
+ 
+ CYGWIN = sys.platform.startswith("cygwin")
+ WIN = sys.platform.startswith("win")
+-_ansi_re = re.compile(r"\033\[[;?0-9]*[a-zA-Z]")
++_ansi_re = re.compile(
++    r"""
++    \033(?:
++        \[[0-?]*[\ -/]*[@-~]                  # CSI: params, intermediates, final
++      | \][^\007\033]*(?:\007|\033\\|$)       # OSC, ended by BEL or ST
++      | O[@-~]                                # SS3 (application function keys)
++      | [\ -/]*[0-~]                          # other escapes (charset, RIS, ...)
++    )
++    """,
++    re.VERBOSE,
++)
+ 
+ 
+ def _make_text_stream(

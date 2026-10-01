@@ -1,0 +1,59 @@
+diff --git a/rust/sens-app/ui/src/bar/choices.test.ts b/rust/sens-app/ui/src/bar/choices.test.ts
+index aa9f42b..f8098cc 100644
+--- a/rust/sens-app/ui/src/bar/choices.test.ts
++++ b/rust/sens-app/ui/src/bar/choices.test.ts
+@@ -36,6 +36,14 @@ describe("where the bar can ask", () => {
+     expect(choicesOf(PROJECTS, SESSIONS, "C:/web", "nada")).toEqual([]);
+   });
+ 
++  it("ignores accents and capitals when searching", () => {
++    const accented = { "C:/diseno": [session("f", "Canción de cuna", 1)] };
++    const projects = [...PROJECTS, { root: "C:/diseno", name: "Diseño" }];
++    expect(shown(choicesOf(projects, accented, "C:/web", "cancion"))).toEqual(["Diseño/Canción de cuna"]);
++    expect(shown(choicesOf(projects, accented, "C:/web", "DISENO"))).toEqual(["project:Diseño"]);
++    expect(shown(choicesOf(projects, SESSIONS, "C:/web", "botón"))).toEqual(["nitid/Tests del botón"]);
++  });
++
+   it("offers only the projects when no project is open yet", () => {
+     expect(shown(choicesOf(PROJECTS, SESSIONS, "", ""))).toEqual(["project:nitid", "project:web", "project:api"]);
+   });
+diff --git a/rust/sens-app/ui/src/bar/choices.ts b/rust/sens-app/ui/src/bar/choices.ts
+index db7790e..c3f91fa 100644
+--- a/rust/sens-app/ui/src/bar/choices.ts
++++ b/rust/sens-app/ui/src/bar/choices.ts
+@@ -1,5 +1,6 @@
+ import type { BarProject, SessionSummary } from "../ipc/types";
+ import { stem } from "../shared/format.js";
++import { plain } from "../features/market/search.js";
+ 
+ export const MOST_SESSIONS = 8;
+ 
+@@ -10,8 +11,6 @@ export type Choice =
+   | { kind: "session"; root: string; name: string; id: string; title: string }
+   | { kind: "project"; root: string; name: string };
+ 
+-const lower = (text: string) => text.toLocaleLowerCase();
+-
+ const nameOf = (projects: BarProject[], root: string) => projects.find((one) => one.root === root)?.name ?? stem(root);
+ 
+ const recent = (sessions: Sessions, root: string) =>
+@@ -22,7 +21,7 @@ const sessionIn = (root: string, name: string) => (summary: SessionSummary): Cho
+ const projectOf = (one: BarProject): Choice => ({ kind: "project", root: one.root, name: one.name });
+ 
+ export function choicesOf(projects: BarProject[], sessions: Sessions, root: string, filter: string): Choice[] {
+-  const wanted = lower(filter.trim());
++  const wanted = plain(filter.trim());
+   if (!wanted) {
+     const here: Choice[] = root ? [{ kind: "new", root, name: nameOf(projects, root) }, ...recent(sessions, root).slice(0, MOST_SESSIONS).map(sessionIn(root, nameOf(projects, root)))] : [];
+     return [...here, ...projects.filter((one) => one.root !== root).map(projectOf)];
+@@ -30,8 +29,8 @@ export function choicesOf(projects: BarProject[], sessions: Sessions, root: stri
+   const ordered = [...projects].sort((one, other) => Number(other.root === root) - Number(one.root === root));
+   const said = ordered.flatMap((one) => recent(sessions, one.root).map(sessionIn(one.root, one.name)));
+   return [
+-    ...said.filter((choice) => choice.kind === "session" && lower(choice.title).includes(wanted)),
+-    ...ordered.filter((one) => lower(one.name).includes(wanted)).map(projectOf),
++    ...said.filter((choice) => choice.kind === "session" && plain(choice.title).includes(wanted)),
++    ...ordered.filter((one) => plain(one.name).includes(wanted)).map(projectOf),
+   ];
+ }
+ 

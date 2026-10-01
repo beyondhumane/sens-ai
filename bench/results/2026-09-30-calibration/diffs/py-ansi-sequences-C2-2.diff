@@ -1,0 +1,37 @@
+diff --git a/src/click/_compat.py b/src/click/_compat.py
+index 90e328b..5a60065 100644
+--- a/src/click/_compat.py
++++ b/src/click/_compat.py
+@@ -12,7 +12,9 @@ from weakref import WeakKeyDictionary
+ 
+ CYGWIN = sys.platform.startswith("cygwin")
+ WIN = sys.platform.startswith("win")
+-_ansi_re = re.compile(r"\033\[[;?0-9]*[a-zA-Z]")
++_ansi_re = re.compile(
++    r"\033(?:\[[0-?]*[ -/]*[@-~]|\][^\a\033]*(?:\a|\033\\))"
++)
+ 
+ 
+ def _make_text_stream(
+diff --git a/tests/test_utils/test_style.py b/tests/test_utils/test_style.py
+index 9830493..8b40b56 100644
+--- a/tests/test_utils/test_style.py
++++ b/tests/test_utils/test_style.py
+@@ -107,6 +107,16 @@ def test_styling_invalid_color(param, value):
+         click.style("x y", **{param: value})
+ 
+ 
+-@pytest.mark.parametrize(("text", "expect"), [("\x1b[?25lx y\x1b[?25h", "x y")])
++@pytest.mark.parametrize(
++    ("text", "expect"),
++    [
++        ("\x1b[?25lx y\x1b[?25h", "x y"),
++        ("\x1b[38:2:255:0:0mx y\x1b[0m", "x y"),
++        ("\x1b[0 qx y", "x y"),
++        ("\x1b[<0;10;5Mx y\x1b[<0;10;5m", "x y"),
++        ("x\x1b[3~ y", "x y"),
++        ("\x1b]8;;http://a.b\x1b\\x y\x1b]8;;\x07", "x y"),
++    ],
++)
+ def test_unstyle_other_ansi(text, expect):
+     assert click.unstyle(text) == expect

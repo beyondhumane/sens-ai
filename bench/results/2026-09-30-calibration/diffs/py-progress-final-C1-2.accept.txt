@@ -1,0 +1,76 @@
+........FF.F                                                             [100%]
+================================== FAILURES ===================================
+__________________ test_the_bar_lands_on_its_total[update-3] __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E01A4F89B0>
+update_min_steps = 3, drive = 'update'
+
+    @pytest.mark.parametrize("update_min_steps", [1, 2, 3, 7, 20, 25])
+    @pytest.mark.parametrize("drive", ["iterate", "update"])
+    def test_the_bar_lands_on_its_total(monkeypatch, update_min_steps, drive):
+        monkeypatch.setattr(click._termui_impl, "isatty", lambda _: True)
+        stream = io.StringIO()
+        if drive == "iterate":
+            with click.progressbar(range(20), show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in bar:
+                    pass
+        else:
+            with click.progressbar(length=20, show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in range(20):
+                    bar.update(1)
+>       assert bar.pos == 20
+E       assert 18 == 20
+E        +  where 18 = <click._termui_impl.ProgressBar object at 0x000001E01A4B96A0>.pos
+
+tests\_accept\test_py_progress_final.py:22: AssertionError
+__________________ test_the_bar_lands_on_its_total[update-7] __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E01A4DA6D0>
+update_min_steps = 7, drive = 'update'
+
+    @pytest.mark.parametrize("update_min_steps", [1, 2, 3, 7, 20, 25])
+    @pytest.mark.parametrize("drive", ["iterate", "update"])
+    def test_the_bar_lands_on_its_total(monkeypatch, update_min_steps, drive):
+        monkeypatch.setattr(click._termui_impl, "isatty", lambda _: True)
+        stream = io.StringIO()
+        if drive == "iterate":
+            with click.progressbar(range(20), show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in bar:
+                    pass
+        else:
+            with click.progressbar(length=20, show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in range(20):
+                    bar.update(1)
+>       assert bar.pos == 20
+E       assert 14 == 20
+E        +  where 14 = <click._termui_impl.ProgressBar object at 0x000001E01A4BA270>.pos
+
+tests\_accept\test_py_progress_final.py:22: AssertionError
+_________________ test_the_bar_lands_on_its_total[update-25] __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E01A47D300>
+update_min_steps = 25, drive = 'update'
+
+    @pytest.mark.parametrize("update_min_steps", [1, 2, 3, 7, 20, 25])
+    @pytest.mark.parametrize("drive", ["iterate", "update"])
+    def test_the_bar_lands_on_its_total(monkeypatch, update_min_steps, drive):
+        monkeypatch.setattr(click._termui_impl, "isatty", lambda _: True)
+        stream = io.StringIO()
+        if drive == "iterate":
+            with click.progressbar(range(20), show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in bar:
+                    pass
+        else:
+            with click.progressbar(length=20, show_pos=True, update_min_steps=update_min_steps, file=stream) as bar:
+                for _ in range(20):
+                    bar.update(1)
+>       assert bar.pos == 20
+E       assert 0 == 20
+E        +  where 0 = <click._termui_impl.ProgressBar object at 0x000001E01A4BABA0>.pos
+
+tests\_accept\test_py_progress_final.py:22: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/_accept/test_py_progress_final.py::test_the_bar_lands_on_its_total[update-3]
+FAILED tests/_accept/test_py_progress_final.py::test_the_bar_lands_on_its_total[update-7]
+FAILED tests/_accept/test_py_progress_final.py::test_the_bar_lands_on_its_total[update-25]
+3 failed, 9 passed in 0.21s

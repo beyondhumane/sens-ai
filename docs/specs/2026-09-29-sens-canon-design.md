@@ -776,6 +776,69 @@ Las de click salen de commits reales de `pallets/click`, cacheadas en
 instalado sin red desde ruedas locales, que se preparan una vez con
 `pip download pytest==9.1.1 -d %TEMP%/sens-bench-sources/wheels`.
 
+### Resultados de la calibración (2026-10-01)
+
+Sonnet 5.5 medio, `--safe-mode`, Canon v1.1, 12 tareas × C0, C1 y C2 × 3
+repeticiones: 108 ejecuciones, todas terminadas, ningún error del banco.
+Resultados en `bench/results/2026-09-30-calibration/`.
+
+| | C0 | C1 | C2 |
+| --- | --- | --- | --- |
+| Válidas | 32/36 | 31/36 | 34/36 |
+| Con tests añadidos | 23/36 | 36/36 | 36/36 |
+| `sens-bar-accents`: usa `plain` | 0/3 | 3/3 | 3/3 |
+| `sens-file-language`: usa `titleOf` | 1/3 | 1/3 | 3/3 |
+| `py-progress-final`: válidas | 0/3 | 0/3 | 2/3 |
+
+- **Los tests vuelven.** Con v1.1, C1 y C2 añaden tests en las 36 ejecuciones
+  (con v1, 9 de 18 y 2 de 18); C0 en 23. Las líneas de test de C2 quedan a la
+  par de C0: +1 [−3, +3].
+- **Código**: C2 − C0 = −3 líneas netas [−4, +0] promediando las tareas. Donde
+  más se nota es `sens-file-language` (−19) y `rs-session-ids` (−4: los tres
+  brazos amplían `named`, pero C0 y C1 añaden `is_session_id`, un envoltorio con
+  un solo uso, y C2 escribe la condición en `named`).
+- **`py-progress-final` es la tarea que separa.** Una barra termina por
+  `finish()` si se itera y por `__exit__` si se mueve con `update()` dentro de
+  `with`, que es el ejemplo de la petición. C0 y C1 arreglan solo la iteración
+  (`finish()` o el generador) y fallan las seis veces. C2 saca el vaciado a una
+  función que llaman los dos caminos las tres veces; en la tercera la posición
+  llega a 20, pero no vuelve a pintar la barra antes de cerrarla.
+- **La única pérdida de C2** es una ejecución de `py-choice-suggest`: importó
+  `difflib` arriba del módulo y rompió `test_light_imports`, una norma de click
+  (las importaciones pesadas van dentro de la función). C1 cayó en lo mismo una
+  vez y C0 ninguna. Ni el circuito ni el revisor conocen esa norma: es materia
+  del genoma del proyecto, fuera de esta spec. El modelo ejecutó cinco ficheros
+  de tests relacionados, pero no `test_imports.py`.
+- **Duplicación**: cero o casi cero en los tres brazos; no hay margen para
+  mejorar sobre C0.
+- **Tokens**: C2 − C0 = +163 [−51 836, +88 340]: el circuito no cuesta tokens
+  de más en conjunto.
+
+#### Revisión de cada parada del circuito
+
+En las 36 ejecuciones de C2 el circuito paró dos veces y dejó cuatro notas. Se
+revisaron todas, con su diff y su conversación.
+
+| Ejecución | Regla | Qué pasó | Juicio |
+| --- | --- | --- | --- |
+| `py-deprecated-space` C2 #1 | R8, bloqueo | «258 checks a 256» en `tests/test_options.py`, que en la base tenía 254: el modelo rehacía 4 aserciones que había escrito él | Injusto |
+| `py-choice-suggest` C2 #3 | R8, bloqueo | Quitar `test_choice_invalid_choice_message_suggests_close_matches`, un test que el modelo había creado en ese turno, siguiendo la nota de R2 | Injusto |
+| `py-choice-suggest` C2 #1 y #3 | R2, nota | El test nuevo se parece un 93–97 % a uno existente; sugiere extenderlo | Justo |
+| `py-deprecated-space` C2 #3 | R2, nota | Un test nuevo parecido a `test_show_envvar` | Justo, de poco valor |
+| `py-deprecated-space` C2 #2 | S4, nota del revisor | Dice que pasar de `if help is not None` a `if help` cambia el comportamiento sin que se pidiera; ese cambio es justo el arreglo pedido | Injusto |
+
+**Listón de bloqueos injustos no cumplido: 2 de 2.** Los dos tienen la misma
+causa: al escribir, R8 comparaba con el fichero tal como estaba justo antes de
+esa escritura, así que un test que el modelo acababa de escribir quedaba
+protegido para el resto del turno, y la nota de R2 lo empujaba a una salida que
+R8 prohibía. Ahora R8 compara con lo último que Sens aprobó (`judge_since`): un
+test escrito en el turno se puede rehacer o quitar, uno aprobado sigue
+preguntando a la persona. Con esa regla ninguno de los dos habría parado.
+
+Sin bloqueos de copias ni del revisor no hay datos para mover el umbral de tipo
+3 ni la confianza del revisor: en 36 ejecuciones ninguna copia ni ningún
+hallazgo `high` llegó a parar.
+
 ## Registro
 
 `.sens/canon/log.jsonl`, local: por cada veredicto, turno, versión del Canon, fase,

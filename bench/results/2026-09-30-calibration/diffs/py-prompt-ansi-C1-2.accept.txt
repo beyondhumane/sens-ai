@@ -1,0 +1,63 @@
+.F.F                                                                     [100%]
+================================== FAILURES ===================================
+_ test_prompts_keep_or_strip_colors_like_echo[<lambda>-y-True-\x1b[32mHello World!\x1b[0m [y/N]: y\n] _
+
+runner = <click.testing.CliRunner object at 0x00000218091DF250>
+call = <function <lambda> at 0x00000218092BE1F0>, user_input = 'y', color = True
+expect = '\x1b[32mHello World!\x1b[0m [y/N]: y\n'
+
+    @pytest.mark.parametrize(
+        ("call", "user_input", "color", "expect"),
+        [
+            (lambda: click.confirm(click.style("Hello World!", fg="green")), "y", False, "Hello World! [y/N]: y\n"),
+            (lambda: click.confirm(click.style("Hello World!", fg="green")), "y", True, "\x1b[32mHello World!\x1b[0m [y/N]: y\n"),
+            (lambda: click.prompt(click.style("Name", fg="green")), "Bob", False, "Name: Bob\n"),
+            (lambda: click.prompt(click.style("Name", fg="green")), "Bob", True, "\x1b[32mName\x1b[0m: Bob\n"),
+        ],
+    )
+    def test_prompts_keep_or_strip_colors_like_echo(runner, call, user_input, color, expect):
+        @click.command()
+        def cli():
+            call()
+    
+        result = runner.invoke(cli, input=user_input, color=color)
+>       assert result.output == expect
+E       AssertionError: assert 'Hello World! [y/N]: y\n' == '\x1b[32mHell...0m [y/N]: y\n'
+E         
+E         - [32mHello World![0m [y/N]: y
+E         ? -----            ----
+E         + Hello World! [y/N]: y
+
+tests\_accept\test_py_prompt_ansi.py:21: AssertionError
+_ test_prompts_keep_or_strip_colors_like_echo[<lambda>-Bob-True-\x1b[32mName\x1b[0m: Bob\n] _
+
+runner = <click.testing.CliRunner object at 0x00000218092EA190>
+call = <function <lambda> at 0x00000218092BE350>, user_input = 'Bob'
+color = True, expect = '\x1b[32mName\x1b[0m: Bob\n'
+
+    @pytest.mark.parametrize(
+        ("call", "user_input", "color", "expect"),
+        [
+            (lambda: click.confirm(click.style("Hello World!", fg="green")), "y", False, "Hello World! [y/N]: y\n"),
+            (lambda: click.confirm(click.style("Hello World!", fg="green")), "y", True, "\x1b[32mHello World!\x1b[0m [y/N]: y\n"),
+            (lambda: click.prompt(click.style("Name", fg="green")), "Bob", False, "Name: Bob\n"),
+            (lambda: click.prompt(click.style("Name", fg="green")), "Bob", True, "\x1b[32mName\x1b[0m: Bob\n"),
+        ],
+    )
+    def test_prompts_keep_or_strip_colors_like_echo(runner, call, user_input, color, expect):
+        @click.command()
+        def cli():
+            call()
+    
+        result = runner.invoke(cli, input=user_input, color=color)
+>       assert result.output == expect
+E       AssertionError: assert 'Name: Bob\n' == '\x1b[32mName\x1b[0m: Bob\n'
+E         
+E         - [32mName[0m: Bob
+E         + Name: Bob
+
+tests\_accept\test_py_prompt_ansi.py:21: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/_accept/test_py_prompt_ansi.py::test_prompts_keep_or_strip_colors_like_echo[<lambda>-y-True-\x1b[32mHello World!\x1b[0m [y/N]: y\n]
+FAILED tests/_accept/test_py_prompt_ansi.py::test_prompts_keep_or_strip_colors_like_echo[<lambda>-Bob-True-\x1b[32mName\x1b[0m: Bob\n]
+2 failed, 2 passed in 0.19s

@@ -1,0 +1,46 @@
+diff --git a/src/click/_compat.py b/src/click/_compat.py
+index 90e328b..0f984a7 100644
+--- a/src/click/_compat.py
++++ b/src/click/_compat.py
+@@ -12,7 +12,14 @@ from weakref import WeakKeyDictionary
+ 
+ CYGWIN = sys.platform.startswith("cygwin")
+ WIN = sys.platform.startswith("win")
+-_ansi_re = re.compile(r"\033\[[;?0-9]*[a-zA-Z]")
++_ansi_re = re.compile(
++    r"""
++    \033[\]PX^_].*?(?:\007|\033\\)   # OSC, DCS, SOS, PM, APC strings
++    | \033\[[0-?]*[ -/]*[@-~]        # CSI: parameters, intermediates, final
++    | \033[ -/]*[0-~]                # other escapes (charset, ESC 7, ...)
++    """,
++    re.VERBOSE | re.DOTALL,
++)
+ 
+ 
+ def _make_text_stream(
+diff --git a/tests/test_compat.py b/tests/test_compat.py
+index 6b8441e..5c5530c 100644
+--- a/tests/test_compat.py
++++ b/tests/test_compat.py
+@@ -53,3 +53,21 @@ def test_should_strip_ansi(
+     if expected_override is not None:
+         expected = expected_override
+     assert click._compat.should_strip_ansi(stream=stream, color=color) == expected
++
++
++@pytest.mark.parametrize(
++    "text",
++    [
++        "\x1b[38:2:255:0:0mhi\x1b[0m",
++        "\x1b[38;2;255;0;0mhi\x1b[0m",
++        "\x1b[0 qhi",
++        "\x1b[3~hi",
++        "\x1b[<0;10;20Mhi\x1b[<0;10;20m",
++        "\x1b[?25lhi\x1b[?25h",
++        "\x1b]0;title\x07hi",
++        "\x1b]8;;http://x\x1b\\hi\x1b]8;;\x1b\\",
++        "\x1b(Bhi",
++    ],
++)
++def test_strip_ansi_sequences(text):
++    assert click.unstyle(text) == "hi"
