@@ -1,4 +1,5 @@
 pub mod cfamily;
+pub mod component;
 pub mod csharp;
 pub mod go;
 pub mod java;

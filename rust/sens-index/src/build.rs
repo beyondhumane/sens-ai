@@ -6,7 +6,7 @@ use crate::fingerprint::{self, Unit};
 use crate::lang::treesitter::Emitted;
 use crate::testfile::is_test_file;
 use crate::index::Index;
-use crate::lang::treesitter::{self, Extract, Grammar, Options};
+use crate::lang::treesitter::{self, Extract, Grammar, Options, Prepare, as_is};
 use crate::lang::{cfamily, csharp, go, java, kotlin, php, python, ruby, rust, typescript};
 
 const SKIP_DIRS: [&str; 8] = ["node_modules", "dist", ".sens", ".git", "target", "__pycache__", ".venv", "venv"];
@@ -15,22 +15,23 @@ struct Language {
     name: &'static str,
     extensions: &'static [&'static str],
     grammar: Grammar,
+    prepare: Prepare,
     extract: Extract,
     options: fn() -> Options,
 }
 
 const LANGUAGES: [Language; 11] = [
-    Language { name: "typescript", extensions: &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"], grammar: typescript::grammar, extract: typescript::extract, options: typescript::options },
-    Language { name: "go", extensions: &["go"], grammar: |_| tree_sitter_go::LANGUAGE.into(), extract: go::extract, options: go::options },
-    Language { name: "ruby", extensions: &["rb"], grammar: |_| tree_sitter_ruby::LANGUAGE.into(), extract: ruby::extract, options: ruby::options },
-    Language { name: "php", extensions: &["php"], grammar: |_| tree_sitter_php::LANGUAGE_PHP.into(), extract: php::extract, options: php::options },
-    Language { name: "java", extensions: &["java"], grammar: |_| tree_sitter_java::LANGUAGE.into(), extract: java::extract, options: java::options },
-    Language { name: "csharp", extensions: &["cs"], grammar: |_| tree_sitter_c_sharp::LANGUAGE.into(), extract: csharp::extract, options: csharp::options },
-    Language { name: "kotlin", extensions: &["kt", "kts"], grammar: |_| tree_sitter_kotlin_ng::LANGUAGE.into(), extract: kotlin::extract, options: kotlin::options },
-    Language { name: "python", extensions: &["py", "pyi"], grammar: |_| tree_sitter_python::LANGUAGE.into(), extract: python::extract, options: python::options },
-    Language { name: "rust", extensions: &["rs"], grammar: |_| tree_sitter_rust::LANGUAGE.into(), extract: rust::extract, options: rust::options },
-    Language { name: "c", extensions: &["c"], grammar: |_| tree_sitter_c::LANGUAGE.into(), extract: cfamily::extract_c, options: cfamily::options },
-    Language { name: "cpp", extensions: &["cpp", "cxx", "cc", "hpp", "hh", "hxx", "h"], grammar: |_| tree_sitter_cpp::LANGUAGE.into(), extract: cfamily::extract_cpp, options: cfamily::options },
+    Language { name: "typescript", extensions: &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "svelte"], grammar: typescript::grammar, prepare: typescript::prepare, extract: typescript::extract, options: typescript::options },
+    Language { name: "go", extensions: &["go"], grammar: |_| tree_sitter_go::LANGUAGE.into(), prepare: as_is, extract: go::extract, options: go::options },
+    Language { name: "ruby", extensions: &["rb"], grammar: |_| tree_sitter_ruby::LANGUAGE.into(), prepare: as_is, extract: ruby::extract, options: ruby::options },
+    Language { name: "php", extensions: &["php"], grammar: |_| tree_sitter_php::LANGUAGE_PHP.into(), prepare: as_is, extract: php::extract, options: php::options },
+    Language { name: "java", extensions: &["java"], grammar: |_| tree_sitter_java::LANGUAGE.into(), prepare: as_is, extract: java::extract, options: java::options },
+    Language { name: "csharp", extensions: &["cs"], grammar: |_| tree_sitter_c_sharp::LANGUAGE.into(), prepare: as_is, extract: csharp::extract, options: csharp::options },
+    Language { name: "kotlin", extensions: &["kt", "kts"], grammar: |_| tree_sitter_kotlin_ng::LANGUAGE.into(), prepare: as_is, extract: kotlin::extract, options: kotlin::options },
+    Language { name: "python", extensions: &["py", "pyi"], grammar: |_| tree_sitter_python::LANGUAGE.into(), prepare: as_is, extract: python::extract, options: python::options },
+    Language { name: "rust", extensions: &["rs"], grammar: |_| tree_sitter_rust::LANGUAGE.into(), prepare: as_is, extract: rust::extract, options: rust::options },
+    Language { name: "c", extensions: &["c"], grammar: |_| tree_sitter_c::LANGUAGE.into(), prepare: as_is, extract: cfamily::extract_c, options: cfamily::options },
+    Language { name: "cpp", extensions: &["cpp", "cxx", "cc", "hpp", "hh", "hxx", "h"], grammar: |_| tree_sitter_cpp::LANGUAGE.into(), prepare: as_is, extract: cfamily::extract_cpp, options: cfamily::options },
 ];
 
 fn language_of(path: &Path) -> Option<&'static Language> {
@@ -79,7 +80,7 @@ pub fn build(root: &Path) -> Index {
         let Some(found) = grouped.get(language.name) else {
             continue;
         };
-        let contribution = treesitter::build(language.name, found, language.grammar, language.extract, (language.options)());
+        let contribution = treesitter::build(language.name, found, language.grammar, language.prepare, language.extract, (language.options)());
         symbols.extend(contribution.symbols);
         files.extend(contribution.files);
         imports.extend(contribution.imports);
@@ -92,8 +93,7 @@ pub fn build(root: &Path) -> Index {
     index
 }
 
-pub fn parse(path: &str, source: &str) -> Option<(tree_sitter::Tree, Emitted)> {
-    let language = language_of(Path::new(path))?;
+fn parsed(language: &Language, path: &str, source: &str) -> Option<(tree_sitter::Tree, Emitted)> {
     let mut parser = tree_sitter::Parser::new();
     parser.set_language(&(language.grammar)(path)).ok()?;
     let tree = parser.parse(source, None)?;
@@ -102,6 +102,15 @@ pub fn parse(path: &str, source: &str) -> Option<(tree_sitter::Tree, Emitted)> {
     Some((tree, emitted))
 }
 
+pub fn parse(path: &str, source: &str) -> Option<(tree_sitter::Tree, Emitted)> {
+    let language = language_of(Path::new(path))?;
+    parsed(language, path, &(language.prepare)(path, source.to_string()))
+}
+
 pub fn analyze(path: &str, source: &str) -> Vec<Unit> {
-    parse(path, source).map_or_else(Vec::new, |(tree, emitted)| fingerprint::units(&tree.root_node(), source, path, &emitted.symbols, is_test_file(path)))
+    let Some(language) = language_of(Path::new(path)) else {
+        return Vec::new();
+    };
+    let source = (language.prepare)(path, source.to_string());
+    parsed(language, path, &source).map_or_else(Vec::new, |(tree, emitted)| fingerprint::units(&tree.root_node(), &source, path, &emitted.symbols, is_test_file(path)))
 }

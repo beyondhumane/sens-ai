@@ -72,6 +72,23 @@ fn copies_are_found_in_python_as_well() {
 }
 
 #[test]
+fn a_copy_inside_a_vue_or_svelte_component_is_found() {
+    let index = project("components");
+    let renamed = TOTALS.replace("export function totals", "function summarize").replace("rows", "entries").replace("row", "entry");
+    for path in ["src/Report.vue", "src/Report.svelte"] {
+        let component = format!("<template>
+  <p>{{{{ summarize([]) }}}}</p>
+</template>
+
+<script lang=\"ts\">
+{renamed}</script>
+");
+        let found = matches(&index, path, &component);
+        assert_eq!(found.first().map(|(symbol, _)| symbol.as_str()), Some("src/lib/totals.ts#totals#1"), "{path}: {found:?}");
+    }
+}
+
+#[test]
 fn a_file_the_index_does_not_understand_has_no_units() {
     assert!(build::analyze("README.md", "# hello").is_empty());
 }

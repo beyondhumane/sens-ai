@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use tree_sitter::Node;
 
+use super::component;
 use super::treesitter::{Emitted, Extra, Options, Scope, all_named, declare, descendants, field, named, never_qualified, text};
 use crate::index::EVERYTHING;
 
@@ -11,8 +12,15 @@ const WRITTEN_AS_JS: [&str; 4] = [".js", ".jsx", ".mjs", ".cjs"];
 pub fn grammar(file: &str) -> tree_sitter::Language {
     match file.rsplit('.').next().unwrap_or_default() {
         "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
-        "ts" | "mts" | "cts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        "ts" | "mts" | "cts" | "vue" | "svelte" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         _ => tree_sitter_javascript::LANGUAGE.into(),
+    }
+}
+
+pub fn prepare(file: &str, source: String) -> String {
+    match file.rsplit('.').next().unwrap_or_default() {
+        "vue" | "svelte" => component::scripted(&source),
+        _ => source,
     }
 }
 

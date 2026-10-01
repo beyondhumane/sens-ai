@@ -54,6 +54,14 @@ fn only<'a>(found: &'a [Candidate], name: &str) -> &'a Candidate {
 }
 
 #[test]
+fn vue_and_svelte_components_count_what_their_templates_use() {
+    let found = candidates("components");
+    alive(&found, &["onClick", "increment", "formatDate", "mount"]);
+    assert!(in_file(&found, "unusedHelper", "src/App.vue").is_some(), "{:?}", found.iter().map(|candidate| &candidate.name).collect::<Vec<_>>());
+    assert!(in_file(&found, "forgotten", "src/Counter.svelte").is_some());
+}
+
+#[test]
 fn go_flags_dead_functions_and_never_live_or_entry_code() {
     let found = candidates("godead");
     let unused = only(&found, "unusedHelper");

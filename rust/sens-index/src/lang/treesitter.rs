@@ -195,6 +195,11 @@ struct Parsed {
 
 pub type Extract = fn(&Node, &str, &str, &HashSet<String>, &mut Emitted);
 pub type Grammar = fn(&str) -> tree_sitter::Language;
+pub type Prepare = fn(&str, String) -> String;
+
+pub fn as_is(_file: &str, source: String) -> String {
+    source
+}
 
 fn stage(t: &mut std::time::Instant, label: &str) {
     if std::env::var_os("SENS_TIMING").is_some() {
@@ -207,6 +212,7 @@ pub fn build(
     tongue: &'static str,
     files: &[(String, PathBuf)],
     grammar: Grammar,
+    prepare: Prepare,
     extract: Extract,
     opts: Options,
 ) -> Contribution {
@@ -219,7 +225,7 @@ pub fn build(
             Parser::new,
             |parser, (rel, abs)| {
                 parser.set_language(&grammar(rel)).ok()?;
-                let source = std::fs::read_to_string(abs).ok()?;
+                let source = prepare(rel, std::fs::read_to_string(abs).ok()?);
                 let tree = parser.parse(&source, None)?;
                 let mut emitted = Emitted::default();
                 extract(&tree.root_node(), &source, rel, &rel_set, &mut emitted);
