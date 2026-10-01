@@ -1,0 +1,54 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 653ca86..7c3fb66 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -183,6 +183,17 @@ const commands: Record<string, Command> = {
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, Expense[]>();
++    for (const expense of load(args[0], io)) {
++      const key = [expense.date, expense.cents, normalize(expense.description).split(/\s+/).filter(Boolean).join(" ")].join("|");
++      groups.set(key, [...(groups.get(key) ?? []), expense]);
++    }
++    const lines = [...groups.values()]
++      .filter((group) => group.length > 1)
++      .map(([first, ...rest]) => `${rest.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`);
++    return lines.length === 0 ? "Sin duplicados" : lines.join("\n");
++  },
+   total: (args, io) => {
+     const month = monthFlag(args);
+     const category = categoryFlag(args);
+diff --git a/tests/duplicados.test.ts b/tests/duplicados.test.ts
+new file mode 100644
+index 0000000..51cfe19
+--- /dev/null
++++ b/tests/duplicados.test.ts
+@@ -0,0 +1,26 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const header = "fecha,importe,categoria,descripcion";
++
++it("groups expenses with the same date, amount and description ignoring case, accents and extra spaces", () => {
++  const csv = [
++    header,
++    "2026-03-09,8.75,ocio,Café con Ana",
++    "2026-03-09,8.75,bar,  CAFE  con   ana ",
++    "2026-03-09,8.75,ocio,cafe con ana",
++    "2026-03-10,8.75,ocio,Café con Ana",
++    "2026-03-09,9,ocio,Café con Ana",
++    "2026-03-11,3,casa,Luz",
++    "2026-03-11,3,casa,Luz",
++  ].join("\n");
++  const result = run(["duplicados", "g.csv"], memoryIo({ "g.csv": csv }));
++  expect(result.code).toBe(0);
++  expect(result.output).toBe(["3 veces: 09/03/2026  8,75 €  Café con Ana", "2 veces: 11/03/2026  3,00 €  Luz"].join("\n"));
++});
++
++it("says so when there are no duplicates", () => {
++  const csv = [header, "2026-03-09,8.75,ocio,Café", "2026-03-10,8.75,ocio,Café"].join("\n");
++  expect(run(["duplicados", "g.csv"], memoryIo({ "g.csv": csv })).output).toBe("Sin duplicados");
++});

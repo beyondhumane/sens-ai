@@ -1,0 +1,31 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 4ee866c..52099a8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -15,10 +15,12 @@ function load(path: string | undefined, io: Io): Expense[] {
+   return parseExpenses(io.read(path));
+ }
+ 
++const formatDate = (iso: string) => iso.split("-").reverse().join("/");
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) =>
+     load(args[0], io)
+-      .map((expense) => [expense.date, expense.category, formatMoney(expense.cents), expense.description].join("  "))
++      .map((expense) => [formatDate(expense.date),expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+   total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
+ };
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 938367a..420b082 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -13,7 +13,7 @@ describe("cuentas", () => {
+   it("lists every expense", () => {
+     const ran = run(["lista", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS }));
+     expect(ran.code).toBe(0);
+-    expect(shown(ran.output)).toBe("2026-03-01  Comida  12,50 €  Pan y fruta\n2026-03-02  Transporte  45,20 €  Gasolina");
++    expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
+   it("adds everything up", () => {

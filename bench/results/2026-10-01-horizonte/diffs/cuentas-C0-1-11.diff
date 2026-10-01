@@ -1,0 +1,107 @@
+diff --git a/README.md b/README.md
+index 299481f..0b7cc09 100644
+--- a/README.md
++++ b/README.md
+@@ -22,6 +22,7 @@ fecha,importe,categoria,descripcion
+ | `informe <fichero> --mes AAAA-MM` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y debe existir; el importe con punto, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
++| `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 34d42f0..968e24f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -54,6 +54,20 @@ function takeDate(args: string[], name: string): { date: string | undefined; res
+   return { date, rest: args.filter((_, i) => i !== flag && i !== flag + 1) };
+ }
+ 
++function checkAmount(amount: string | undefined): asserts amount is string {
++  if (amount === undefined || !/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
++    throw new Error(`Importe no válido: ${amount ?? ""}`.trim());
++  }
++}
++
++function checkCategory(category: string | undefined): asserts category is string {
++  if (category === undefined || category.trim() === "" || /[,\r\n]/.test(category)) {
++    throw new Error(`Categoría no válida: ${category ?? ""}`.trim());
++  }
++}
++
++const BUDGET_HEADER = "categoria,importe";
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { date: from, rest: afterFrom } = takeDate(args, "--desde");
+@@ -81,12 +95,8 @@ const commands: Record<string, Command> = {
+     const description = words.join(" ");
+     load(path, io);
+     if (date === undefined || !isRealDate(date)) throw new Error(`Fecha no válida: ${date ?? ""}`.trim());
+-    if (amount === undefined || !/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+-      throw new Error(`Importe no válido: ${amount ?? ""}`.trim());
+-    }
+-    if (category === undefined || category.trim() === "" || /[,\r\n]/.test(category)) {
+-      throw new Error(`Categoría no válida: ${category ?? ""}`.trim());
+-    }
++    checkAmount(amount);
++    checkCategory(category);
+     if (description.trim() === "" || /[\r\n]/.test(description)) throw new Error("Descripción no válida");
+     const expense: Expense = { date, cents: Math.round(Number(amount) * 100), category, description };
+     const text = io.read(path!);
+@@ -94,6 +104,26 @@ const commands: Record<string, Command> = {
+     io.write(path!, `${text}${separator}${date},${(expense.cents / 100).toFixed(2)},${category},${csvField(description)}\n`);
+     return `Añadido: ${line(expense)}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, category, amount] = args;
++    if (!path) throw new Error("Falta el fichero de presupuestos");
++    checkCategory(category);
++    checkAmount(amount);
++    const cents = Math.round(Number(amount) * 100);
++    const newRow = `${category},${(cents / 100).toFixed(2)}`;
++    let rows: string[] = [];
++    if (io.exists(path)) {
++      const [header, ...rest] = io.read(path).split(/\r?\n/);
++      if (header !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++      rows = rest.filter((row) => row.trim() !== "");
++    }
++    const key = fold(category);
++    const index = rows.findIndex((row) => fold(row.slice(0, row.lastIndexOf(","))) === key);
++    if (index === -1) rows.push(newRow);
++    else rows[index] = newRow;
++    io.write(path, `${[BUDGET_HEADER, ...rows].join("\n")}\n`);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   exportar: (args, io) => {
+     const { month, rest } = parseMonth(args);
+     const expenses = load(rest[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 31dddf6..78aa0de 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -203,3 +203,23 @@ describe("comillas CSV", () => {
+     ]);
+   });
+ });
++
++describe("presupuesto", () => {
++  it("creates the file and replaces a category in place", () => {
++    const io = memoryIo({});
++    expect(shown(run(["presupuesto", "p.csv", "Comida", "100"], io).output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    run(["presupuesto", "p.csv", "Ocio", "30.5"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\nOcio,30.50\n");
++    run(["presupuesto", "p.csv", "comída", "120"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\ncomída,120.00\nOcio,30.50\n");
++  });
++
++  it("validates without touching the file", () => {
++    const io = memoryIo({ "p.csv": "categoria,importe\nComida,100.00\n" });
++    expect(run(["presupuesto", "p.csv", "Comida", "-3"], io)).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(run(["presupuesto", "p.csv", "A,B", "3"], io)).toEqual({ code: 1, output: "Categoría no válida: A,B" });
++    expect(run(["presupuesto", "n.csv", "Ocio", "0"], io).code).toBe(1);
++    expect("n.csv" in io.files).toBe(false);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++  });
++});

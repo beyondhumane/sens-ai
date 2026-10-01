@@ -1,0 +1,72 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index d45b4f8..076075a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -60,6 +60,14 @@ function monthFlag(args: string[]): string | undefined {
+   return month;
+ }
+ 
++function yearFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--anio");
++  if (flag === -1) return undefined;
++  const year = args[flag + 1] ?? "";
++  if (!/^\d{4}$/.test(year)) throw new Error(`Año no válido: ${year}`);
++  return year;
++}
++
+ function categoryFlag(args: string[]): string | undefined {
+   const flag = args.indexOf("--categoria");
+   if (flag === -1) return undefined;
+@@ -202,8 +210,19 @@ const commands: Record<string, Command> = {
+     return `Media diaria en ${monthTitle(month)}: ${formatMoney(average)}`;
+   },
+   informe: (args, io) => {
++    const year = yearFlag(args);
++    if (year !== undefined) {
++      const expenses = load(args[0], io).filter((expense) => expense.date.startsWith(`${year}-`));
++      const byMonth = new Map<string, number>();
++      for (const { date, cents } of expenses) byMonth.set(date.slice(5, 7), (byMonth.get(date.slice(5, 7)) ?? 0) + cents);
++      const lines = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).map(([number, cents]) => {
++        const name = new Date(`${year}-${number}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
++        return `  ${name.charAt(0).toUpperCase() + name.slice(1)}: ${formatMoney(cents)}`;
++      });
++      return [year, ...lines, `Total: ${formatMoney(sumCents(expenses))}`].join("\n");
++    }
+     const month = monthFlag(args);
+-    if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
++    if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM | --anio AAAA");
+     const expenses = inMonth(load(args[0], io), month);
+     const budgets = budgetsFlag(args, io);
+     const title = monthTitle(month);
+diff --git a/tests/informe-anio.test.ts b/tests/informe-anio.test.ts
+new file mode 100644
+index 0000000..554c3c2
+--- /dev/null
++++ b/tests/informe-anio.test.ts
+@@ -0,0 +1,26 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const shown = (output: string) => output.replace(/ /g, " ");
++
++const csv = [
++  "fecha,importe,categoria,descripcion",
++  "2026-03-02,100,casa,Luz",
++  "2026-02-10,30,casa,Agua",
++  "2026-03-04,49.85,ocio,Cine",
++  "2025-12-01,500,casa,Otro año",
++].join("\n");
++
++it("lists one line per month with spending in calendar order, then the total", () => {
++  const result = run(["informe", "g.csv", "--anio", "2026"], memoryIo({ "g.csv": csv }));
++  expect(result.code).toBe(0);
++  expect(shown(result.output)).toBe("2026\n  Febrero: 30,00 €\n  Marzo: 149,85 €\nTotal: 179,85 €");
++});
++
++it("rejects an invalid year", () => {
++  expect(run(["informe", "g.csv", "--anio", "26"], memoryIo({ "g.csv": csv }))).toEqual({
++    code: 1,
++    output: "Año no válido: 26",
++  });
++});

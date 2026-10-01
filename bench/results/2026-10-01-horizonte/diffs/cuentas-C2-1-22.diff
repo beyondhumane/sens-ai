@@ -1,0 +1,24 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 19d7d55..3501785 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -203,6 +203,19 @@ const commands: Record<string, Command> = {
+       .map(([first, ...rest]) => `${rest.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`);
+     return lines.length === 0 ? "Sin duplicados" : lines.join("\n");
+   },
++  renombrar: ([path, category = "", renamed = ""], io) => {
++    if (!path || !category || !renamed) throw new Error("Uso: renombrar <fichero> <categoría> <nueva>");
++    if (renamed.includes(",")) throw new Error(`Categoría no válida: ${renamed}`);
++    const expenses = load(path, io);
++    let count = 0;
++    for (const expense of expenses) {
++      if (normalize(expense.category) !== normalize(category)) continue;
++      expense.category = renamed;
++      count++;
++    }
++    io.write(path, `${[HEADER, ...expenses.map(formatRow)].join("\n")}\n`);
++    return `Renombrados ${count} gastos`;
++  },
+   avisos: ([path, budgetsPath, ...rest], io) => {
+     const month = monthFlag(rest);
+     if (!path || !budgetsPath || month === undefined) throw new Error("Uso: avisos <fichero> <presupuestos> --mes AAAA-MM");

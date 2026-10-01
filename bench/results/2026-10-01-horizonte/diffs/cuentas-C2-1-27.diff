@@ -1,0 +1,88 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index e11b987..eda2585 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -63,12 +63,15 @@ function formatFlag(args: string[]): string | undefined {
+   return format;
+ }
+ 
++function parseMonth(month: string): string {
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++  return month;
++}
++
+ function monthFlag(args: string[]): string | undefined {
+   const flag = args.indexOf("--mes");
+   if (flag === -1) return undefined;
+-  const month = args[flag + 1] ?? "";
+-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
+-  return month;
++  return parseMonth(args[flag + 1] ?? "");
+ }
+ 
+ function yearFlag(args: string[]): string | undefined {
+@@ -264,6 +267,22 @@ const commands: Record<string, Command> = {
+     );
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
++  comparar: ([path, first = "", second = ""], io) => {
++    if (!path || !first || !second) throw new Error("Uso: comparar <fichero> AAAA-MM AAAA-MM");
++    const expenses = load(path, io);
++    const before = new Map(categoryTotals(inMonth(expenses, parseMonth(first))));
++    const after = new Map(categoryTotals(inMonth(expenses, parseMonth(second))));
++    const categories = [...new Set([...before.keys(), ...after.keys()])].sort((a, b) => a.localeCompare(b));
++    if (categories.length === 0) return "Sin gastos";
++    return categories
++      .map((category) => {
++        const was = before.get(category) ?? 0;
++        const now = after.get(category) ?? 0;
++        const sign = now >= was ? "+" : "-";
++        return `${category}: ${formatMoney(was)} → ${formatMoney(now)} (${sign}${formatMoney(Math.abs(now - was))})`;
++      })
++      .join("\n");
++  },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   exportar: (args, io) => {
+     const month = monthFlag(args);
+diff --git a/tests/comparar.test.ts b/tests/comparar.test.ts
+new file mode 100644
+index 0000000..488ac4d
+--- /dev/null
++++ b/tests/comparar.test.ts
+@@ -0,0 +1,36 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const files = {
++  "g.csv": [
++    "fecha,importe,categoria,descripcion",
++    "2026-02-01,40.00,Comida,Pan",
++    "2026-02-02,90.00,Ocio,Cine",
++    "2026-02-03,5.00,Casa,Luz",
++    "2026-03-01,44.65,Comida,Cena",
++    "2026-03-02,60.00,Ocio,Teatro",
++    "2026-03-03,5.00,Casa,Luz",
++    "2026-03-04,12.00,Viajes,Tren",
++  ].join("\n"),
++};
++
++const nbsp = (text: string) => text.replace(/ /g, " ");
++
++it("compares each category between two months, sorted alphabetically, with signed difference", () => {
++  const ran = run(["comparar", "g.csv", "2026-02", "2026-03"], memoryIo(files));
++  expect(ran.code).toBe(0);
++  expect(nbsp(ran.output)).toBe(
++    [
++      "Casa: 5,00 € → 5,00 € (+0,00 €)",
++      "Comida: 40,00 € → 44,65 € (+4,65 €)",
++      "Ocio: 90,00 € → 60,00 € (-30,00 €)",
++      "Viajes: 0,00 € → 12,00 € (+12,00 €)",
++    ].join("\n"),
++  );
++});
++
++it("rejects an invalid month or missing arguments", () => {
++  expect(run(["comparar", "g.csv", "2026-02", "2026-13"], memoryIo(files)).code).toBe(1);
++  expect(run(["comparar", "g.csv", "2026-02"], memoryIo(files)).code).toBe(1);
++});

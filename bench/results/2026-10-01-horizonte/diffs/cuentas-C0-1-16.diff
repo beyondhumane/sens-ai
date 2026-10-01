@@ -1,0 +1,114 @@
+diff --git a/README.md b/README.md
+index ad32b78..cada579 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ fecha,importe,categoria,descripcion
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ | `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+ | `semana <fichero> <fecha>` | Gastos de la semana (lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y al final `Total: 48,30 €`. `Fecha no válida: 2026-02-30` si no existe |
++| `importar <banco> <fichero>` | Añade al final de `<fichero>` los gastos de un CSV del banco (`Fecha;Concepto;Importe`, fechas `09/03/2026`, importes con coma y puntos de miles; los negativos son gastos, los positivos se ignoran), en positivo, con el concepto como descripción y la categoría `Sin categoría`, y responde `Importados 1 gastos`. Si una línea no se entiende no importa nada: `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index c89d7c3..f519878 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -113,6 +113,22 @@ function budgetNote(spent: number, budget: number | undefined): string {
+   return ` de ${formatMoney(budget)} (${verdict})`;
+ }
+ 
++const BANK_HEADER = "Fecha;Concepto;Importe";
++
++function parseBankDate(text: string): string | undefined {
++  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
++  if (!match) return undefined;
++  const iso = `${match[3]}-${match[2]}-${match[1]}`;
++  return isRealDate(iso) ? iso : undefined;
++}
++
++function parseBankAmount(text: string): number | undefined {
++  const match = /^([+-]?)(\d+|\d{1,3}(?:\.\d{3})+)(?:,(\d{1,2}))?$/.exec(text);
++  if (!match) return undefined;
++  const cents = Number(match[2].replace(/\./g, "")) * 100 + Number((match[3] ?? "").padEnd(2, "0"));
++  return match[1] === "-" ? -cents : cents;
++}
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { date: from, rest: afterFrom } = takeDate(args, "--desde");
+@@ -149,6 +165,33 @@ const commands: Record<string, Command> = {
+     io.write(path!, `${text}${separator}${date},${(expense.cents / 100).toFixed(2)},${category},${csvField(description)}\n`);
+     return `Añadido: ${line(expense)}`;
+   },
++  importar: (args, io) => {
++    const [bankPath, path] = args;
++    if (!bankPath) throw new Error("Falta el fichero del banco");
++    load(path, io);
++    const [header, ...rows] = io.read(bankPath).replace(/^﻿/, "").split(/\r?\n/);
++    if (header !== BANK_HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++    const imported: string[] = [];
++    rows.forEach((row, i) => {
++      if (row.trim() === "") return;
++      const invalid = new Error(`Línea ${i + 2} del banco no válida`);
++      const fields = row.split(";");
++      if (fields.length !== 3) throw invalid;
++      const date = parseBankDate(fields[0]);
++      const description = fields[1].trim();
++      const cents = parseBankAmount(fields[2].trim());
++      if (date === undefined || cents === undefined || description === "") throw invalid;
++      if (cents < 0) {
++        imported.push(`${date},${(-cents / 100).toFixed(2)},Sin categoría,${csvField(description)}\n`);
++      }
++    });
++    if (imported.length > 0) {
++      const text = io.read(path!);
++      const separator = text === "" || text.endsWith("\n") ? "" : "\n";
++      io.write(path!, `${text}${separator}${imported.join("")}`);
++    }
++    return `Importados ${imported.length} gastos`;
++  },
+   presupuesto: (args, io) => {
+     const [path, category, amount] = args;
+     if (!path) throw new Error("Falta el fichero de presupuestos");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 0a7b3bb..aec5ec5 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -300,3 +300,36 @@ describe("importes con coma", () => {
+     expect(io.files["p.csv"]).toBe("categoria,importe\nComida,1234.50\n");
+   });
+ });
++
++describe("importar", () => {
++  const BANCO = `Fecha;Concepto;Importe
++09/03/2026;Bar Paco;-8,75
++10/03/2026;Nómina;1.850,00
++11/03/2026;Cena, con amigos;-1.234,5
++`;
++
++  it("appends only the expenses, as positive amounts without category", () => {
++    const io = memoryIo({ "b.csv": BANCO, "g.csv": GASTOS });
++    expect(run(["importar", "b.csv", "g.csv"], io)).toEqual({ code: 0, output: "Importados 2 gastos" });
++    expect(io.files["g.csv"]).toBe(`${GASTOS}2026-03-09,8.75,Sin categoría,Bar Paco\n2026-03-11,1234.50,Sin categoría,"Cena, con amigos"\n`);
++  });
++
++  it("imports nothing and names the bad line", () => {
++    const bad = (line: string) => {
++      const io = memoryIo({ "b.csv": `Fecha;Concepto;Importe\n09/03/2026;Bar;-1,00\n${line}\n`, "g.csv": GASTOS });
++      const ran = run(["importar", "b.csv", "g.csv"], io);
++      expect(io.files["g.csv"]).toBe(GASTOS);
++      return ran;
++    };
++    expect(bad("30/02/2026;X;-1,00")).toEqual({ code: 1, output: "Línea 3 del banco no válida" });
++    expect(bad("10/03/2026;X;abc").code).toBe(1);
++    expect(bad("10/03/2026;X").code).toBe(1);
++    expect(bad("10/03/2026;;-1,00").code).toBe(1);
++  });
++
++  it("handles CRLF and files without expenses", () => {
++    const io = memoryIo({ "b.csv": "Fecha;Concepto;Importe\r\n10/03/2026;Nómina;5,00\r\n", "g.csv": GASTOS });
++    expect(run(["importar", "b.csv", "g.csv"], io).output).toBe("Importados 0 gastos");
++    expect(io.files["g.csv"]).toBe(GASTOS);
++  });
++});

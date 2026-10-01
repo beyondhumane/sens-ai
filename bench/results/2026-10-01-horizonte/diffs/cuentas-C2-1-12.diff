@@ -1,0 +1,69 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2a77027..52ecb8e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -52,12 +52,26 @@ const inMonth =(expenses: Expense[], month: string | undefined) =>
+ 
+ const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+ 
+-function categoryLines(expenses: Expense[]): string[] {
++function categoryLines(expenses: Expense[], budgets: { category: string; cents: number }[] = []): string[] {
+   const totals = new Map<string, number>();
+   for (const { category, cents } of expenses) totals.set(category, (totals.get(category) ?? 0) + cents);
+   return [...totals]
+     .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b))
+-    .map(([category, cents]) => `${category}: ${formatMoney(cents)}`);
++    .map(([category, cents]) => {
++      const budget = budgets.find((item) => normalize(item.category) === normalize(category));
++      if (!budget) return `${category}: ${formatMoney(cents)}`;
++      const left = budget.cents - cents;
++      const status = left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`;
++      return `${category}: ${formatMoney(cents)} de ${formatMoney(budget.cents)} (${status})`;
++    });
++}
++
++function budgetsFlag(args: string[], io: Io) {
++  const flag = args.indexOf("--presupuestos");
++  if (flag === -1) return [];
++  const path = args[flag + 1];
++  if (!path || path.startsWith("--")) throw new Error("Falta el fichero de presupuestos");
++  return parseBudgets(io.read(path));
+ }
+ 
+ const commands: Record<string, Command> = {
+@@ -116,10 +130,11 @@ const commands: Record<string, Command> = {
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
+     const expenses = inMonth(load(args[0], io), month);
++    const budgets = budgetsFlag(args, io);
+     const title = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+     return [
+       title.charAt(0).toUpperCase() + title.slice(1),
+-      ...categoryLines(expenses).map((line) => `  ${line}`),
++      ...categoryLines(expenses, budgets).map((line) => `  ${line}`),
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
+diff --git a/tests/presupuesto.test.ts b/tests/presupuesto.test.ts
+index 2b71e35..6785737 100644
+--- a/tests/presupuesto.test.ts
++++ b/tests/presupuesto.test.ts
+@@ -22,6 +22,18 @@ it("appends a new category", () => {
+   expect(io.files["p.csv"]).toBe("categoria,importe\nOcio,20.00\nCasa,50.00\n");
+ });
+ 
++it("informe shows what is left or exceeded for budgeted categories only", () => {
++  const io = memoryIo({
++    "g.csv": "fecha,importe,categoria,descripcion\n2026-03-01,44.65,Comida,Pan\n2026-03-02,60.00,Ocio,Cine\n2026-03-03,5.00,Casa,Luz\n",
++    "p.csv": "categoria,importe\ncomida,100.00\nOCIO,55.00\n",
++  });
++  const ran = run(["informe", "g.csv", "--mes", "2026-03", "--presupuestos", "p.csv"], io);
++  expect(ran.output.replace(/ /g, " ")).toBe(
++    "Marzo de 2026\n  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)\n  Comida: 44,65 € de 100,00 € (quedan 55,35 €)\n  Casa: 5,00 €\nTotal: 109,65 €",
++  );
++  expect(run(["informe", "g.csv", "--mes", "2026-03", "--presupuestos"], io).code).toBe(1);
++});
++
+ it("validates the amount like añadir", () => {
+   const io = memoryIo({});
+   expect(run(["presupuesto", "p.csv", "Comida", "abc"], io)).toEqual({ code: 1, output: "Importe no válido: abc" });

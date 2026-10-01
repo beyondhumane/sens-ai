@@ -1,0 +1,56 @@
+diff --git a/README.md b/README.md
+index a284389..2c17883 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `--desde` y `--hasta` limitan por fecha igual que en `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <categoría>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos. Ambas opciones se pueden combinar |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos (misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más): una línea por grupo con cuántas veces sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+-| `categorias <fichero>` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético |
++| `categorias <fichero> [--mes AAAA-MM]` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético; con `--mes 2026-03` cuenta solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>] [--csv <salida>]` | Con `--csv <salida>`, además guarda el informe en un CSV `categoria,total` con una línea por categoría en el mismo orden y el total con punto (`Ocio,60.00`); `Falta el fichero de salida` si no se indica. Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes`. Con `--anio 2026` en su lugar: `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y al final el `Total: 179,85 €` (`Año no válido: 26` si no son cuatro cifras; no usa presupuestos). Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto, emparejadas sin distinguir mayúsculas ni acentos, añaden cuánto queda o cuánto te pasas: `  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)` |
+ | `avisos <fichero> <presupuestos> --mes AAAA-MM` | Las categorías que ese mes se pasan de su presupuesto, una por línea, de la que más se pasa a la que menos, con el nombre como está en los gastos (`Ocio: te pasas 5,00 €`); `Todo en orden` si ninguna. `Falta el mes` sin `--mes` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19`, debe existir y no puede ser posterior a hoy (`La fecha 2026-03-25 es futura`); el importe mayor que cero y con dos decimales como mucho, con punto decimal (`4.20`) o con coma (`4,20`; entonces los puntos son de miles: `1.234,56`). Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 9011f84..4ff6162 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -172,10 +172,12 @@ const commands: Record<string, Command> = {
+           .map(({ first, count }) => `${count} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`)
+           .join("\n");
+   },
+-  categorias: (args, io) =>
+-    categoryTotals(load(args[0], io))
++  categorias: (args, io) => {
++    const { month, rest } = parseMonth(args);
++    return categoryTotals(load(rest[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`)))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+-      .join("\n"),
++      .join("\n");
++  },
+   añadir: (args, io) => {
+     const [path, date, amount, category, ...words] = args;
+     const description = words.join(" ");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 423fdf3..7eace00 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -91,6 +91,18 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nÁlbum: 20,00 €\nBarco: 20,00 €");
+   });
+ 
++  it("adds up categories only for the month given with --mes", () => {
++    const csv = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,50.00,Ocio,Cine
++2026-04-03,32.15,Comida,Cena
++`;
++    const io = memoryIo({ "gastos.csv": csv });
++    expect(shown(run(["categorias", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Ocio: 50,00 €\nComida: 12,50 €");
++    expect(shown(run(["categorias", "--mes", "2026-04", "gastos.csv"], io).output)).toBe("Comida: 32,15 €");
++    expect(run(["categorias", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("searches descriptions ignoring case and accents", () => {
+     const csv = `fecha,importe,categoria,descripcion
+ 2026-03-01,3.50,Ocio,Café con Ana

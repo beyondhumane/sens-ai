@@ -1,0 +1,62 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 52ecb8e..fb8969e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -126,6 +126,21 @@ const commands: Record<string, Command> = {
+     io.write(output, `${[HEADER, ...expenses.map(formatRow)].join("\n")}\n`);
+     return `Exportados ${expenses.length} gastos a ${output}`;
+   },
++  semana: ([path, date = ""], io) => {
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    const day = new Date(`${date}T00:00:00Z`);
++    const offsetDay = (days: number) => new Date(day.getTime() + days * 86_400_000).toISOString().slice(0, 10);
++    const monday = offsetDay(-((day.getUTCDay() + 6) % 7));
++    const sunday = offsetDay(6 - ((day.getUTCDay() + 6) % 7));
++    const expenses = load(path, io).filter((expense) => expense.date >= monday && expense.date <= sunday);
++    const byDay = new Map<string, number>();
++    for (const { date: when, cents } of expenses) byDay.set(when, (byDay.get(when) ?? 0) + cents);
++    const lines = [...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([when, cents]) => {
++      const name = new Date(`${when}T00:00:00Z`).toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" });
++      return `${name.charAt(0).toUpperCase() + name.slice(1)} ${formatDate(when)}: ${formatMoney(cents)}`;
++    });
++    return [...lines, `Total: ${formatMoney(sumCents(expenses))}`].join("\n");
++  },
+   informe: (args, io) => {
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
+diff --git a/tests/semana.test.ts b/tests/semana.test.ts
+new file mode 100644
+index 0000000..d39d860
+--- /dev/null
++++ b/tests/semana.test.ts
+@@ -0,0 +1,30 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const shown = (output: string) => output.replace(/ /g, " ");
++
++const csv = [
++  "fecha,importe,categoria,descripcion",
++  "2026-03-01,9,casa,Domingo anterior",
++  "2026-03-02,40,casa,Luz",
++  "2026-03-02,5.2,ocio,Cine",
++  "2026-03-04,3.1,ocio,Café",
++  "2026-03-08,1,ocio,Domingo",
++  "2026-03-09,7,casa,Lunes siguiente",
++].join("\n");
++
++it("lists each day with expenses from Monday to Sunday and the total", () => {
++  const result = run(["semana", "g.csv", "2026-03-04"], memoryIo({ "g.csv": csv }));
++  expect(result.code).toBe(0);
++  expect(shown(result.output)).toBe(
++    ["Lunes 02/03/2026: 45,20 €", "Miércoles 04/03/2026: 3,10 €", "Domingo 08/03/2026: 1,00 €", "Total: 49,30 €"].join("\n"),
++  );
++});
++
++it("rejects a date that does not exist", () => {
++  expect(run(["semana", "g.csv", "2026-02-30"], memoryIo({ "g.csv": csv }))).toEqual({
++    code: 1,
++    output: "Fecha no válida: 2026-02-30",
++  });
++});

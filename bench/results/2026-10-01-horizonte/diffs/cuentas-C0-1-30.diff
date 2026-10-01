@@ -1,0 +1,67 @@
+diff --git a/README.md b/README.md
+index 2c17883..6133f4e 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. `--desde` y `--hasta`, juntas o por separado, limitan por fecha con ambos días incluidos (`Fecha no válida: 2026-03-32` si no existe) |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--categoria <categoría>] [--orden fecha\|importe]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. `--desde` y `--hasta`, juntas o por separado, limitan por fecha con ambos días incluidos (`Fecha no válida: 2026-03-32` si no existe); `--categoria Comida` deja solo los de esa categoría, sin distinguir mayúsculas ni acentos; `--orden importe` ordena de mayor a menor importe. Todas las opciones se pueden combinar |
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `--desde` y `--hasta` limitan por fecha igual que en `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <categoría>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos. Ambas opciones se pueden combinar |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos (misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más): una línea por grupo con cuántas veces sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+diff --git a/src/cli.ts b/src/cli.ts
+index 4ff6162..031615a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -133,12 +133,18 @@ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { date: from, rest: afterFrom } = takeDate(args, "--desde");
+     const { date: to, rest: afterTo } = takeDate(afterFrom, "--hasta");
+-    const orderFlag = afterTo.indexOf("--orden");
+-    const order = orderFlag === -1 ? "fecha" : afterTo[orderFlag + 1];
++    const { category, rest: afterCategory } = takeCategory(afterTo);
++    const orderFlag = afterCategory.indexOf("--orden");
++    const order = orderFlag === -1 ? "fecha" : afterCategory[orderFlag + 1];
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order ?? ""}`.trim());
+-    const rest = orderFlag === -1 ? afterTo : afterTo.filter((_, i) => i !== orderFlag && i !== orderFlag + 1);
++    const rest = orderFlag === -1 ? afterCategory : afterCategory.filter((_, i) => i !== orderFlag && i !== orderFlag + 1);
+     return load(rest[0], io)
+-      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .filter(
++        (expense) =>
++          (from === undefined || expense.date >= from) &&
++          (to === undefined || expense.date <= to) &&
++          (category === undefined || fold(expense.category) === category),
++      )
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(line)
+       .join("\n");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 7eace00..6244d5d 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -47,6 +47,22 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
+   });
+ 
++  it("filters lista by --categoria (ignoring case and accents) and combines it with dates and --orden", () => {
++    const csv = `fecha,importe,categoria,descripcion
++2026-03-01,9.00,Comida,Uno
++2026-03-02,30.00,Ocio,Dos
++2026-03-10,20.00,comída,Tres
++2026-04-01,5.00,Comida,Cuatro
++`;
++    const io = memoryIo({ "gastos.csv": csv });
++    const names = (args: string[]) => shown(run(["lista", ...args], io).output).split("\n").map((l) => l.split("  ")[3]);
++    expect(names(["gastos.csv", "--categoria", "COMIDA"])).toEqual(["Uno", "Tres", "Cuatro"]);
++    expect(names(["--categoria", "comida", "gastos.csv", "--desde", "2026-03-05", "--hasta", "2026-03-31"])).toEqual(["Tres"]);
++    expect(names(["gastos.csv", "--categoria", "Comida", "--orden", "importe"])).toEqual(["Tres", "Uno", "Cuatro"]);
++    expect(run(["lista", "gastos.csv", "--categoria", "Viajes"], io)).toEqual({ code: 0, output: "" });
++    expect(run(["lista", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Categoría no válida:" });
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

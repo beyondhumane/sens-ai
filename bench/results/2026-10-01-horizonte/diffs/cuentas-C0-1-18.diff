@@ -1,0 +1,65 @@
+diff --git a/README.md b/README.md
+index fcca5d3..1213404 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <categoría>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos. Ambas opciones se pueden combinar |
+ | `categorias <fichero>` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético |
+-| `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes`. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto, emparejadas sin distinguir mayúsculas ni acentos, añaden cuánto queda o cuánto te pasas: `  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)` |
++| `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes`. Con `--anio 2026` en su lugar: `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y al final el `Total: 179,85 €` (`Año no válido: 26` si no son cuatro cifras; no usa presupuestos). Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto, emparejadas sin distinguir mayúsculas ni acentos, añaden cuánto queda o cuánto te pasas: `  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y debe existir; el importe mayor que cero y con dos decimales como mucho, con punto decimal (`4.20`) o con coma (`4,20`; entonces los puntos son de miles: `1.234,56`). Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ | `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+diff --git a/src/cli.ts b/src/cli.ts
+index d17d9cd..983f3c6 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -262,6 +262,20 @@ const commands: Record<string, Command> = {
+     return `Media diaria en ${MONTHS[number - 1].toLowerCase()} de ${year}: ${formatMoney(Math.round(total / days))}`;
+   },
+   informe: (args, io) => {
++    const yearFlag = args.indexOf("--anio");
++    if (yearFlag !== -1) {
++      const year = args[yearFlag + 1];
++      if (year === undefined || !/^\d{4}$/.test(year)) throw new Error(`Año no válido: ${year ?? ""}`.trim());
++      const rest = args.filter((_, i) => i !== yearFlag && i !== yearFlag + 1);
++      const inYear = load(rest[0], io).filter((expense) => expense.date.startsWith(`${year}-`));
++      const lines: string[] = [];
++      MONTHS.forEach((name, i) => {
++        const prefix = `${year}-${String(i + 1).padStart(2, "0")}-`;
++        const monthExpenses = inYear.filter((expense) => expense.date.startsWith(prefix));
++        if (monthExpenses.length > 0) lines.push(`  ${name}: ${formatMoney(sumCents(monthExpenses))}`);
++      });
++      return [year, ...lines, `Total: ${formatMoney(sumCents(inYear))}`].join("\n");
++    }
+     const { month, rest: afterMonth } = parseMonth(args);
+     const { path: budgetsPath, rest } = takeBudgetsPath(afterMonth);
+     const expenses = load(rest[0], io);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 99df4db..0f7ef9e 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -112,6 +112,22 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("reports a whole year month by month", () => {
++    const io = memoryIo({
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-03-01,100.00,Comida,Pan
++2026-02-10,30.00,Ocio,Cine
++2026-03-05,49.85,Ocio,Teatro
++2025-12-31,9.00,Ocio,Viejo
++`,
++    });
++    expect(shown(run(["informe", "g.csv", "--anio", "2026"], io).output)).toBe(
++      "2026\n  Febrero: 30,00 €\n  Marzo: 149,85 €\nTotal: 179,85 €",
++    );
++    expect(run(["informe", "g.csv", "--anio", "26"], io)).toEqual({ code: 1, output: "Año no válido: 26" });
++    expect(run(["informe", "g.csv", "--anio"], io)).toEqual({ code: 1, output: "Año no válido:" });
++  });
++
+   it("shows what is left or exceeded for categories with a budget", () => {
+     const csv = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

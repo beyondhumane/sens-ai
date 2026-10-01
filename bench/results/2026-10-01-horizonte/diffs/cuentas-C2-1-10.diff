@@ -1,0 +1,32 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 1b118c4..dfc10a3 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -77,7 +77,9 @@ const commands: Record<string, Command> = {
+   },
+   buscar: (args, io) => {
+     const needle = normalize(args.slice(1).join(" "));
+-    const found = load(args[0], io).filter((expense) => normalize(expense.description).includes(needle));
++    const found = load(args[0], io).filter(
++      ({ description, category }) => normalize(description).includes(needle) || normalize(category).includes(needle),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (args, io) => {
+diff --git a/tests/buscar.test.ts b/tests/buscar.test.ts
+index 9ac0d08..056d071 100644
+--- a/tests/buscar.test.ts
++++ b/tests/buscar.test.ts
+@@ -11,6 +11,12 @@ it("finds expenses ignoring case and accents, with the lista lines", () => {
+   expect(found.output).toBe(run(["lista", "g.csv"], memoryIo({ "g.csv": csv.split("\n").slice(0, 2).join("\n") })).output);
+ });
+ 
++it("finds expenses by category even when the description does not mention it", () => {
++  const io = memoryIo({ "g.csv": csv });
++  const luz = memoryIo({ "g.csv": ["fecha,importe,categoria,descripcion", "2026-03-02,10,casa,Luz"].join("\n") });
++  expect(run(["buscar", "g.csv", "CASA"], io).output).toBe(run(["lista", "g.csv"], luz).output);
++});
++
+ it("says so when nothing matches", () => {
+   expect(run(["buscar", "g.csv", "zzz"], memoryIo({ "g.csv": csv })).output).toBe("Sin resultados");
+ });

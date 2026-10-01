@@ -1,0 +1,62 @@
+diff --git a/README.md b/README.md
+index 0bce25e..b85c949 100644
+--- a/README.md
++++ b/README.md
+@@ -26,6 +26,7 @@ fecha,importe,categoria,descripcion
+ | `exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato (con `--formato banco`: `Fecha;Concepto;Importe`, fechas `09/03/2026` e importes en negativo con coma; otro formato da `Formato no válido: pdf`), y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ | `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+ | `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría (sin distinguir mayúsculas ni acentos) por `<nueva>` en todos los gastos y guarda el fichero: `Renombrados 3 gastos`. Si no hay ninguno no toca el fichero (`Renombrados 0 gastos`). La categoría se valida como en `añadir` |
++| `resumen <fichero>` | Cuatro líneas: `Gastos: 12`, `Desde 03/01/2026 hasta 28/02/2026` (primer y último día), `Total: 412,30 €` y `Mayor: 120,00 € en Seguro del coche (15/01/2026)` (si hay varios iguales, el primero del fichero); `Sin gastos` si no hay ninguno |
+ | `semana <fichero> <fecha>` | Gastos de la semana (lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y al final `Total: 48,30 €`. `Fecha no válida: 2026-02-30` si no existe |
+ | `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día en ese mes, contando todos sus días aunque no hayas gastado, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `Falta el mes` sin `--mes` |
+ | `importar <banco> <fichero>` | Añade al final de `<fichero>` los gastos de un CSV del banco (`Fecha;Concepto;Importe`, fechas `09/03/2026`, importes con coma y puntos de miles; los negativos son gastos, los positivos se ignoran), en positivo, con el concepto como descripción y la categoría `Sin categoría`, y responde `Importados 1 gastos`. Si una línea no se entiende no importa nada: `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+diff --git a/src/cli.ts b/src/cli.ts
+index 3743253..d078d8e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -302,6 +302,18 @@ const commands: Record<string, Command> = {
+     );
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
++  resumen: (args, io) => {
++    const expenses = load(args[0], io);
++    if (expenses.length === 0) return "Sin gastos";
++    const dates = expenses.map((e) => e.date).sort();
++    const biggest = expenses.reduce((best, e) => (e.cents > best.cents ? e : best));
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(dates[0])} hasta ${formatDate(dates[dates.length - 1])}`,
++      `Total: ${formatMoney(sumCents(expenses))}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   semana: (args, io) => {
+     const expenses = load(args[0], io);
+     const target = args[1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f14ba75..5486a2f 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -477,3 +477,22 @@ describe("renombrar", () => {
+     expect(io.files["g.csv"]).toBe(CSV);
+   });
+ });
++
++describe("resumen", () => {
++  it("summarizes count, date range, total and the first largest expense", () => {
++    const csv = `fecha,importe,categoria,descripcion
++2026-02-28,120.00,Coche,Seguro
++2026-01-03,5.50,Comida,Pan
++2026-01-15,120.00,Coche,Otro
++`;
++    const ran = run(["resumen", "g.csv"], memoryIo({ "g.csv": csv }));
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe(
++      ["Gastos: 3", "Desde 03/01/2026 hasta 28/02/2026", "Total: 245,50 €", "Mayor: 120,00 € en Seguro (28/02/2026)"].join("\n"),
++    );
++  });
++
++  it("says Sin gastos when the file has none", () => {
++    expect(run(["resumen", "g.csv"], memoryIo({ "g.csv": "fecha,importe,categoria,descripcion\n" }))).toEqual({ code: 0, output: "Sin gastos" });
++  });
++});

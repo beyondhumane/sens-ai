@@ -1,6 +1,6 @@
 # Horizonte: un proyecto después de 30 tareas, con Sens y sin él
 
-Fecha: 2026-10-01 · Estado: aprobada; pasos 1 y 2 hechos, falta el piloto.
+Fecha: 2026-10-01 · Estado: aprobada; piloto hecho, la medida principal no distinguió nada (ver *Piloto*).
 Ámbito: `rust/sens-bench`, `bench/sequences/` (nuevo).
 
 ## Por qué
@@ -155,6 +155,65 @@ Las ejecuciones gastan cuota del plan: el piloto y el resto se piden antes.
 | 2 | Modo secuencia en `sens-bench`, con sus pruebas | Hecho: pruebas en verde con un modelo falso |
 | 3 | Piloto: 1 secuencia por brazo | Curvas del piloto; decisión de seguir o rediseñar |
 | 4 | Resto: 2 secuencias más por brazo | Resultado frente a las hipótesis, en esta spec |
+
+## Piloto (2026-10-01)
+
+Una secuencia por brazo, Sonnet 5.5 medio, `--safe-mode`, Canon v1.1: 60 pasos en
+una hora. Resultados en `bench/results/2026-10-01-horizonte/`.
+
+| En la tarea 30 | C0 | C2 | Referencia |
+| --- | --- | --- | --- |
+| Tareas aceptadas | 30/30 | 30/30 | 30/30 |
+| Tests ocultos anteriores rotos | 0 | 0 | 0 |
+| Líneas de código | 515 | 411 | 455 |
+| Funciones | 24 | 37 | 50 |
+| Líneas duplicadas (jscpd) | 0 | 0 | 0 |
+| Funciones con casi-copia (Sens) | 0 | 2 | 0 |
+| Sitios que leen opciones de la orden | 7 | 8 | 1 |
+| Tokens en total | 9,94 M | 9,80 M | — |
+| Pendiente de tokens por tarea | +1 912 | +1 379 | — |
+
+Lo que dice, contra las hipótesis:
+
+1. **Duplicación: no distingue.** Ninguno de los dos brazos copia bloques en un
+   proyecto de este tamaño: jscpd da cero en los dos, y las sondas, una vez
+   corregidas, encuentran cada concepto en un solo sitio en ambos, salvo leer las
+   opciones de la orden, que los dos reescriben a mano en 7 u 8 sitios. Es la
+   regla de parada que se fijó para el piloto: la medida principal no puede
+   separar los brazos.
+2. **Una sola versión de cada cosa:** igual en los dos.
+3. **Tamaño: la diferencia que sí aparece.** Con las mismas 30 funcionalidades y
+   todos los tests pasando, C2 termina con 411 líneas y C0 con 515, un 20 % menos,
+   y por debajo de la referencia. La distancia se abre pronto (13 líneas en la
+   tarea 3, 66 en la 9) y luego se mantiene en torno a 90–100. C2 escribe más
+   funciones y más cortas; C0, menos y más largas. Ejemplo en la tarea 8: para
+   leer descripciones entre comillas C0 escribió un lector de CSV entero (99
+   líneas añadidas) y C2 dos funciones de una línea, porque la descripción es el
+   último campo.
+4. **Coste: igual en total**, con una pendiente algo menor en C2. Con una sola
+   secuencia no se puede decir más.
+5. **Sin pérdida: se cumple.**
+
+Lo que hizo el circuito en C2: un bloqueo (R2, `parseBudgets` copia de
+`parseExpenses` al 83 %, justo), dos «piénsalo» de R2 sobre lectores de opciones
+repetidos (justos) y tres notas del revisor, **las tres equivocadas**: pedir que
+`formatDate` se escribiera en línea por tener un solo uso (se reutilizó después),
+llamar especulativa a la validación que impide romper el CSV con una coma, y decir
+que `normalize` no estaba definida cuando lo estaba fuera del diff. Las notas no
+paran nada, pero llegan al modelo y a la persona; el revisor necesita otro ajuste
+en S1, S3 y S4.
+
+Correcciones del instrumento, hechas después de mirar los diffs a mano como pedía
+el diseño y aplicadas a los dos brazos con `sequence remeasure`: la sonda de
+acentos contaba las llamadas a una función que C2 había llamado `normalize`, la de
+fechas mezclaba los nombres de días y meses, y las de meses y días no veían las
+tablas escritas con mayúscula.
+
+**Una sola secuencia por brazo no basta para afirmar el 20 %.** En la calibración,
+las líneas de una misma tarea variaban mucho entre repeticiones. Si se quiere
+contar, el tamaño tiene que pasar a ser la medida principal declarada antes de
+medir otra vez, con secuencias nuevas: el piloto sirvió para elegirla y no puede
+confirmarla.
 
 ## Riesgos
 
