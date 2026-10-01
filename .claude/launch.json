@@ -4,14 +4,49 @@
     {
       "name": "sens-ui",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "sens-app-ui"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "sens-app-ui"
+      ],
       "port": 5173
+    },
+    {
+      "name": "sens-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "P:/sens-web",
+        "run",
+        "dev"
+      ],
+      "port": 4321
     },
     {
       "name": "sens-setup-ui",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:setup", "-w", "sens-app-ui"],
+      "runtimeArgs": [
+        "run",
+        "dev:setup",
+        "-w",
+        "sens-app-ui"
+      ],
       "port": 5174
+    },
+    {
+      "name": "sens-ui-canon",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "sens-app-ui",
+        "--",
+        "--port",
+        "5177"
+      ],
+      "port": 5177
     }
   ]
 }

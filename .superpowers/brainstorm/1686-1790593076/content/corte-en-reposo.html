@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barra flotante · el corte en reposo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0c0d0d;
+    --panel: #111313;
+    --card: #1a1d1c;
+    --raise: #252927;
+    --edge: #363b38;
+    --hair: #1a1d1c;
+    --hair-strong: #252927;
+    --text: #f4f1ea;
+    --dim: #b5bbb7;
+    --faint: #929995;
+    --ghost: #747b77;
+    --signal: #c7ff4a;
+    --signal-hot: #f0ffd0;
+    --signal-700: #78aa12;
+    --tint: #1a1f16;
+    --tint-edge: #353e2a;
+    --ui: "Space Grotesk", system-ui, sans-serif;
+    --mono: "Geist Mono", ui-monospace, Consolas, monospace;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--text); font: 15px/1.53 var(--ui); -webkit-font-smoothing: antialiased; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 6px; }
+  .lede { color: var(--faint); margin: 0 0 8px; max-width: 70ch; }
+
+  .controls { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0 18px; background: linear-gradient(var(--ground) 72%, transparent); }
+  .controls button { font: 500 13px var(--ui); color: var(--faint); background: var(--panel); border: 1px solid var(--hair-strong); border-radius: 999px; padding: 6px 13px; cursor: pointer; transition: color 140ms, border-color 140ms, background 140ms; }
+  .controls button:hover { color: var(--text); border-color: var(--edge); }
+  .controls button[aria-pressed="true"] { color: var(--text); background: var(--card); border-color: var(--edge); }
+  .controls .play { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; }
+  .controls .play[aria-pressed="true"] { color: var(--signal); border-color: var(--tint-edge); background: var(--tint); }
+
+  .cards { display: grid; gap: 22px; }
+  .stage { border-radius: 16px; border: 1px solid var(--hair-strong); overflow: hidden; cursor: pointer; background: #0e1010; transition: border-color 160ms, box-shadow 160ms; }
+  .stage:hover { border-color: var(--edge); }
+  .stage.selected { border-color: var(--signal-700); box-shadow: 0 0 0 1px var(--signal-700); }
+  .stage-head { display: flex; gap: 14px; align-items: baseline; padding: 14px 18px 13px; border-bottom: 1px solid var(--hair); }
+  .letter { font: 500 12px var(--mono); color: var(--ghost); flex: none; }
+  .stage-head h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+  .stage-head p { margin: 0; color: var(--faint); font-size: 13px; max-width: 76ch; }
+  .stage.selected .letter { color: var(--signal); }
+
+  .desk { position: relative; height: 360px; padding: 46px 16px 0; display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
+  .desk::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 15% 0%, #1a1e1c 0%, #0b0c0c 62%); }
+  .window { position: absolute; left: 5%; right: 5%; top: 20px; bottom: -30px; border-radius: 10px; background: #121414; border: 1px solid #1d201f; opacity: .6; padding: 34px 26px; display: grid; align-content: start; gap: 9px; }
+  .window::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 22px; border-bottom: 1px solid #1d201f; }
+  .code-line { display: flex; gap: 7px; height: 7px; }
+  .code-line span { border-radius: 3px; opacity: .5; }
+
+  .bar { position: relative; z-index: 1; width: min(640px, 100%); background: var(--panel); border: 1px solid var(--hair-strong); border-radius: 16px; box-shadow: 0 34px 80px -24px rgba(0, 0, 0, .9), 0 2px 8px rgba(0, 0, 0, .45); }
+  .row { display: flex; align-items: center; gap: 10px; height: 58px; padding: 0 10px 0 18px; }
+  .ident { width: 28px; height: 28px; flex: none; display: grid; place-items: center; margin-left: -4px; }
+  .field { flex: 1; min-width: 0; font: 400 16px var(--ui); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph { color: var(--ghost); }
+  .caret { display: inline-block; width: 1.5px; height: 19px; background: var(--text); vertical-align: -4px; margin-left: 1px; animation: blink 1.06s steps(1) infinite; }
+  .stage[data-state="working"] .caret, .stage[data-state="answer"] .caret { display: none; }
+  .stage[data-state="working"] .field, .stage[data-state="answer"] .field { color: var(--dim); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .project { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 7px; border-radius: 8px; color: var(--faint); font: 12px var(--mono); border: 1px solid var(--hair-strong); flex: none; }
+  .iconbtn { width: 32px; height: 32px; display: grid; place-items: center; color: var(--ghost); border-radius: 8px; flex: none; }
+  .send { width: 32px; height: 32px; border-radius: 10px; background: var(--card); color: var(--ghost); display: grid; place-items: center; flex: none; transition: background 140ms, color 140ms; }
+  .send .stop { display: none; }
+  .stage[data-state="typing"] .send { background: var(--text); color: var(--ground); }
+  .stage[data-state="working"] .send { background: var(--raise); color: var(--text); }
+  .stage[data-state="working"] .send .go { display: none; }
+  .stage[data-state="working"] .send .stop { display: block; }
+
+  .fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms var(--ease); }
+  .fold > div { overflow: hidden; min-height: 0; }
+  .stage:not([data-state="idle"]) .chips { grid-template-rows: 1fr; }
+  .stage[data-state="working"] .reply, .stage[data-state="answer"] .reply { grid-template-rows: 1fr; }
+
+  .chips-inner { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px 18px; }
+  .stage[data-variant="c2"] .chips-inner { padding-left: 52px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 8px; border-radius: 8px; font-size: 12px; border: 1px dashed var(--edge); color: var(--ghost); background: transparent; max-width: 320px; transition: background 160ms, color 160ms, border-color 160ms; }
+  .chip .mono { font: 11px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip.on { border: 1px solid var(--hair-strong); background: var(--card); color: var(--dim); }
+  .chip.on .mono { color: var(--faint); }
+
+  .reply-inner { padding: 14px 18px 13px 18px; min-height: 58px; }
+  .stage[data-variant="c2"] .reply-inner { padding-left: 52px; }
+  .verb { font-size: 13.5px; width: fit-content; background: linear-gradient(90deg, var(--faint) 0 38%, var(--signal-hot) 50%, var(--faint) 62% 100%); background-size: 260% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: glint 1.5s linear infinite; }
+  .stage[data-state="answer"] .verb { display: none; }
+  @keyframes glint { from { background-position: 100% 0; } to { background-position: -160% 0; } }
+  .answer { font-size: 14.5px; line-height: 1.62; color: var(--text); }
+  .stage:not([data-state="answer"]) .answer { display: none; }
+  .answer code { font: 12.5px var(--mono); background: var(--card); padding: 1px 5px; border-radius: 5px; color: var(--dim); }
+  .w { animation: rise 150ms ease-out both; }
+  @keyframes rise { from { opacity: 0; filter: blur(2px); } }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; font-size: 12px; color: var(--ghost); opacity: 0; transition: opacity 200ms; }
+  .stage[data-ended] .foot { opacity: 1; }
+  .keys { display: flex; gap: 16px; flex-wrap: wrap; }
+  .keys span { display: inline-flex; align-items: center; gap: 6px; }
+  kbd { font: 10.5px var(--mono); padding: 1px 5px; border: 1px solid var(--hair-strong); border-radius: 5px; color: var(--faint); }
+  .meta { font: 11px var(--mono); color: var(--ghost); white-space: nowrap; }
+
+  .mark-body { fill: var(--edge); }
+  .mark-cut { stroke: var(--panel); }
+
+  .seam { position: relative; height: 0; z-index: 2; }
+  .seam svg { position: absolute; left: 14px; right: 14px; top: -6px; width: calc(100% - 28px); height: 12px; overflow: visible; }
+  .seam .base { fill: none; stroke: var(--edge); stroke-width: 1.25; stroke-linecap: round; stroke-dasharray: 0 1; d: path("M0 6 C150 6 150 6 300 6 C450 6 450 6 600 6"); transition: stroke-dasharray 90ms linear, d 760ms var(--ease), stroke 320ms, stroke-width 320ms; }
+  .seam .run { fill: none; stroke: var(--signal); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: .12 1.3; stroke-dashoffset: .12; opacity: 0; filter: drop-shadow(0 0 3px rgba(199, 255, 74, .8)); d: path("M0 6 C150 6 150 6 300 6 C450 6 450 6 600 6"); transition: opacity 200ms; }
+  .stage[data-state="working"] .base { stroke-dasharray: 1 0; stroke: var(--hair-strong); }
+  .stage[data-state="working"] .run { opacity: 1; animation: run 1100ms linear infinite; }
+  .stage[data-state="answer"] .base { stroke-dasharray: 1 0; stroke: var(--signal); stroke-width: 1.6; d: path("M0 9 C150 9 196 2.5 300 6 C404 9.5 450 3 600 3"); filter: drop-shadow(0 0 3px rgba(199, 255, 74, .5)); }
+  .stage[data-ended] .base { stroke: var(--edge); stroke-width: 1.25; filter: none; transition: stroke 900ms 300ms, stroke-width 900ms 300ms; }
+  @keyframes run { from { stroke-dashoffset: .12; } to { stroke-dashoffset: -1.18; } }
+
+  .stage[data-variant="c3"] .bar { padding-bottom: 9px; }
+  .stage[data-variant="c3"][data-state="idle"] .base { stroke-dasharray: 1 0; stroke: var(--edge); stroke-width: 1.6; d: path("M0 10 C150 10 196 2 300 6 C404 10 450 2 600 2"); animation: rest 5s ease-in-out infinite; }
+  .stage[data-variant="c3"][data-state="typing"] .base { stroke-dasharray: 1 0; stroke: var(--ghost); }
+  .stage[data-variant="c3"][data-ended] .base { d: path("M0 10 C150 10 196 2 300 6 C404 10 450 2 600 2"); }
+  @keyframes rest { 50% { opacity: .6; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .seam .run, .stage[data-variant="c3"] .base, .verb, .caret { animation: none !important; }
+    .seam .base { transition: none; }
+  }
+
+  .verdict { margin-top: 26px; color: var(--faint); font-size: 13.5px; max-width: 72ch; }
+  .verdict b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>El corte es la barra. ¿Cómo se ve Sens cuando no hace nada?</h1>
+  <p class="lede">Te quedas con C. Su punto débil era el reposo: una barra vacía sin rastro de la marca. Aquí van tres maneras de resolverlo. Escribir, trabajar y responder funcionan igual en las tres, y Signal solo aparece en la línea mientras trabaja y al responder.</p>
+
+  <nav class="controls" aria-label="Estado">
+    <button data-show="idle">Reposo</button>
+    <button data-show="typing">Escribiendo</button>
+    <button data-show="working">Trabajando</button>
+    <button data-show="answer">Respuesta</button>
+    <button class="play" data-show="cycle" aria-pressed="true">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+      Ciclo
+    </button>
+  </nav>
+
+  <div class="cards">
+    <section class="stage card" data-variant="c1" data-choice="c1" onclick="toggleSelect(this)">
+      <div class="stage-head">
+        <span class="letter">C1</span>
+        <div>
+          <h2>Tal cual</h2>
+          <p>Es la C de antes. En reposo solo hay campo y botones, y la línea aparece al escribir. Es lo más limpio, pero hasta que escribes la barra podría ser de cualquiera.</p>
+        </div>
+      </div>
+      <div class="desk"><div class="window"></div><div class="bar"></div></div>
+    </section>
+
+    <section class="stage card" data-variant="c2" data-choice="c2" onclick="toggleSelect(this)">
+      <div class="stage-head">
+        <span class="letter">C2</span>
+        <div>
+          <h2>Marca muda</h2>
+          <p>La marca en una tinta, con el corte en negativo y sin Signal, a la izquierda del campo. No se mueve nunca. Todo lo vivo sigue pasando en la línea. Se reconoce enseguida, pero añade un elemento.</p>
+        </div>
+      </div>
+      <div class="desk"><div class="window"></div><div class="bar"></div></div>
+    </section>
+
+    <section class="stage card" data-variant="c3" data-choice="c3" onclick="toggleSelect(this)">
+      <div class="stage-head">
+        <span class="letter">C3</span>
+        <div>
+          <h2>Costura dormida</h2>
+          <p>La línea no desaparece: en reposo es una S apenas insinuada en Carbon al pie de la barra, que respira cada 5 s. Al escribir se aclara, al trabajar se endereza y la recorre la luz, y al responder vuelve a curvarse en Signal. La marca es la propia barra.</p>
+        </div>
+      </div>
+      <div class="desk"><div class="window"></div><div class="bar"></div></div>
+    </section>
+  </div>
+
+  <p class="verdict"><b>Mi apuesta: C3.</b> Mantiene la idea de C sin añadir nada: la barra está cortada incluso cuando no hace nada, y la misma línea cuenta cada estado. C2 es la opción segura si quieres ver la marca literal.</p>
+</main>
+
+<script type="module">
+  const icon = (paths, size = 16, stroke = 1.7) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  const ICON = {
+    folder: icon('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>', 13, 1.8),
+    caret: icon('<path d="M6 9l6 6 6-6"/>', 11, 2.4),
+    mic: icon('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>', 16, 1.7),
+    up: icon('<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>', 16, 2),
+    stop: icon('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>', 14, 2),
+    scan: icon('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>', 13, 1.8),
+    clip: icon('<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>', 13, 1.8),
+  };
+  const CUT = "M48 13C41 13 35 8.5 29 8.5C21 8.5 13.5 13 13.5 18.5C13.5 23 19 21.8 24 24C29 26.2 34.5 25 34.5 29.5C34.5 35 27 39.5 19 39.5C13 39.5 7 35 0 35";
+  const markSvg = `<svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><defs><clipPath id="mute"><rect width="48" height="48" rx="11"/></clipPath></defs><g clip-path="url(#mute)"><rect class="mark-body" width="48" height="48"/><path class="mark-cut" d="${CUT}" fill="none" stroke-width="5.2" stroke-linecap="round"/></g></svg>`;
+  const seamSvg = `<div class="seam"><svg viewBox="0 0 600 12" preserveAspectRatio="none" aria-hidden="true"><path class="base" pathLength="1" vector-effect="non-scaling-stroke"/><path class="run" pathLength="1" vector-effect="non-scaling-stroke"/></svg></div>`;
+
+  const QUESTION = "¿por qué falla el build de la ui?";
+  const VERBS = ["Rastreando el error…", "Leyendo look.ts…", "Comparando con vite.config.ts…"];
+  const ANSWER = [
+    ["c", "look.ts:2"], ["t", "importa"], ["c", "../brand/tokens"], ["t", ", pero esa carpeta está en la raíz del repo, fuera de"], ["c", "ui/"],
+    ["t", ". Vite no la resuelve sin un alias. Hay 1 import roto y no he cambiado nada. ¿Añado el alias"], ["c", "@brand"], ["t", "en"], ["c", "vite.config.ts"], ["t", "?"],
+  ];
+  const units = ANSWER.flatMap(([kind, text]) => kind === "c" ? [`<code>${text}</code>`] : text.split(" ").filter(Boolean));
+  const attached = (u) => u.startsWith(",") || u.startsWith(".") || u === "?";
+  const glue = (list) => list.map((u) => attached(u) ? u : " " + u).join("").trim();
+
+  const barHtml = (variant) => `
+    <div class="row">
+      ${variant === "c2" ? `<div class="ident">${markSvg}</div>` : ""}
+      <div class="field"></div>
+      <span class="project">${ICON.folder}sens${ICON.caret}</span>
+      <span class="iconbtn">${ICON.mic}</span>
+      <span class="send"><span class="go">${ICON.up}</span><span class="stop">${ICON.stop}</span></span>
+    </div>
+    <div class="fold chips"><div><div class="chips-inner">
+      <span class="chip capture">${ICON.scan}Terminal <span class="mono">captura</span></span>
+      <span class="chip clip">${ICON.clip}<span class="mono">error TS2307: Cannot find module '../brand/tokens'</span></span>
+    </div></div></div>
+    ${seamSvg}
+    <div class="fold reply"><div><div class="reply-inner">
+      <div class="verb"></div>
+      <div class="answer"></div>
+      <div class="foot">
+        <div class="keys"><span><kbd>Ctrl ⏎</kbd>abrir en Sens</span><span><kbd>Ctrl P</kbd>fijar</span><span><kbd>Esc</kbd>cerrar</span></div>
+        <span class="meta">2 ficheros leídos · 3,8 s</span>
+      </div>
+    </div></div></div>`;
+
+  const stages = [...document.querySelectorAll(".stage")];
+  for (const stage of stages) {
+    stage.querySelector(".bar").innerHTML = barHtml(stage.dataset.variant);
+    const win = stage.querySelector(".window");
+    const colors = ["#5b8fc9", "#d8b24a", "#9b87c4", "#5aa86f", "#8a918d", "#d08248"];
+    let seed = stage.dataset.variant.charCodeAt(1);
+    const rand = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    for (let i = 0; i < 26; i++) {
+      const line = document.createElement("div");
+      line.className = "code-line";
+      line.style.paddingLeft = `${Math.floor(rand() * 4) * 18}px`;
+      const n = 1 + Math.floor(rand() * 4);
+      for (let k = 0; k < n; k++) {
+        const bit = document.createElement("span");
+        bit.style.width = `${24 + rand() * 110}px`;
+        bit.style.background = colors[Math.floor(rand() * colors.length)];
+        line.append(bit);
+      }
+      win.append(line);
+    }
+  }
+
+  const growing = (stage) => stage.dataset.variant !== "c3";
+  const all = (selector) => stages.flatMap((s) => [...s.querySelectorAll(selector)]);
+  const setField = (text, typing) => {
+    for (const f of all(".field")) f.innerHTML = text ? `${text.replace(/</g, "&lt;")}<span class="caret"></span>` : `<span class="caret"></span><span class="ph">Pide lo que necesites a Sens</span>`;
+    const fraction = Math.min(1, text.length / 44);
+    for (const s of stages) {
+      if (!growing(s) || typing === false) continue;
+      for (const b of s.querySelectorAll(".seam .base")) b.style.strokeDasharray = `${fraction} 1`;
+    }
+  };
+  const setChips = (captureOn, clipOn) => {
+    for (const c of all(".chip.capture")) c.classList.toggle("on", captureOn);
+    for (const c of all(".chip.clip")) c.classList.toggle("on", clipOn);
+  };
+  const setVerb = (text) => { for (const v of all(".verb")) v.textContent = text; };
+  const setAnswer = (count, animate) => {
+    const html = glue(units.slice(0, count));
+    for (const a of all(".answer")) {
+      if (!animate) { a.innerHTML = html; continue; }
+      const last = units[count - 1];
+      const prev = glue(units.slice(0, count - 1));
+      const sep = last && attached(last) ? "" : prev ? " " : "";
+      a.innerHTML = prev + sep + `<span class="w">${last}</span>`;
+    }
+  };
+  const mark = (state) => {
+    for (const s of stages) {
+      s.dataset.state = state;
+      delete s.dataset.ended;
+      if (state !== "typing") for (const b of s.querySelectorAll(".seam .base")) b.style.strokeDasharray = "";
+    }
+  };
+  const end = () => { for (const s of stages) s.dataset.ended = ""; };
+
+  let run = 0;
+  const wait = (ms, token) => new Promise((ok, no) => setTimeout(() => (token === run ? ok() : no()), ms));
+
+  async function play(state, animate, token) {
+    mark(state);
+    if (state === "idle") {
+      setField("");
+      setChips(false, false);
+      setAnswer(0, false);
+      if (animate) await wait(3200, token);
+      return;
+    }
+    if (state === "typing") {
+      setChips(false, false);
+      if (!animate) { setField(QUESTION); setChips(false, true); return; }
+      for (let i = 1; i <= QUESTION.length; i++) {
+        setField(QUESTION.slice(0, i));
+        if (i === 14) setChips(false, true);
+        await wait(i === QUESTION.length ? 0 : 42 + Math.random() * 50, token);
+      }
+      await wait(650, token);
+      return;
+    }
+    setField(QUESTION, false);
+    setChips(false, true);
+    if (state === "working") {
+      setVerb(VERBS[0]);
+      if (!animate) return;
+      for (const verb of VERBS) { setVerb(verb); await wait(1150, token); }
+      return;
+    }
+    if (state === "answer") {
+      if (!animate) { setAnswer(units.length, false); await wait(900, token); end(); return; }
+      for (let i = 1; i <= units.length; i++) { setAnswer(i, true); await wait(55 + Math.random() * 60, token); }
+      await wait(250, token);
+      end();
+      await wait(3600, token);
+    }
+  }
+
+  const order = ["idle", "typing", "working", "answer"];
+  async function cycle(token) {
+    for (;;) for (const state of order) await play(state, true, token);
+  }
+
+  const buttons = [...document.querySelectorAll(".controls button")];
+  const choose = (what) => {
+    run += 1;
+    const token = run;
+    for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.show === what));
+    (what === "cycle" ? cycle(token) : play(what, what === "answer", token)).catch(() => {});
+  };
+  for (const b of buttons) b.addEventListener("click", () => choose(b.dataset.show));
+  choose("cycle");
+</script>
+</body>
+</html>
