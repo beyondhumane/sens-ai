@@ -1,0 +1,37 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index d4912ee..4637343 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -342,7 +342,12 @@ class ProgressBar(t.Generic[V]):
+ 
+         self._completed_intervals += n_steps
+ 
+-        if self._completed_intervals >= self.update_min_steps:
++        reaches_end = (
++            self.length is not None
++            and self.pos + self._completed_intervals >= self.length
++        )
++
++        if self._completed_intervals >= self.update_min_steps or reaches_end:
+             self.make_step(self._completed_intervals)
+             self.render_progress()
+             self._completed_intervals = 0
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index eef91e0..601e639 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -350,6 +350,14 @@ def test_progress_bar_update_min_steps(runner):
+     assert bar.pos == 5
+ 
+ 
++def test_progress_bar_update_min_steps_reaches_length(runner):
++    bar = _create_progress(length=20, update_min_steps=7)
++    for _ in range(20):
++        bar.update(1)
++    assert bar.pos == 20
++    assert bar.finished
++
++
+ @pytest.mark.parametrize("key_char", ("h", "H", "é", "À", " ", "字", "àH", "àR"))
+ @pytest.mark.parametrize("echo", [True, False])
+ @pytest.mark.skipif(not WIN, reason="Tests user-input using the msvcrt module.")

@@ -839,6 +839,56 @@ Sin bloqueos de copias ni del revisor no hay datos para mover el umbral de tipo
 3 ni la confianza del revisor: en 36 ejecuciones ninguna copia ni ningún
 hallazgo `high` llegó a parar.
 
+#### C2 repetida con el R8 nuevo
+
+Las mismas 12 tareas × 3, solo C2 (C1 no pasa por el circuito), como `C2·r8` en
+la misma carpeta: 33 de 36 válidas, tests en las 36 y **ningún bloqueo**. Quedan
+cinco notas de R2, todas sobre código de test que se parece a otro test; son
+ciertas y no paran nada. Las tres no válidas son errores del modelo en los que el
+circuito no intervino: dos de `py-progress-final` que solo arreglan la iteración
+y una de `py-prompt-ansi` que quita el ANSI también con el color forzado.
+
+Entre C2 y C2·r8 solo cambia R8, que en C2 saltó dos veces y sobre tests, y aun
+así la mediana de código de `sens-file-language` pasa de 12 a 31 líneas y la de
+`rs-session-ids` de 6 a 10. Con tres repeticiones, unas pocas líneas de
+diferencia son ruido.
+
+### Conclusión de la fase 7
+
+Juntando las dos tandas de C2 (seis ejecuciones por tarea) frente a C0 y C1:
+
+| | C0 | C1 | C2 |
+| --- | --- | --- | --- |
+| Válidas | 32/36 | 31/36 | 67/72 |
+| Con tests | 23/36 | 36/36 | 72/72 |
+| Usa `plain` | 0/3 | 3/3 | 6/6 |
+| Usa `titleOf` | 1/3 | 1/3 | 6/6 |
+| `py-progress-final` | 0/3 | 0/3 | 3/6 |
+| Código, diferencia con C0 | — | −2,9 [−3,8, +1,0] | −2,3 [−3,9, +0,4] |
+
+Frente al listón:
+
+1. **C2 no pierde ninguna tarea frente a C0.** Cumplido en lo que se puede
+   medir: no hay tarea que C2 falle de forma sistemática. Gana
+   `py-progress-final` (3/6 frente a 0/3) y `py-deprecated-space` (6/6 frente a
+   2/3); en `py-choice-suggest` y `py-prompt-ansi` tiene un fallo suelto en seis,
+   errores del modelo que el circuito no causó.
+2. **Mejora en duplicación y reutilización.** La reutilización, sí: `plain` y
+   `titleOf` siempre, y el arreglo de la barra en el sitio compartido. La
+   duplicación no tiene margen, C0 ya no añade. Las líneas de código bajan unas
+   dos por tarea, pero el intervalo toca el cero.
+3. **Menos del 5 % de bloqueos injustos.** Con el R8 corregido, cero bloqueos en
+   36 ejecuciones. Antes del arreglo, 2 de 2 eran injustos; esa causa ya no
+   existe. Que no haya bloqueos significa también que estas tareas no ponen a
+   prueba R1 ni R2 sobre código: con la lista de lo que ya existe delante, el
+   modelo no copia.
+
+El Canon queda en **v1.1**: el único cambio que justifican los datos es el de los
+tests. No hay datos para mover el umbral de tipo 3 ni la confianza del revisor,
+porque ninguno llegó a parar. Lo que hace falta para medir más fino: más
+repeticiones para las líneas de código, y tareas que tienten a copiar código del
+proyecto para medir los bloqueos de R1 y R2 con precisión.
+
 ## Registro
 
 `.sens/canon/log.jsonl`, local: por cada veredicto, turno, versión del Canon, fase,
@@ -891,7 +941,7 @@ Ningún fichero lleva comentarios.
 | 4 | El circuito en `sens-agent` y C2 en el piloto | Pruebas del circuito en verde y C2 del piloto |
 | 5 | El revisor (S1–S6) | Contrato y validación de citas en verde; piloto repetido |
 | 6 | Interfaz, registro y seis idiomas | Pruebas de interfaz y `typecheck` en verde |
-| 7 | Calibración con datos, 12 tareas, Canon v2 | Listón cumplido o motivo documentado |
+| 7 | Calibración con datos, 12 tareas, Canon v2 | Hecha: ver *Conclusión de la fase 7* |
 
 ## Fuera de esta spec
 

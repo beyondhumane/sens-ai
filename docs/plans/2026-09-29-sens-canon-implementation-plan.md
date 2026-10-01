@@ -3,7 +3,7 @@
 - **Fecha:** 2026-09-29
 - **Diseño de referencia:** [../specs/2026-09-29-sens-canon-design.md](../specs/2026-09-29-sens-canon-design.md)
 - **Rama:** `feat/canon`
-- **Estado:** Fases 0 a 3 hechas; fase 4 construida y probada sin modelo, falta medirla
+- **Estado:** fase 7 hecha el 2026-10-01; el estado de cada fase está en su sección
 
 Ocho fases. Cada una termina con algo que funciona, sus pruebas en verde y un
 commit. La fase 0 es una puerta: si alguna comprobación falla, se corrige la spec
@@ -581,6 +581,19 @@ compila en esta máquina (whisper necesita libclang).
 - Ajustar el umbral de tipo 3 y la confianza del revisor con esos datos; Canon v2
   solo con cambios que justifiquen los datos, y repetir C1 y C2.
 - Resultados y conclusión en la spec, cumpla o no el listón.
+
+**Hecha el 2026-10-01**, con cambios respecto a lo planeado:
+
+- Las nueve tareas nuevas son siete de click (commits reales de `pallets/click`,
+  con pytest sin red) y dos de Rust sobre Sens; con las tres de TypeScript, cinco
+  en español. `sens-bench validate` prueba cada una contra su `reference.patch`.
+- Antes de lanzar las 108 se vio que C2 no escribía tests porque el Canon no los
+  pedía; se lanzaron ya con el Canon v1.1, que los pide.
+- La revisión de las paradas encontró que los dos bloqueos eran injustos y por
+  la misma causa, R8 comparando con el fichero de justo antes de cada escritura.
+  Se corrigió y se repitió solo C2, porque C1 no pasa por el circuito.
+- No se tocaron el umbral de tipo 3 ni la confianza del revisor: ninguno llegó a
+  parar, así que no hay datos.
 
 ## Riesgos
 

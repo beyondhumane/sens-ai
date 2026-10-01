@@ -1,0 +1,141 @@
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.tsx b/rust/sens-app/ui/src/features/changes/Changes.tsx
+index 330f0ed..a525d34 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.tsx
+@@ -6,7 +6,7 @@ import { FileIcon } from "../../shared/FileIcon";
+ import { Icon } from "../../shared/Icon";
+ import { LinesCard } from "../../shared/LinesCard";
+ import { addedRows, patchRows } from "../../shared/rows";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf } from "../../shared/syntax/languages";
+ import { ICONS } from "../../shared/icons.js";
+ import { project } from "../project/store";
+ import { t } from "./copy";
+@@ -67,6 +67,27 @@ export function ChangeTotals() {
+   );
+ }
+ 
++// A file without an extension or a known name is read for its shebang.
++function useLanguageTitle(file: DiffFile) {
++  const root = useStore(project, (s) => s.work);
++  const [head, setHead] = useState("");
++  const byPath = languageTitleOf(file.path);
++  const reads = !byPath && file.state !== "D" && !file.binary && !stem(file.path).includes(".");
++  useEffect(() => {
++    setHead("");
++    if (!reads) return;
++    let live = true;
++    commands.openFile(root, file.path).then(
++      (opened) => live && opened.kind === "text" && setHead(opened.text.slice(0, 200)),
++      () => {},
++    );
++    return () => {
++      live = false;
++    };
++  }, [reads, root, file.path, file.plus, file.minus]);
++  return byPath ?? (head ? languageTitleOf(file.path, head) : null);
++}
++
+ // The body is drawn while the row is open, again after each read of git, as the
+ // file may have changed. A new file's lines are counted once they are read.
+ function ChangeRow({ file }: { file: DiffFile }) {
+@@ -74,6 +95,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+   const touched = useStore(project, (s) => s.touched.has(file.path));
+   const [counted, setCounted] = useState<number | null>(null);
+   const plus = file.fresh ? (counted ?? file.plus) : file.plus;
++  const language = useLanguageTitle(file);
+ 
+   return (
+     <details
+@@ -91,6 +113,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+         </span>
+         <FileIcon path={file.path} />
+         <span className="name">{stem(file.path)}</span>
++        {language && <span className="language">{language}</span>}
+         <span className="dirname">{parentOf(file.path)}</span>
+         <Counts file={file} plus={plus} />
+         {file.state !== "D" && (
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.tsx b/rust/sens-app/ui/src/features/files/Viewer.tsx
+index ef5756f..8d8ed89 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.tsx
+@@ -6,7 +6,7 @@ import { FRONT_MATTER, stem, weigh } from "../../shared/format.js";
+ import { ICONS } from "../../shared/icons.js";
+ import { Markdown } from "../../shared/markdown/Markdown";
+ import { useCode } from "../../shared/syntax/code";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf } from "../../shared/syntax/languages";
+ import type { Look, Painted, Runs } from "../../shared/syntax/paint";
+ import { useSeen } from "../../shared/useSeen";
+ import { project, type Edits } from "../project/store";
+@@ -40,11 +40,13 @@ const useEdits = () => {
+ export function ViewerHead() {
+   const title = useStore(viewer, (s) => s.title) || t.noneOpen;
+   const edits = useEdits();
++  const language = useStore(viewer, (s) => (s.title ? languageTitleOf(s.title, textOf(s.body).slice(0, 200)) : null));
+   return (
+     <>
+       <span className="where" title={title}>
+         {title}
+       </span>
++      {language && <span className="language">{language}</span>}
+       <span className="marks">
+         {edits && (
+           <>
+diff --git a/rust/sens-app/ui/src/shared/syntax/languages.ts b/rust/sens-app/ui/src/shared/syntax/languages.ts
+index a736a08..cdbedec 100644
+--- a/rust/sens-app/ui/src/shared/syntax/languages.ts
++++ b/rust/sens-app/ui/src/shared/syntax/languages.ts
+@@ -28,6 +28,12 @@ export function languageNamed(tag: string) {
+   return (Object.hasOwn(aliases, name) ? aliases[name] : undefined) ?? byName(`.${name}`, {}, extensions) ?? null;
+ }
+ 
++// The name to show for a file: `TypeScript`, `Python`; null when not known.
++export function languageTitleOf(path: string, text = "") {
++  const grammar = languageOf(path, text);
++  return grammar && Object.hasOwn(titles, grammar) ? titles[grammar] : null;
++}
++
+ export function titleOf(tag: string) {
+   const name = tag.trim().toLowerCase();
+   if (Object.hasOwn(SHELL_TITLES, name)) return SHELL_TITLES[name];
+diff --git a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+index 4e34892..96a69cc 100644
+--- a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
++++ b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ import { describe, expect, it } from "vitest";
+ import { codeNow, paintCode } from "./code";
+-import { languageNamed, languageOf, titleOf } from "./languages";
++import { languageNamed, languageOf, languageTitleOf, titleOf } from "./languages";
+ import { paint, paintedNow, paintRows } from "./paint";
+ 
+ const KEYWORD = "light-dark(#0000ff, #569cd6)";
+@@ -63,6 +63,14 @@ describe("languages", () => {
+     ]);
+   });
+ 
++  it("are named for a file, by its extension or its shebang", () => {
++    expect(languageTitleOf("src/App.ts")).toBe("TypeScript");
++    expect(languageTitleOf("README.md")).toBe("Markdown");
++    expect(languageTitleOf("bin/deploy", "#!/usr/bin/env python3\nprint(1)")).toBe("Python");
++    expect(languageTitleOf("bin/deploy")).toBeNull();
++    expect(languageTitleOf("notes.txt")).toBeNull();
++  });
++
+   it("are called by their proper names", () => {
+     expect(["ts", "ps1", "bash", "zsh", "sh", "cmd", "bat", "json", "c#", "nu", "text", "whatever"].map(titleOf)).toEqual([
+       "TypeScript",
+diff --git a/rust/sens-app/ui/src/styles.css b/rust/sens-app/ui/src/styles.css
+index a70d69b..1e64891 100644
+--- a/rust/sens-app/ui/src/styles.css
++++ b/rust/sens-app/ui/src/styles.css
+@@ -1335,6 +1335,7 @@
+     font-family: var(--mono); font-size: 12px; color: var(--text);
+     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+   }
++  .language { flex: none; font-size: 12px; color: var(--ghost); white-space: nowrap; }
+   .marks { font-family: var(--mono); font-size: 12px; display: flex; gap: 10px; flex: none; }
+   .marks .plus { color: var(--green); }
+   .marks .minus { color: var(--red); }

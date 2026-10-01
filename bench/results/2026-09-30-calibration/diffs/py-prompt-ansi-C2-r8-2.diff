@@ -1,0 +1,44 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..1acd270 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -11,6 +11,7 @@ from contextlib import AbstractContextManager
+ from contextlib import redirect_stdout
+ from gettext import gettext as _
+ 
++from . import _compat
+ from ._compat import isatty
+ from ._compat import strip_ansi
+ from .exceptions import Abort
+@@ -83,7 +84,12 @@ def hidden_prompt_func(prompt: str) -> str:
+ def _readline_prompt(func: t.Callable[[str], str], text: str, err: bool) -> str:
+     """Call a prompt function, passing the full prompt on non-Windows so
+     readline can handle line editing and cursor positioning correctly.
++    ANSI codes are stripped the same way :func:`echo` does.
+     """
++    if _compat.should_strip_ansi(
++        sys.stderr if err else sys.stdout, resolve_color_default()
++    ):
++        text = strip_ansi(text)
+     if err:
+         with redirect_stdout(sys.stderr):
+             return func(text)
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index ce974f0..9983030 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -1560,3 +1560,14 @@ def test_hide_input_value_never_leaks_when_err_true(runner):
+     result = runner.invoke(cli, input="leaky\n", mix_stderr=False)
+     assert "leaky" not in result.stdout
+     assert "leaky" not in result.stderr
++
++
++@pytest.mark.parametrize("color", [False, True])
++def test_prompt_and_confirm_strip_ansi(runner, color):
++    @click.command()
++    def cli():
++        click.prompt(click.style("Name", fg="red"))
++        click.confirm(click.style("Sure", fg="green"))
++
++    result = runner.invoke(cli, input="x\ny\n", color=color)
++    assert ("\x1b[" in result.output) is color
