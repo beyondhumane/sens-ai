@@ -552,8 +552,9 @@ acentos.
 **Termina cuando** `npm run typecheck`, `npm test`, las pruebas de los cuatro crates
 y las capturas están bien.
 
-**Estado el 2026-09-30.** Construida; falta que CI compile `sens-app`, que no
-compila en esta máquina (whisper necesita libclang).
+**Hecha el 2026-10-01.** CI compila `sens-app`, le pasa clippy y sus tests en
+verde (run 36828987173); en esta máquina sigue sin compilar porque whisper
+necesita libclang.
 - La lógica está en `sens-agent`, que sí se prueba aquí: `canon/tools.rs` (las
   seis herramientas del índice; `already_exists` usa la búsqueda calibrada y
   entiende los seis idiomas), `canon/log.rs` (registro y lo evitado) y en
