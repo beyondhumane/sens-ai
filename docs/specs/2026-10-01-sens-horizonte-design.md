@@ -1,6 +1,6 @@
 # Horizonte: un proyecto después de 30 tareas, con Sens y sin él
 
-Fecha: 2026-10-01 · Estado: aprobada; piloto hecho, la medida principal no distinguió nada (ver *Piloto*).
+Fecha: 2026-10-01 · Estado: aprobada; piloto hecho; confirmación fijada, pendiente de medir (ver *Confirmación*).
 Ámbito: `rust/sens-bench`, `bench/sequences/` (nuevo).
 
 ## Por qué
@@ -214,6 +214,28 @@ las líneas de una misma tarea variaban mucho entre repeticiones. Si se quiere
 contar, el tamaño tiene que pasar a ser la medida principal declarada antes de
 medir otra vez, con secuencias nuevas: el piloto sirvió para elegirla y no puede
 confirmarla.
+
+## Confirmación, fijada antes de medir
+
+Escrita el 2026-10-01, después del piloto y antes de cualquier ejecución nueva.
+
+- **Pregunta:** con las mismas 30 tareas y el mismo modelo, ¿termina el proyecto
+  más pequeño con Sens que sin él?
+- **Medida principal:** líneas sin blancos de `src/` sin tests en la tarea 30.
+- **Criterio:** se afirma que C2 deja el proyecto más pequeño si **las tres
+  secuencias de C2 terminan por debajo de las tres de C0**. Sin diferencia real,
+  eso pasa por azar una vez de cada 20 (prueba exacta de permutación, p = 0,05 de
+  un lado). Se publica también la diferencia de medianas y su porcentaje.
+- **Condición:** C2 no acepta menos tareas que C0 ni rompe más tests anteriores,
+  sumando las tres secuencias.
+- **Secundarias, descriptivas:** tokens en total y su pendiente, funciones,
+  duplicación de jscpd, casi-copias de Sens, sondas por concepto y lo que hizo el
+  circuito, con cada parada revisada a mano.
+- **Secuencias nuevas:** tres por brazo (`--reps 3` en una carpeta nueva). El
+  piloto sirvió para elegir la medida y no cuenta.
+- **Lo que se mide es Sens tal como queda:** Canon v1.1 y el revisor corregido
+  tras el piloto (`1f60112`).
+- **Coste:** 180 ejecuciones, unas 3 horas por lo que tardó el piloto.
 
 ## Riesgos
 
