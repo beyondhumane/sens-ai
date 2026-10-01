@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 362" width="760" height="362" role="img" aria-label="El circuito de Sens alrededor de un turno de Claude Code">
+<rect width="760" height="362" fill="#fbfaf6"/>
+<rect x="24" y="40" width="156" height="118" rx="8" fill="#ffffff" stroke="#d1cfc8" stroke-width="1"/>
+<text x="36.0" y="64.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0c0d0d" text-anchor="start">Mensaje</text>
+<text x="36.0" y="82.0" font-family="'Geist Mono', SFMono-Regular, Consolas, monospace" font-size="11" font-weight="400" fill="#666d69" text-anchor="start">UserPromptSubmit</text>
+<text x="36.0" y="106.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Foto del proyecto</text>
+<text x="36.0" y="122.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">y lo que ya existe</text>
+<text x="36.0" y="138.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">relacionado</text>
+<path d="M184,99 L200,99" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<path d="M196,94 L202,99 L196,104" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<rect x="206" y="40" width="156" height="118" rx="8" fill="#ffffff" stroke="#d1cfc8" stroke-width="1"/>
+<text x="218.0" y="64.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0c0d0d" text-anchor="start">Escritura</text>
+<text x="218.0" y="82.0" font-family="'Geist Mono', SFMono-Regular, Consolas, monospace" font-size="11" font-weight="400" fill="#666d69" text-anchor="start">PreToolUse</text>
+<text x="218.0" y="106.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Juzga el fichero</text>
+<text x="218.0" y="122.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">resultante antes</text>
+<text x="218.0" y="138.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">de que exista</text>
+<path d="M366,99 L382,99" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<path d="M378,94 L384,99 L378,104" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<rect x="388" y="40" width="156" height="118" rx="8" fill="#ffffff" stroke="#d1cfc8" stroke-width="1"/>
+<text x="400.0" y="64.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0c0d0d" text-anchor="start">Otra herramienta</text>
+<text x="400.0" y="82.0" font-family="'Geist Mono', SFMono-Regular, Consolas, monospace" font-size="11" font-weight="400" fill="#666d69" text-anchor="start">PostToolUse</text>
+<text x="400.0" y="106.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Juzga lo que llegó</text>
+<text x="400.0" y="122.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">al disco por la</text>
+<text x="400.0" y="138.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">terminal o un MCP</text>
+<path d="M548,99 L564,99" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<path d="M560,94 L566,99 L560,104" stroke="#595f5c" stroke-width="1.5" fill="none"/>
+<rect x="570" y="40" width="156" height="118" rx="8" fill="#eff7e5" stroke="#d0e1b6" stroke-width="1"/>
+<text x="582.0" y="64.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#0c0d0d" text-anchor="start">Fin del turno</text>
+<text x="582.0" y="82.0" font-family="'Geist Mono', SFMono-Regular, Consolas, monospace" font-size="11" font-weight="400" fill="#666d69" text-anchor="start">Stop</text>
+<text x="582.0" y="106.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Audita el diff desde</text>
+<text x="582.0" y="122.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">lo último aprobado</text>
+<text x="582.0" y="138.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">y pasa el revisor</text>
+<path d="M648.0,158 L648.0,196 L506,196" stroke="#dddcd5" stroke-width="1" fill="none"/>
+<text x="206" y="200" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#666d69"><tspan font-weight="600" fill="#4e700d">Aprobado</tspan> · pasa la auditoría</text>
+<path d="M648.0,158 L648.0,222 L506,222" stroke="#dddcd5" stroke-width="1" fill="none"/>
+<text x="206" y="226" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#666d69"><tspan font-weight="450" fill="#595f5c">Otra ronda</tspan> · el modelo corrige; hasta 3</text>
+<path d="M648.0,158 L648.0,248 L506,248" stroke="#dddcd5" stroke-width="1" fill="none"/>
+<text x="206" y="252" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#666d69"><tspan font-weight="450" fill="#895b00">Retenido</tspan> · aceptar, deshacer o pedir arreglo</text>
+<rect x="24" y="290" width="702" height="56" rx="8" fill="none" stroke="#d1cfc8" stroke-dasharray="4 3"/>
+<text x="40.0" y="313.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Punto de control: un git propio en .sens/canon/checkpoints, sin tocar el .git del proyecto.</text>
+<text x="40.0" y="333.0" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="400" fill="#595f5c" text-anchor="start">Cada turno nace sin aprobar: solo lo aprueban una auditoría que pasa o la persona.</text>
+</svg>
