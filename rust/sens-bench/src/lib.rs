@@ -1,7 +1,9 @@
 pub mod drive;
 pub mod git;
 pub mod measure;
+pub mod project;
 pub mod report;
+pub mod sequence;
 pub mod shell;
 pub mod stats;
 pub mod task;

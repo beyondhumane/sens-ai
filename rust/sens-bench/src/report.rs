@@ -12,12 +12,26 @@ type Metric = (&'static str, fn(&Run) -> f64);
 
 const COMPARED: [Metric; 4] = [("Líneas netas de código", Run::net_code_lines), ("Líneas netas de tests", Run::net_test_lines), ("Duplicación añadida", Run::duplication), ("Tokens", Run::tokens)];
 
-pub fn read(dir: &Path) -> Result<Vec<Run>, String> {
-    let text = std::fs::read_to_string(dir.join(RUNS)).map_err(|error| format!("{}: {error}", dir.join(RUNS).display()))?;
+pub fn lines_of<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Vec<T>, String> {
+    let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     text.lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).map_err(|error| format!("{RUNS}: {error}")))
+        .map(|line| serde_json::from_str(line).map_err(|error| format!("{}: {error}", path.display())))
         .collect()
+}
+
+pub fn add_line<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    use std::io::Write as _;
+    if let Some(folder) = path.parent() {
+        std::fs::create_dir_all(folder).map_err(|error| error.to_string())?;
+    }
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|error| error.to_string())?;
+    let line = serde_json::to_string(value).map_err(|error| error.to_string())?;
+    writeln!(file, "{line}").map_err(|error| error.to_string())
+}
+
+pub fn read(dir: &Path) -> Result<Vec<Run>, String> {
+    lines_of(&dir.join(RUNS))
 }
 
 pub fn recorded(dir: &Path) -> Result<BTreeSet<String>, String> {
@@ -28,15 +42,7 @@ pub fn recorded(dir: &Path) -> Result<BTreeSet<String>, String> {
 }
 
 pub fn append(dir: &Path, run: &Run) -> Result<(), String> {
-    use std::io::Write as _;
-    std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join(RUNS))
-        .map_err(|error| error.to_string())?;
-    let line = serde_json::to_string(run).map_err(|error| error.to_string())?;
-    writeln!(file, "{line}").map_err(|error| error.to_string())
+    add_line(&dir.join(RUNS), run)
 }
 
 pub fn rewrite(dir: &Path, runs: &[Run]) -> Result<(), String> {

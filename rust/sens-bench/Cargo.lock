@@ -228,6 +228,7 @@ dependencies = [
 name = "sens-bench"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "sens-agent",
  "sens-canon",
  "sens-index",

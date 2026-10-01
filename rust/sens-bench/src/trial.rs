@@ -134,15 +134,19 @@ impl Plan<'_> {
     }
 
     fn settings(&self, work: &Path) -> Settings {
-        Settings {
-            model: self.model.clone(),
-            effort: self.effort.clone(),
-            mode: "bypassPermissions".into(),
-            canon: self.condition.canon(),
-            extra: vec![ISOLATED.into()],
-            env: path_first(&self.task.path_first, work),
-            ..Settings::default()
-        }
+        settings(&self.model, &self.effort, self.condition, path_first(&self.task.path_first, work))
+    }
+}
+
+pub fn settings(model: &str, effort: &str, condition: Condition, env: std::collections::BTreeMap<String, String>) -> Settings {
+    Settings {
+        model: model.into(),
+        effort: effort.into(),
+        mode: "bypassPermissions".into(),
+        canon: condition.canon(),
+        extra: vec![ISOLATED.into()],
+        env,
+        ..Settings::default()
     }
 }
 
@@ -216,7 +220,7 @@ fn attempt(engine: &Engine, plan: &Plan, work: &Path, run: &mut Run) -> Result<(
     judge(plan.task, work, &plan.diffs, &plan.name(), run)
 }
 
-fn checked(work: &Path, check: &str) -> shell::Outcome {
+pub fn checked(work: &Path, check: &str) -> shell::Outcome {
     let first = shell::run(work, check);
     if first.ok {
         return first;
@@ -297,12 +301,19 @@ fn prepare(task: &Task, work: &Path) -> Result<(), String> {
 }
 
 pub fn copy(from: &Path, to: &Path) -> Result<(), String> {
+    copy_without(from, to, &[])
+}
+
+pub fn copy_without(from: &Path, to: &Path, skipped: &[&str]) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|error| format!("{}: {error}", to.display()))?;
     for entry in std::fs::read_dir(from).map_err(|error| format!("{}: {error}", from.display()))? {
         let entry = entry.map_err(|error| error.to_string())?;
+        if skipped.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
         let target = to.join(entry.file_name());
         if entry.file_type().map_err(|error| error.to_string())?.is_dir() {
-            copy(&entry.path(), &target)?;
+            copy_without(&entry.path(), &target, skipped)?;
         } else {
             std::fs::copy(entry.path(), &target).map_err(|error| format!("{}: {error}", target.display()))?;
         }

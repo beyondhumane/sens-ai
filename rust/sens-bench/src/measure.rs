@@ -156,6 +156,10 @@ fn clones(dir: &Path, jscpd: &Path) -> Result<Value, String> {
     serde_json::from_str(&std::fs::read_to_string(&report).map_err(|error| format!("jscpd: {error}"))?).map_err(|error| format!("jscpd: {error}"))
 }
 
+pub fn duplicated_lines(dir: &Path, jscpd: &Path) -> Result<u64, String> {
+    Ok(clones(dir, jscpd)?["statistics"]["total"]["duplicatedLines"].as_u64().unwrap_or(0))
+}
+
 fn inside(dir: &Path, name: &str) -> String {
     let flat = |text: &str| text.replace('\\', "/");
     let (name, dir) = (flat(name), flat(&dir.to_string_lossy()));
