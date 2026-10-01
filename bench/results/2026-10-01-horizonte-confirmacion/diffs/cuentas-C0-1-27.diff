@@ -1,0 +1,88 @@
+diff --git a/README.md b/README.md
+index 6d16061..fa1b3df 100644
+--- a/README.md
++++ b/README.md
+@@ -31,6 +31,7 @@ fecha,importe,categoria,descripcion
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo con las veces que sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); si no hay ninguno, `Sin duplicados` |
+ | `avisos <fichero> <presupuestos> --mes 2026-03` | Una línea por cada categoría que ese mes se pasa de su presupuesto, de la que más se pasa a la que menos, con el nombre como está en los gastos (`Ocio: te pasas 5,00 €`); gastar justo el presupuesto no es pasarse. El emparejamiento no distingue mayúsculas ni acentos y las categorías sin presupuesto no cuentan. Si ninguna se pasa, `Todo en orden`. `--mes` y el fichero de presupuestos son obligatorios |
+ | `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría por la nueva en todos los gastos, buscándola sin distinguir mayúsculas ni acentos, y guarda el fichero. Responde `Renombrados 3 gastos` (con 0 coincidencias no toca el fichero). La categoría nueva no puede llevar comas ni saltos de línea |
++| `comparar <fichero> 2026-02 2026-03` | Por cada categoría con gasto en alguno de los dos meses, por orden alfabético: lo de cada mes y la diferencia con signo, `+` si sube o se queda igual y `-` si baja (`Ocio: 90,00 € → 60,00 € (-30,00 €)`). Un mes que no es válido da `Mes no válido: 2026-13`; sin gastos en ninguno, `Sin gastos` |
+ | `resumen <fichero>` | Cuatro líneas: `Gastos: 12`, `Desde 03/01/2026 hasta 28/02/2026` (primer y último día con gasto), `Total: 412,30 €` y `Mayor: 120,00 € en Seguro del coche (15/01/2026)` (si hay varios iguales, el primero del fichero). Sin gastos, `Sin gastos` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index 9c58f7a..ffce0ac 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -327,6 +327,29 @@ const commands: Record<string, Command> = {
+       `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
+     ].join("\n");
+   },
++  comparar: ([path, first, second], io) => {
++    const expenses = load(path, io);
++    if (first === undefined || second === undefined) throw new Error("Faltan los meses");
++    for (const month of [first, second]) {
++      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++    }
++    const totals = new Map<string, [number, number]>();
++    for (const expense of expenses) {
++      const slot = expense.date.startsWith(`${first}-`) ? 0 : expense.date.startsWith(`${second}-`) ? 1 : -1;
++      if (slot === -1) continue;
++      const pair = totals.get(expense.category) ?? [0, 0];
++      pair[slot] += expense.cents;
++      totals.set(expense.category, pair);
++    }
++    if (totals.size === 0) return "Sin gastos";
++    return [...totals]
++      .sort(([a], [b]) => a.localeCompare(b, "es"))
++      .map(([category, [before, after]]) => {
++        const diff = after - before;
++        return `${category}: ${formatMoney(before)} → ${formatMoney(after)} (${diff < 0 ? "-" : "+"}${formatMoney(Math.abs(diff))})`;
++      })
++      .join("\n");
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/comparar.test.ts b/tests/comparar.test.ts
+new file mode 100644
+index 0000000..5718324
+--- /dev/null
++++ b/tests/comparar.test.ts
+@@ -0,0 +1,36 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const norm = (text: string) => text.replace(/ /g, " ");
++const csv = (rows: string[]) => [HEADER, ...rows].join("\n");
++
++it("compares each category between two months with a signed difference, alphabetically", () => {
++  const io = memoryIo({
++    "g.csv": csv([
++      "2026-02-03,40.00,Comida,a",
++      "2026-03-04,44.65,Comida,b",
++      "2026-02-05,50.00,Ocio,c",
++      "2026-02-06,40.00,Ocio,d",
++      "2026-03-07,60.00,Ocio,e",
++      "2026-04-01,999.00,Casa,otro mes",
++    ]),
++  });
++  const ran = run(["comparar", "g.csv", "2026-02", "2026-03"], io);
++  expect(ran.code).toBe(0);
++  expect(norm(ran.output)).toBe("Comida: 40,00 € → 44,65 € (+4,65 €)\nOcio: 90,00 € → 60,00 € (-30,00 €)");
++});
++
++it("includes categories with spending in only one month and a plus sign when equal", () => {
++  const io = memoryIo({ "g.csv": csv(["2026-02-03,10.00,Zoo,a", "2026-03-03,5.00,Arte,b", "2026-02-04,7.00,Pan,c", "2026-03-04,7.00,Pan,d"]) });
++  expect(norm(run(["comparar", "g.csv", "2026-02", "2026-03"], io).output)).toBe(
++    "Arte: 0,00 € → 5,00 € (+5,00 €)\nPan: 7,00 € → 7,00 € (+0,00 €)\nZoo: 10,00 € → 0,00 € (-10,00 €)",
++  );
++});
++
++it("validates the months", () => {
++  const io = memoryIo({ "g.csv": csv([]) });
++  expect(run(["comparar", "g.csv", "2026-02"], io)).toEqual({ code: 1, output: "Faltan los meses" });
++  expect(run(["comparar", "g.csv", "2026-02", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});

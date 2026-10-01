@@ -1,0 +1,56 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index cc22382..40b9df0 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -30,6 +30,21 @@ const commands: Record<string, Command> = {
+     const found = load(args[0], io).filter((expense) => plain(expense.description).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
++  añadir: ([path, date = "", amount = "", category, ...words], io) => {
++    if (!path) throw new Error("Falta el fichero de gastos");
++    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
++    if (!validDate) throw new Error(`Fecha no válida: ${date}`);
++    const cents = Math.round(Number(amount) * 100);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const description = words.join(" ");
++    if (!category) throw new Error("Falta la categoría");
++    if (!description) throw new Error("Falta la descripción");
++    if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
++    const text = io.read(path);
++    const expense: Expense = { date, cents, category, description };
++    io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${date},${(cents / 100).toFixed(2)},${category},${description}\n`);
++    return `Añadido: ${formatLine(expense)}`;
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--mes");
+     const month = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f927a07..c9f1c1a 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -26,6 +26,25 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("appends an expense, validating date and amount first", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Añadido: 19/03/2026  Comida  4,20 €  Churros con chocolate");
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros con chocolate\n`);
++
++    const before = io.files["gastos.csv"];
++    const add = (date: string, amount: string) => run(["añadir", "gastos.csv", date, amount, "Comida", "X"], io);
++    expect(add("2026-02-30", "4")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++    expect(add("19/03/2026", "4")).toEqual({ code: 1, output: "Fecha no válida: 19/03/2026" });
++    expect(add("2026-03-19", "-3")).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(add("2026-03-19", "0")).toEqual({ code: 1, output: "Importe no válido: 0" });
++    expect(add("2026-03-19", "1.005")).toEqual({ code: 1, output: "Importe no válido: 1.005" });
++    expect(add("2026-03-19", "abc")).toEqual({ code: 1, output: "Importe no válido: abc" });
++    expect(run(["añadir", "gastos.csv", "2026-03-19", "4", "Comida"], io)).toEqual({ code: 1, output: "Falta la descripción" });
++    expect(io.files["gastos.csv"]).toBe(before);
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

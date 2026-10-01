@@ -1,0 +1,48 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index ec8d94d..5d72265 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -255,6 +255,20 @@ const commands: Record<string, Command> = {
+           .map(({ category, excess }) => `${category}: te pasas ${formatMoney(excess)}`)
+           .join("\n");
+   },
++  renombrar: (args, io) => {
++    const [path, category, renamed] = args;
++    if (!path || !category || !renamed) throw new Error("Uso: renombrar <fichero> <categoría> <nueva>");
++    if (/[,\r\n]/.test(renamed)) throw new Error("Categoría no válida");
++    const expenses = load(path, io);
++    let count = 0;
++    const updated = expenses.map((expense) => {
++      if (plain(expense.category) !== plain(category)) return expense;
++      count++;
++      return { ...expense, category: renamed };
++    });
++    io.write(path, `${[HEADER, ...updated.map(csvRow)].join("\n")}\n`);
++    return `Renombrados ${count} gastos`;
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 0748600..1541f12 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -234,6 +234,18 @@ describe("cuentas", () => {
+     });
+   });
+ 
++  it("renames a category ignoring case and accents", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,transporte,Billete\n2026-03-04,2.00,Ocio,Cine\n`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(run(["renombrar", "gastos.csv", "TRANSPÓRTE", "Viajes"], io)).toEqual({
++      code: 0,
++      output: "Renombrados 2 gastos",
++    });
++    expect(io.files["gastos.csv"]).toBe(
++      "fecha,importe,categoria,descripcion\n2026-03-01,12.50,Comida,Pan y fruta\n2026-03-02,45.20,Viajes,Gasolina\n2026-03-03,3.00,Viajes,Billete\n2026-03-04,2.00,Ocio,Cine\n",
++    );
++  });
++
+   it("searches by category too", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,Transporte,Billete\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

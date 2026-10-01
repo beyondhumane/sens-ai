@@ -1,0 +1,56 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 94c4023..ec8d94d 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -238,6 +238,23 @@ const commands: Record<string, Command> = {
+           })
+           .join("\n");
+   },
++  avisos: (args, io) => {
++    const month = monthFlag(args);
++    if (month === undefined) throw new Error("Falta --mes");
++    const path = args[1];
++    if (!path || path.startsWith("--")) throw new Error("Falta el fichero de presupuestos");
++    const budgets = parseBudgets(io.read(path));
++    const over = categoryTotals(inMonth(load(args[0], io), month)).flatMap(([category, cents]) => {
++      const budget = budgets.find((candidate) => plain(candidate.category) === plain(category));
++      return budget && cents > budget.cents ? [{ category, excess: cents - budget.cents }] : [];
++    });
++    return over.length === 0
++      ? "Todo en orden"
++      : over
++          .sort((a, b) => b.excess - a.excess)
++          .map(({ category, excess }) => `${category}: te pasas ${formatMoney(excess)}`)
++          .join("\n");
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 82bb8b3..0748600 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -173,6 +173,23 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos"], io).code).toBe(1);
+   });
+ 
++  it("warns about categories over budget, biggest excess first", () => {
++    const io = memoryIo({
++      "gastos.csv": `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,60.00,Ocio,Cine
++2026-03-03,132.15,Comida,Cena
++2026-03-04,5.00,Varios,Cosas
++2026-04-04,500.00,Varios,Abril
++`,
++      "presupuestos.csv": "categoria,importe\ncómida,100.00\nOCIO,55.00\nVarios,10.00\n",
++    });
++    const avisos = (month: string) => shown(run(["avisos", "gastos.csv", "presupuestos.csv", "--mes", month], io).output);
++    expect(avisos("2026-03")).toBe("Comida: te pasas 44,65 €\nOcio: te pasas 5,00 €");
++    expect(avisos("2026-02")).toBe("Todo en orden");
++    expect(run(["avisos", "gastos.csv", "presupuestos.csv"], io).code).toBe(1);
++  });
++
+   it("shows the daily average of a month counting every day", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     expect(shown(run(["media", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Media diaria en marzo de 2026: 1,86 €");

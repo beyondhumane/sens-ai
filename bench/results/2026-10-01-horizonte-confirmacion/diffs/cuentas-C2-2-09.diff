@@ -1,0 +1,63 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index d7070c0..171a522 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { csvField, parseExpenses } from "./csv";
++import { HEADER, csvRow, parseExpenses } from "./csv";
+ import { formatDate, formatMonth, isRealDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -94,10 +94,17 @@ const commands: Record<string, Command> = {
+     if (/[,\r\n]/.test(category) || /[\r\n]/.test(description)) throw new Error("Categoría o descripción no válidas");
+     const text = io.read(path);
+     parseExpenses(text);
+-    const row = `${date},${(cents / 100).toFixed(2)},${category},${csvField(description)}\n`;
++    const row = `${csvRow({ date, cents, category, description })}\n`;
+     io.write(path, text.endsWith("\n") ? text + row : `${text}\n${row}`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
++  exportar: (args, io) => {
++    const [path, out] = args;
++    if (!out) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM]");
++    const expenses = inMonth(load(path, io), monthFlag(args));
++    io.write(out, `${[HEADER, ...expenses.map(csvRow)].join("\n")}\n`);
++    return `Exportados ${expenses.length} gastos a ${out}`;
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/src/csv.ts b/src/csv.ts
+index dbad4cb..9a1d8dc 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -36,3 +36,6 @@ export function parseExpenses(text: string): Expense[] {
+       return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
+     });
+ }
++
++export const csvRow = (expense: Expense) =>
++  `${expense.date},${(expense.cents / 100).toFixed(2)},${csvField(expense.category)},${csvField(expense.description)}`;
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 4eaaca5..ffa739a 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -118,6 +118,18 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
+   });
+ 
++  it("exports only the requested month with the same format", () => {
++    const gastos = `${GASTOS}2026-04-01,3.00,Ocio,"Cine, con amigos"\n`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(run(["exportar", "gastos.csv", "marzo.csv", "--mes", "2026-03"], io)).toEqual({
++      code: 0,
++      output: "Exportados 2 gastos a marzo.csv",
++    });
++    expect(io.files["marzo.csv"]).toBe(GASTOS);
++    expect(run(["exportar", "gastos.csv", "todo.csv"], io).output).toBe("Exportados 3 gastos a todo.csv");
++    expect(io.files["todo.csv"]).toBe(gastos);
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

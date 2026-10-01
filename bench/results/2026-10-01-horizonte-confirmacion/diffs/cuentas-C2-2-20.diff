@@ -1,0 +1,52 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 1f4c09c..94c4023 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -222,6 +222,22 @@ const commands: Record<string, Command> = {
+     io.write(out, `${[HEADER, ...expenses.map(csvRow)].join("\n")}\n`);
+     return `Exportados ${expenses.length} gastos a ${out}`;
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, Expense[]>();
++    for (const expense of load(args[0], io)) {
++      const key = [expense.date, expense.cents, plain(expense.description).trim().replace(/\s+/g, " ")].join("|");
++      groups.set(key, [...(groups.get(key) ?? []), expense]);
++    }
++    const repeated = [...groups.values()].filter((group) => group.length > 1);
++    return repeated.length === 0
++      ? "Sin duplicados"
++      : repeated
++          .map(([first, ...rest]) => {
++            const text = [formatDate(first.date), formatMoney(first.cents), first.description].join("  ");
++            return `${rest.length + 1} veces: ${text}`;
++          })
++          .join("\n");
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index e573d00..82bb8b3 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -203,6 +203,20 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
+   });
+ 
++  it("reports repeated expenses ignoring case, accents and extra spaces", () => {
++    const gastos = `${GASTOS}2026-03-09,8.75,Comida,Café con Ana
++2026-03-09,8.75,Ocio,  CAFE  con   ana
++2026-03-09,8.75,Comida,cafe con ana
++2026-03-10,8.75,Comida,Café con Ana
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["duplicados", "gastos.csv"], io).output)).toBe("3 veces: 09/03/2026  8,75 €  Café con Ana");
++    expect(run(["duplicados", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS }))).toEqual({
++      code: 0,
++      output: "Sin duplicados",
++    });
++  });
++
+   it("searches by category too", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,Transporte,Billete\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

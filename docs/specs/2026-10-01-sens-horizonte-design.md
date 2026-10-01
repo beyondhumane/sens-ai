@@ -1,6 +1,6 @@
 # Horizonte: un proyecto después de 30 tareas, con Sens y sin él
 
-Fecha: 2026-10-01 · Estado: aprobada; piloto hecho; confirmación fijada, pendiente de medir (ver *Confirmación*).
+Fecha: 2026-10-01 · Estado: hecha; la confirmación cumple su criterio (ver *Resultado de la confirmación*).
 Ámbito: `rust/sens-bench`, `bench/sequences/` (nuevo).
 
 ## Por qué
@@ -236,6 +236,61 @@ Escrita el 2026-10-01, después del piloto y antes de cualquier ejecución nueva
 - **Lo que se mide es Sens tal como queda:** Canon v1.1 y el revisor corregido
   tras el piloto (`1f60112`).
 - **Coste:** 180 ejecuciones, unas 3 horas por lo que tardó el piloto.
+
+## Resultado de la confirmación (2026-10-01)
+
+Tres secuencias nuevas por brazo, 180 pasos, Sonnet 5.5 medio. Resultados en
+`bench/results/2026-10-01-horizonte-confirmacion/`.
+
+| En la tarea 30 | C0 | C2 |
+| --- | --- | --- |
+| Líneas de código, por secuencia | 484 · 496 · 564 | **424 · 436 · 456** |
+| Mediana | 496 | 436 (−60, −12 %; intervalo [−140, −28]) |
+| Tareas aceptadas | 90/90 | 90/90 |
+| Tests ocultos anteriores rotos | 0 | 0 |
+| Tokens en total | 33,7 M | 27,7 M (−18 %) |
+| Funciones (mediana) | 20 | 28 |
+| Líneas duplicadas, jscpd (por secuencia) | 0 · 6 · 6 | 0 · 0 · 0 |
+| Funciones con casi-copia, Sens (por secuencia) | 0 · 0 · 0 | 0 · 2 · 3 |
+
+- **Criterio cumplido:** las tres secuencias de C2 terminan por debajo de las tres
+  de C0 (p = 0,05, prueba exacta de un lado). **Condición cumplida:** ninguna
+  tarea perdida ni ningún test roto en los dos brazos.
+- **Con Sens el proyecto termina un 12 % más pequeño para las mismas 30
+  funcionalidades**, y gasta un 18 % menos de tokens. El piloto, con una sola
+  secuencia, daba un 20 %: la cifra que vale es la de la confirmación.
+- **No es por copiar menos:** ninguno de los dos brazos copia bloques en serio
+  (jscpd ve 6 líneas en dos secuencias de C0) y las sondas encuentran cada
+  concepto en un solo sitio en ambos. C2 escribe más funciones y más cortas, y
+  C0 menos y más largas. Las casi-copias que ve Sens en C2 son funciones pequeñas
+  y parecidas que el modelo mantuvo después de un «piénsalo» (por ejemplo,
+  `formatWeekday` junto a `formatMonth`).
+- **La pendiente del coste no se distingue** entre brazos.
+
+### Revisión de cada parada de C2
+
+| Secuencia y tarea | Regla | Qué pasó | Juicio |
+| --- | --- | --- | --- |
+| #2, tarea 11 | R2, bloqueo | `parseBudgets` copia de `parseExpenses` al 83 % | Justo |
+| #2, tarea 1 | S3, bloqueo del revisor | `formatDate` a mano cuando `Intl.DateTimeFormat` lo da; el modelo lo cambió por una línea igual de corta | Coherente con el Canon, de poco valor |
+| #1, tarea 2 | R8, bloqueo | «Quitar el test `shown`»: `shown` es una función auxiliar del fichero de tests que no comprueba nada | **Injusto** |
+| #1 tarea 11, #2 tareas 13 y 18 | R1/R2, «piénsalo» | Lectores de CSV y de nombres de fecha muy parecidos | Justos de preguntar |
+| #3, tarea 11 | S1, nota | «`parseBudgets` es una abstracción con un solo uso» | Equivocada, pese a la instrucción nueva |
+| #3, tarea 15 | S5, nota | Un ternario anidado para validar | Aceptable |
+| #1, tareas 19 y 25 | R1/R2, notas en tests | Tests parecidos entre sí | Aceptables |
+
+**Bloqueos injustos: 1 de 3.** La causa: en un fichero de tests, R8 tomaba por
+test cualquier función, también las auxiliares. Ahora solo cuenta como test lo
+que comprueba algo (`expect`, `assert`…); el caso queda en una prueba. Y el
+revisor todavía devuelve alguna nota S1 equivocada: sus notas no paran nada,
+pero conviene seguir afinándolo.
+
+### Lo que no dice
+
+Un proyecto, un lenguaje (TypeScript), un modelo y tres secuencias por brazo. Las
+tareas las escribimos nosotros; para que eso no inclinara el resultado se
+guardaron, con sus tests y referencias, antes de la primera ejecución, y el
+criterio se fijó antes de medir la confirmación.
 
 ## Riesgos
 

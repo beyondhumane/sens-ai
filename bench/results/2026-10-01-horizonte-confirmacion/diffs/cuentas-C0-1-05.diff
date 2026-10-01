@@ -1,0 +1,95 @@
+diff --git a/README.md b/README.md
+index b75b0b6..05ae61d 100644
+--- a/README.md
++++ b/README.md
+@@ -19,6 +19,7 @@ fecha,importe,categoria,descripcion
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
++| `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero, con punto y dos decimales como mucho. Si algo no vale, no toca el fichero |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 8e2612b..66fa3b6 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -20,7 +20,32 @@ const line = (expense: Expense) =>
+ 
+ const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+ 
++function isRealDate(text: string): boolean {
++  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
++  if (!match) return false;
++  const [year, month, day] = match.slice(1).map(Number);
++  const date = new Date(Date.UTC(year, month - 1, day));
++  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
++}
++
+ const commands: Record<string, Command> = {
++  añadir: (args, io) => {
++    const [path, date = "", amount = "", category = "", ...words] = args;
++    if (!path) throw new Error("Falta el fichero de gastos");
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const description = words.join(" ").trim();
++    if (!category.trim()) throw new Error("Falta la categoría");
++    if (/[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
++    if (!description) throw new Error("Falta la descripción");
++    if (/[\r\n]/.test(description)) throw new Error("Descripción no válida");
++    const text = io.read(path);
++    parseExpenses(text);
++    const cents = Math.round(Number(amount) * 100);
++    const row = [date, (cents / 100).toFixed(2), category, description].join(",");
++    io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
++    return `Añadido: ${line({ date, cents, category, description })}`;
++  },
+   lista: (args, io) => load(args[0], io).map(line).join("\n"),
+   buscar: (args, io) => {
+     const needle = fold(args.slice(1).join(" "));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index fe4a1da..f35148a 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -56,4 +56,41 @@ describe("cuentas", () => {
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });
+     expect(run(["lista", "otro.csv"], memoryIo({}))).toEqual({ code: 1, output: "No existe otro.csv" });
+   });
++
++  it("appends an expense at the end of the file", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    const ran = run(["añadir", "g.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Añadido: 19/03/2026  Comida  4,20 €  Churros con chocolate");
++    expect(io.files["g.csv"]).toBe(GASTOS + "2026-03-19,4.20,Comida,Churros con chocolate\n");
++    expect(shown(run(["total", "g.csv"], io).output)).toBe("Total: 61,90 €");
++  });
++
++  it("adds a missing final newline before appending", () => {
++    const io = memoryIo({ "g.csv": GASTOS.trimEnd() });
++    run(["añadir", "g.csv", "2026-03-19", "4.20", "Comida", "Churros"], io);
++    expect(io.files["g.csv"]).toBe(GASTOS + "2026-03-19,4.20,Comida,Churros\n");
++  });
++
++  it("refuses bad input and leaves the file alone", () => {
++    const bad = (args: string[]) => {
++      const io = memoryIo({ "g.csv": GASTOS });
++      const ran = run(["añadir", "g.csv", ...args], io);
++      expect(io.files["g.csv"]).toBe(GASTOS);
++      return ran;
++    };
++    expect(bad(["2026-02-30", "4", "Comida", "x"])).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++    expect(bad(["19/03/2026", "4", "Comida", "x"]).output).toBe("Fecha no válida: 19/03/2026");
++    expect(bad(["2026-03-19", "-3", "Comida", "x"])).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(bad(["2026-03-19", "0", "Comida", "x"]).output).toBe("Importe no válido: 0");
++    expect(bad(["2026-03-19", "1.234", "Comida", "x"]).output).toBe("Importe no válido: 1.234");
++    expect(bad(["2026-03-19", "4,20", "Comida", "x"]).output).toBe("Importe no válido: 4,20");
++    expect(bad(["2026-03-19", "4"]).output).toBe("Falta la categoría");
++    expect(bad(["2026-03-19", "4", "Comida"]).output).toBe("Falta la descripción");
++    expect(bad(["2026-03-19", "4", "Co,mida", "x"]).output).toBe("Categoría no válida: Co,mida");
++    expect(run(["añadir", "nuevo.csv", "2026-03-19", "4", "Comida", "x"], memoryIo({}))).toEqual({
++      code: 1,
++      output: "No existe nuevo.csv",
++    });
++  });
+ });

@@ -1,0 +1,64 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index e33f40a..c249d7f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseExpenses } from "./csv";
++import { parseExpenses, quoteIfNeeded } from "./csv";
+ import { formatDate, formatMonth, isValidDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -96,7 +96,7 @@ const commands: Record<string, Command> = {
+     const expense: Expense = { date, cents, category, description };
+     load(path, io);
+     const text = io.read(path as string);
+-    const row = [date, (cents / 100).toFixed(2), category, description].join(",");
++    const row = [date, (cents / 100).toFixed(2), category, quoteIfNeeded(description)].join(",");
+     io.write(path as string, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${formatLine(expense)}`;
+   },
+diff --git a/src/csv.ts b/src/csv.ts
+index f21bd0a..6235a9f 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -9,6 +9,14 @@ export function parseExpenses(text: string): Expense[] {
+     .filter((row) => row.trim() !== "")
+     .map((row) => {
+       const [date, amount, category, ...rest] = row.split(",");
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
++      return { date, cents: Math.round(Number(amount) * 100), category, description: unquote(rest.join(",")) };
+     });
+ }
++
++function unquote(field: string): string {
++  return field.length >= 2 && field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replaceAll('""', '"') : field;
++}
++
++export function quoteIfNeeded(field: string): string {
++  return /[,"]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field;
++}
+diff --git a/tests/anadir.test.ts b/tests/anadir.test.ts
+index ab7a7db..966229c 100644
+--- a/tests/anadir.test.ts
++++ b/tests/anadir.test.ts
+@@ -18,6 +18,20 @@ it("adds the missing line break when the file does not end with one", () => {
+   expect(io.files["g.csv"]).toBe(`${csv}\n2026-03-19,4.20,Comida,Churros\n`);
+ });
+ 
++it("quotes descriptions with commas or quotes, and reads them back", () => {
++  const io = memoryIo({ "g.csv": `${csv}\n` });
++  run(["añadir", "g.csv", "2026-03-19", "18", "Ocio", "Cena,", "con", 'amigos', 'y "hola"'], io);
++  expect(io.files["g.csv"]).toBe(`${csv}\n2026-03-19,18.00,Ocio,"Cena, con amigos y ""hola"""\n`);
++  expect(run(["lista", "g.csv"], io).output).toContain('Cena, con amigos y "hola"');
++});
++
++it("reads quoted descriptions written by other apps in every command", () => {
++  const io = memoryIo({ "g.csv": `${csv}\n2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,2.00,Ocio,"Dijo ""hola"""\n` });
++  expect(run(["buscar", "g.csv", "con amigos"], io).output).toContain("Cena, con amigos");
++  expect(run(["buscar", "g.csv", "hola"], io).output).toContain('Dijo "hola"');
++  expect(run(["total", "g.csv"], io).code).toBe(0);
++});
++
+ it.each([
+   [["2026-02-30", "4.20"], "Fecha no válida: 2026-02-30"],
+   [["19/03/2026", "4.20"], "Fecha no válida: 19/03/2026"],

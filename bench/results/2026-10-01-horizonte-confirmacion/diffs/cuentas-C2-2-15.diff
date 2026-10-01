@@ -1,0 +1,39 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 12f4900..5cbbee4 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -34,8 +34,11 @@ function monthFlag(args: string[]): string | undefined {
+ }
+ 
+ function parseCents(amount: string): number {
+-  const cents = Math.round(Number(amount) * 100);
+-  if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++  const comma = amount.includes(",");
++  const valid = comma ? /^(\d+|\d{1,3}(\.\d{3})+),\d{1,2}$/.test(amount) : /^\d+(\.\d{1,2})?$/.test(amount);
++  const normalized = comma ? amount.replace(/\./g, "").replace(",", ".") : amount;
++  const cents = valid ? Math.round(Number(normalized) * 100) : 0;
++  if (cents <= 0) throw new Error(`Importe no válido: ${amount}`);
+   return cents;
+ }
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6a36797..894cd47 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -36,6 +36,16 @@ describe("cuentas", () => {
+     expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros con chocolate\n`);
+   });
+ 
++  it("accepts comma decimals, with dots as thousands separators", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS, "p.csv": "categoria,importe\n" });
++    run(["añadir", "gastos.csv", "2026-03-19", "4,20", "Comida", "A"], io);
++    run(["añadir", "gastos.csv", "2026-03-19", "1.234,56", "Comida", "B"], io);
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,A\n2026-03-19,1234.56,Comida,B\n`);
++    run(["presupuesto", "p.csv", "Comida", "1.000,5"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,1000.50\n");
++    expect(run(["añadir", "gastos.csv", "2026-03-19", "1.23,4", "Comida", "X"], io).output).toBe("Importe no válido: 1.23,4");
++  });
++
+   it("reads quoted descriptions with commas and doubled quotes", () => {
+     const gastos = `${GASTOS}2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,3.00,Ocio,"Dijo ""hola"""\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

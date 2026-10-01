@@ -1,0 +1,133 @@
+diff --git a/README.md b/README.md
+index 1df9abd..c3abd37 100644
+--- a/README.md
++++ b/README.md
+@@ -17,6 +17,7 @@ fecha,importe,categoria,descripcion
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+ | `total <fichero>` | `Total: 57,70 €` |
++| `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría (`  Ocio: 60,00 €`, de más a menos) y `Total: …` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index ce32ba3..0316957 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { parseExpenses } from "./csv";
+-import { formatDate } from "./date";
++import { formatDate, formatMonth } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -25,6 +25,27 @@ const plain = (text: string) =>
+     .replace(/\p{M}/gu, "")
+     .toLowerCase();
+ 
++function monthFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--mes");
++  if (flag === -1) return undefined;
++  const month = args[flag + 1];
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
++  return month;
++}
++
++const inMonth = (expenses: Expense[], month: string | undefined) =>
++  expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++
++const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
++
++function categoryTotals(expenses: Expense[]): [string, number][] {
++  const totals = new Map<string, number>();
++  for (const expense of expenses) {
++    totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
++  }
++  return [...totals].sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"));
++}
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) => load(args[0], io).map(line).join("\n"),
+   buscar: (args, io) => {
+@@ -33,11 +54,18 @@ const commands: Record<string, Command> = {
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+   },
+   total: (args, io) => {
+-    const flag = args.indexOf("--mes");
+-    const month = flag === -1 ? undefined : args[flag + 1];
+-    if (flag !== -1 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
+-    const expenses = load(args[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+-    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++    const month = monthFlag(args);
++    return `Total: ${formatMoney(sumCents(inMonth(load(args[0], io), month)))}`;
++  },
++  informe: (args, io) => {
++    const month = monthFlag(args);
++    if (month === undefined) throw new Error("Falta --mes");
++    const expenses = inMonth(load(args[0], io), month);
++    return [
++      formatMonth(month),
++      ...categoryTotals(expenses).map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`),
++      `Total: ${formatMoney(sumCents(expenses))}`,
++    ].join("\n");
+   },
+   añadir: (args, io) => {
+     const [path, date, amount, category, ...words] = args;
+@@ -59,12 +87,7 @@ const commands: Record<string, Command> = {
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
+   categorias: (args, io) => {
+-    const totals = new Map<string, number>();
+-    for (const expense of load(args[0], io)) {
+-      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
+-    }
+-    return [...totals]
+-      .sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"))
++    return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n");
+   },
+diff --git a/src/date.ts b/src/date.ts
+index b2a0568..7b727e9 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -1,5 +1,12 @@
+ const dates = new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+ 
++const months = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
++
++export function formatMonth(month: string): string {
++  const text = months.format(new Date(`${month}-01`));
++  return text.charAt(0).toUpperCase() + text.slice(1);
++}
++
+ export function formatDate(iso: string): string {
+   return dates.format(new Date(iso));
+ }
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 8498864..f621cb2 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -63,6 +63,22 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nAgua: 10,00 €\nZapatos: 10,00 €");
+   });
+ 
++  it("reports one month by category, biggest first, with the total", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,60.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++2026-04-01,99.00,Ocio,Concierto
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-03"], io).output)).toBe(
++      "Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 €\nTotal: 104,65 €",
++    );
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-05"], io).output)).toBe("Mayo de 2026\nTotal: 0,00 €");
++    expect(run(["informe", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta --mes" });
++    expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("searches descriptions ignoring case and accents", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
+ `;

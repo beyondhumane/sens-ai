@@ -1,0 +1,125 @@
+diff --git a/README.md b/README.md
+index b473aad..10436d5 100644
+--- a/README.md
++++ b/README.md
+@@ -19,6 +19,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
++| `informe <fichero> --mes AAAA-MM` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`; la fecha es `2026-03-19` y debe existir, el importe lleva punto decimal, es mayor que cero y tiene dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index 7205096..911c537 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -36,6 +36,34 @@ function isRealDate(text: string): boolean {
+   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+ }
+ 
++function takeMonth(args: string[]): { month: string | undefined; rest: string[] } {
++  const flag = args.indexOf("--mes");
++  if (flag === -1) return { month: undefined, rest: args };
++  const month = args[flag + 1] ?? "";
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++  return { month, rest: [...args.slice(0, flag), ...args.slice(flag + 2)] };
++}
++
++function inMonth(expenses: Expense[], month: string | undefined): Expense[] {
++  return expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++}
++
++function sumByCategory(expenses: Expense[]): [string, number][] {
++  const byCategory = new Map<string, number>();
++  for (const expense of expenses) {
++    byCategory.set(expense.category, (byCategory.get(expense.category) ?? 0) + expense.cents);
++  }
++  return [...byCategory].sort(
++    ([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"),
++  );
++}
++
++function sumCents(expenses: Expense[]): number {
++  return expenses.reduce((sum, expense) => sum + expense.cents, 0);
++}
++
++const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
++
+ const commands: Record<string, Command> = {
+   añadir: (args, io) => {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+@@ -59,27 +87,24 @@ const commands: Record<string, Command> = {
+     const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+-  categorias: (args, io) => {
+-    const byCategory = new Map<string, number>();
+-    for (const expense of load(args[0], io)) {
+-      byCategory.set(expense.category, (byCategory.get(expense.category) ?? 0) + expense.cents);
+-    }
+-    return [...byCategory]
+-      .sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"))
++  categorias: (args, io) =>
++    sumByCategory(load(args[0], io))
+       .map(([name, cents]) => `${name}: ${formatMoney(cents)}`)
+-      .join("\n");
+-  },
++      .join("\n"),
+   total: (args, io) => {
+-    const flag = args.indexOf("--mes");
+-    let month: string | undefined;
+-    let rest = args;
+-    if (flag !== -1) {
+-      month = args[flag + 1] ?? "";
+-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
+-      rest = [...args.slice(0, flag), ...args.slice(flag + 2)];
+-    }
+-    const expenses = load(rest[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+-    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++    const { month, rest } = takeMonth(args);
++    return `Total: ${formatMoney(sumCents(inMonth(load(rest[0], io), month)))}`;
++  },
++  informe: (args, io) => {
++    const { month, rest } = takeMonth(args);
++    if (month === undefined) throw new Error("Falta el mes (--mes AAAA-MM)");
++    const expenses = inMonth(load(rest[0], io), month);
++    const [year, number] = month.split("-");
++    return [
++      `${MONTHS[Number(number) - 1]} de ${year}`,
++      ...sumByCategory(expenses).map(([name, cents]) => `  ${name}: ${formatMoney(cents)}`),
++      `Total: ${formatMoney(sumCents(expenses))}`,
++    ].join("\n");
+   },
+ };
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 7642b99..ebba49a 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -64,6 +64,25 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nÁrboles: 10,00 €\nZapatos: 10,00 €");
+   });
+ 
++  it("reports one month by category, biggest first", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-02-28,99.00,Ocio,Teatro
++2026-03-01,12.50,Comida,Pan
++2026-03-02,50.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++2026-03-04,10.00,Ocio,Helado
++2026-04-01,5.00,Comida,Pan
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    const ran = run(["informe", "gastos.csv", "--mes", "2026-03"], io());
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 €\nTotal: 104,65 €");
++    expect(shown(run(["informe", "--mes", "2026-03", "gastos.csv"], io()).output)).toBe(shown(ran.output));
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-12"], io()).output)).toBe("Diciembre de 2026\nTotal: 0,00 €");
++    expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io())).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++    expect(run(["informe", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el mes (--mes AAAA-MM)" });
++  });
++
+   it("appends an expense to the end of the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

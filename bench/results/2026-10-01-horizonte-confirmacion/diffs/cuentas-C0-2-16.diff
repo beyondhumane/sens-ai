@@ -1,0 +1,128 @@
+diff --git a/README.md b/README.md
+index 69eb1e1..deb53be 100644
+--- a/README.md
++++ b/README.md
+@@ -25,6 +25,7 @@ fecha,importe,categoria,descripcion
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (sumando sus gastos), `Lunes 02/03/2026: 45,20 €`, y `Total: 48,30 €` al final; sin gastos solo sale el total. `Fecha no válida: 2026-02-30` si no existe |
++| `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, separado por `;`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`; la primera línea es la cabecera) y añade al final de `<fichero>` solo los gastos (importes negativos, en positivo) con el concepto como descripción y la categoría `Sin categoría`. Responde `Importados 1 gastos`. Los ingresos se ignoran. Si alguna línea no se entiende no importa nada: `Línea 3 del banco no válida` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index df60a64..a2a6c49 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -87,6 +87,48 @@ function categoryLines(expenses: Expense[], budgets = new Map<string, number>())
+     });
+ }
+ 
++function splitBankLine(line: string): string[] | undefined {
++  const fields: string[] = [];
++  let field = "";
++  let quoted = false;
++  for (let i = 0; i < line.length; i++) {
++    const ch = line[i];
++    if (quoted) {
++      if (ch !== '"') field += ch;
++      else if (line[i + 1] === '"') {
++        field += '"';
++        i++;
++      } else quoted = false;
++    } else if (ch === '"' && field === "") quoted = true;
++    else if (ch === ";") {
++      fields.push(field);
++      field = "";
++    } else field += ch;
++  }
++  if (quoted) return undefined;
++  fields.push(field);
++  return fields;
++}
++
++// undefined: línea no válida; null: válida pero no es un gasto
++function parseBankLine(line: string): Expense | null | undefined {
++  const fields = splitBankLine(line);
++  if (fields === undefined || fields.length !== 3) return undefined;
++  const [rawDate, rawConcept, rawAmount] = fields.map((f) => f.trim());
++  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(rawDate);
++  if (!match) return undefined;
++  const date = `${match[3]}-${match[2]}-${match[1]}`;
++  if (!isRealDate(date)) return undefined;
++  const description = rawConcept.replace(/\s+/g, " ");
++  if (description === "") return undefined;
++  const sign = /^[+-]/.test(rawAmount) ? rawAmount[0] : "";
++  const unsigned = sign === "" ? rawAmount : rawAmount.slice(1);
++  if (/^0+(,0{1,2})?$/.test(unsigned)) return null;
++  const cents = /^[\d.]+$/.test(unsigned) && unsigned.includes(".") ? undefined : parseAmount(unsigned);
++  if (cents === undefined) return undefined;
++  return sign === "-" ? { date, cents, category: "Sin categoría", description } : null;
++}
++
+ const commands:Record<string, Command> = {
+   añadir: (args, io) => {
+     const [path, date, amount, category, ...words] = args;
+@@ -108,6 +150,27 @@ const commands:Record<string, Command> = {
+     io.write(path, `${text}${text === "" || /\n$/.test(text) ? "" : eol}${row}${eol}`);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
++  importar: (args, io) => {
++    const [bankPath, path, ...extra] = args;
++    if (!bankPath || !path || extra.length > 0) throw new Error("Uso: importar <fichero-del-banco> <fichero>");
++    if (!io.exists(path)) throw new Error(`No existe ${path}`);
++    const text = io.read(path);
++    parseExpenses(text);
++    const lines = io.read(bankPath).replace(/^﻿/, "").split(/\r?\n/);
++    const rows: string[] = [];
++    for (let i = 1; i < lines.length; i++) {
++      if (lines[i].trim() === "") continue;
++      const expense = parseBankLine(lines[i]);
++      if (expense === undefined) throw new Error(`Línea ${i + 1} del banco no válida`);
++      if (expense === null) continue;
++      rows.push(`${expense.date},${(expense.cents / 100).toFixed(2)},Sin categoría,${escapeField(expense.description)}`);
++    }
++    if (rows.length > 0) {
++      const eol = text.includes("\r\n") ? "\r\n" : "\n";
++      io.write(path, `${text}${text === "" || /\n$/.test(text) ? "" : eol}${rows.join(eol)}${eol}`);
++    }
++    return `Importados ${rows.length} gastos`;
++  },
+   presupuesto: (args, io) => {
+     const [path, category, amount, ...extra] = args;
+     if (!path) throw new Error("Falta el fichero de presupuestos");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 0119659..3bbbaba 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -235,3 +235,30 @@ describe("presupuesto", () => {
+     expect(run(["presupuesto", "g.csv", "x", "5"], memoryIo({ "g.csv": GASTOS })).output).toMatch(/^Cabecera desconocida/);
+   });
+ });
++
++describe("importar", () => {
++  const BANCO = `Fecha;Concepto;Importe
++09/03/2026;Bar Paco;-8,75
++10/03/2026;Nómina;1.850,00
++11/03/2026;"Pago; móvil";-1.234,5
++`;
++
++  it("appends only the expenses, as positive amounts, without category", () => {
++    const io = memoryIo({ "banco.csv": BANCO, "gastos.csv": GASTOS });
++    expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 0, output: "Importados 2 gastos" });
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-09,8.75,Sin categoría,Bar Paco\n2026-03-11,1234.50,Sin categoría,Pago; móvil\n`);
++  });
++
++  it("imports nothing and names the bad line", () => {
++    for (const [bad, line] of [
++      ["09/03/2026;Bar;-8,75\n31/02/2026;X;-1,00\n", 3],
++      ["09/03/2026;Bar;-8.75\n", 2],
++      ["09/03/2026;Bar\n", 2],
++      ["09/03/2026;;-1,00\n", 2],
++    ] as const) {
++      const io = memoryIo({ "banco.csv": `Fecha;Concepto;Importe\n${bad}`, "gastos.csv": GASTOS });
++      expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 1, output: `Línea ${line} del banco no válida` });
++      expect(io.files["gastos.csv"]).toBe(GASTOS);
++    }
++  });
++});

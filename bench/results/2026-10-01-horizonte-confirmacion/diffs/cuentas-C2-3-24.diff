@@ -1,0 +1,77 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index da62ae5..9761894 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -80,7 +80,12 @@ function parseMonthFlag(args: string[]): { month: string | undefined; file: stri
+   return { month, file: positional[0], positional };
+ }
+ 
+-function parseRangeFlags(args: string[]): { from: string | undefined; to: string | undefined; file: string | undefined } {
++function parseRangeFlags(args: string[]): {
++  from: string | undefined;
++  to: string | undefined;
++  file: string | undefined;
++  positional: string[];
++} {
+   const dates: Record<string, string | undefined> = {};
+   const used = new Set<number>();
+   for (const flag of ["--desde", "--hasta"]) {
+@@ -91,9 +96,13 @@ function parseRangeFlags(args: string[]): { from: string | undefined; to: string
+     dates[flag] = date;
+     used.add(index).add(index + 1);
+   }
+-  return { from: dates["--desde"], to: dates["--hasta"], file: args.find((_, index) => !used.has(index)) };
++  const positional = args.filter((_, index) => !used.has(index));
++  return { from: dates["--desde"], to: dates["--hasta"], file: positional[0], positional };
+ }
+ 
++const inRange = (expense: Expense, from: string | undefined, to: string | undefined) =>
++  (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to);
++
+ const sumCents =(expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+ 
+ function categoryTotals(expenses: Expense[]): [string, number][] {
+@@ -109,17 +118,19 @@ const commands: Record<string, Command> = {
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+     const { from, to, file } = parseRangeFlags(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
+     return load(file, io)
+-      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .filter((expense) => inRange(expense, from, to))
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    const text = args[1];
++    const { from, to, file, positional } = parseRangeFlags(args);
++    const text = positional[1];
+     if (!text) throw new Error("Falta el texto a buscar");
+     const needle = plain(text);
+-    const found = load(args[0], io).filter(
+-      (expense) => plain(expense.description).includes(needle) || plain(expense.category).includes(needle),
++    const found = load(file, io).filter(
++      (expense) =>
++        inRange(expense, from, to) && (plain(expense.description).includes(needle) || plain(expense.category).includes(needle)),
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 35a5f12..d1c6709 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -52,6 +52,15 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("filters the search with --desde and --hasta", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-03-03,3.00,Comida,Café con Ana\n2026-03-20,3.00,Comida,Café solo\n` });
++    const found = (args: string[]) => shown(run(["buscar", ...args], io).output);
++    expect(found(["gastos.csv", "cafe", "--desde", "2026-03-10"])).toBe("20/03/2026  Comida  3,00 €  Café solo");
++    expect(found(["--hasta", "2026-03-10", "gastos.csv", "cafe"])).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
++    expect(found(["gastos.csv", "cafe", "--desde", "2026-03-04", "--hasta", "2026-03-19"])).toBe("Sin resultados");
++    expect(run(["buscar", "gastos.csv", "cafe", "--hasta", "x"], io)).toEqual({ code: 1, output: "Fecha no válida: x" });
++  });
++
+   it("reads quoted descriptions and writes them quoted when they have commas or quotes", () => {
+     const gastos = `${GASTOS}2026-03-05,18.00,Ocio,"Cena, con amigos"
+ 2026-03-06,2.00,Ocio,"Dijo ""hola"""

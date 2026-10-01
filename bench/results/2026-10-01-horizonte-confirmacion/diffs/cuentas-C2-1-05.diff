@@ -1,0 +1,67 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 5bee856..e693999 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -43,6 +43,24 @@ const commands: Record<string, Command> = {
+         .reduce((sum, expense) => sum + expense.cents, 0),
+     )}`;
+   },
++  añadir: (args, io) => {
++    const [path, date = "", amount = "", category = "", ...words] = args;
++    const description = words.join(" ");
++    const parsed = new Date(`${date}T00:00:00Z`);
++    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
++      throw new Error(`Fecha no válida: ${date}`);
++    }
++    const cents = Math.round(Number(amount) * 100);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++    if (category === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
++    if (description === "" || /[\r\n]/.test(description)) throw new Error(`Descripción no válida: ${description}`);
++    const expense: Expense = { date, cents, category, description };
++    load(path, io);
++    const text = io.read(path as string);
++    const row = [date, (cents / 100).toFixed(2), category, description].join(",");
++    io.write(path as string, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
++    return `Añadido: ${formatLine(expense)}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/anadir.test.ts b/tests/anadir.test.ts
+new file mode 100644
+index 0000000..ab7a7db
+--- /dev/null
++++ b/tests/anadir.test.ts
+@@ -0,0 +1,32 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++import { formatMoney } from "../src/money";
++
++const csv = "fecha,importe,categoria,descripcion\n2026-03-01,3.50,ocio,Café";
++
++it("appends the expense at the end and reports it", () => {
++  const io = memoryIo({ "g.csv": `${csv}\n` });
++  const ran = run(["añadir", "g.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);
++  expect(ran).toEqual({ code: 0, output: `Añadido: 19/03/2026  Comida  ${formatMoney(420)}  Churros con chocolate` });
++  expect(io.files["g.csv"]).toBe(`${csv}\n2026-03-19,4.20,Comida,Churros con chocolate\n`);
++});
++
++it("adds the missing line break when the file does not end with one", () => {
++  const io = memoryIo({ "g.csv": csv });
++  run(["añadir", "g.csv", "2026-03-19", "4.20", "Comida", "Churros"], io);
++  expect(io.files["g.csv"]).toBe(`${csv}\n2026-03-19,4.20,Comida,Churros\n`);
++});
++
++it.each([
++  [["2026-02-30", "4.20"], "Fecha no válida: 2026-02-30"],
++  [["19/03/2026", "4.20"], "Fecha no válida: 19/03/2026"],
++  [["2026-03-19", "-3"], "Importe no válido: -3"],
++  [["2026-03-19", "0"], "Importe no válido: 0"],
++  [["2026-03-19", "1.234"], "Importe no válido: 1.234"],
++  [["2026-03-19", "1,5"], "Importe no válido: 1,5"],
++])("rejects %j without touching the file", ([date, amount], message) => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["añadir", "g.csv", date, amount, "Comida", "Churros"], io)).toEqual({ code: 1, output: message });
++  expect(io.files["g.csv"]).toBe(csv);
++});

@@ -1,0 +1,65 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 234d0f3..e29bb88 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -53,14 +53,19 @@ function dateFlag(args: string[], flag: string): string | undefined {
+   return date;
+ }
+ 
+-function withRange(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined; order: string } {
++function withRange(args: string[]): { path: string | undefined; positional: string[]; from: string | undefined; to: string | undefined; order: string } {
+   const from = dateFlag(args, "--desde");
+   const to = dateFlag(args, "--hasta");
+   const orderFlag = args.indexOf("--orden");
+   const order = orderFlag === -1 ? "fecha" : (args[orderFlag + 1] ?? "");
+   if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+   const flags = ["--desde", "--hasta", "--orden"].map((flag) => args.indexOf(flag)).filter((i) => i !== -1);
+-  return { path: args.find((_, i) => !flags.includes(i) && !flags.includes(i - 1)), from, to, order };
++  const positional = args.filter((_, i) => !flags.includes(i) && !flags.includes(i - 1));
++  return { path: positional[0], positional, from, to, order };
++}
++
++function inRange(expenses: Expense[], from: string | undefined, to: string | undefined): Expense[] {
++  return expenses.filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to));
+ }
+ 
+ function inMonth(expenses: Expense[], month: string | undefined): Expense[] {
+@@ -87,16 +92,16 @@ function loadBudgets(path: string, io: Io): Map<string, number> {
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { path, from, to, order } = withRange(args);
+-    return load(path, io)
+-      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++    return inRange(load(path, io), from, to)
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    if (args[1] === undefined) throw new Error("Falta el texto a buscar");
+-    const needle = fold(args[1]);
+-    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle));
++    const { path, positional, from, to } = withRange(args);
++    if (positional[1] === undefined) throw new Error("Falta el texto a buscar");
++    const needle = fold(positional[1]);
++    const found = inRange(load(path, io), from, to).filter((expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (rawArgs, io) => {
+diff --git a/tests/buscar.test.ts b/tests/buscar.test.ts
+index 44d3b2b..bc09070 100644
+--- a/tests/buscar.test.ts
++++ b/tests/buscar.test.ts
+@@ -20,3 +20,12 @@ it("also finds by category even if the description does not mention it", () => {
+ it("says when nothing matches", () => {
+   expect(run(["buscar", "g.csv", "zzz"], memoryIo({ "g.csv": csv })).output).toBe("Sin resultados");
+ });
++
++it("limits the search to --desde and --hasta, in any position", () => {
++  const io = memoryIo({ "g.csv": `${csv}\n2026-03-20,4,ocio,Cine` });
++  expect(run(["buscar", "g.csv", "ocio", "--desde", "2026-03-10"], io).output).toContain("Cine");
++  expect(run(["buscar", "--desde", "2026-03-10", "g.csv", "ocio"], io).output).not.toContain("Café");
++  expect(run(["buscar", "g.csv", "ocio", "--hasta", "2026-03-10"], io).output).not.toContain("Cine");
++  expect(run(["buscar", "g.csv", "ocio", "--desde", "2026-03-25"], io).output).toBe("Sin resultados");
++  expect(run(["buscar", "g.csv", "ocio", "--hasta", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++});

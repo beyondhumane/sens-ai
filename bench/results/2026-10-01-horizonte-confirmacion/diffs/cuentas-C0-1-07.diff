@@ -1,0 +1,82 @@
+diff --git a/README.md b/README.md
+index eef25ed..4ff9445 100644
+--- a/README.md
++++ b/README.md
+@@ -16,6 +16,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
++| `lista <fichero> --desde 2026-03-01 --hasta 2026-03-15` | Solo los gastos del rango, ambos días incluidos; `--desde` y `--hasta` valen juntos o por separado. Una fecha que no existe da `Fecha no válida: 2026-03-32` |
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+diff --git a/src/cli.ts b/src/cli.ts
+index d514f4a..a780bbd 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -40,6 +40,14 @@ function splitMonth(args: string[]): { month: string | undefined; positional: st
+   return { month, positional: [...args.slice(0, flag), ...args.slice(flag + 2)] };
+ }
+ 
++function takeDate(args: string[], flag: string): { date: string | undefined; rest: string[] } {
++  const index = args.indexOf(flag);
++  if (index === -1) return { date: undefined, rest: args };
++  const date = args[index + 1];
++  if (date === undefined || !isRealDate(date)) throw new Error(`Fecha no válida: ${date ?? ""}`.trim());
++  return { date, rest: [...args.slice(0, index), ...args.slice(index + 2)] };
++}
++
+ const commands: Record<string, Command> = {
+   añadir: (args, io) => {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+@@ -58,7 +66,14 @@ const commands: Record<string, Command> = {
+     io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
+-  lista: (args, io) => load(args[0], io).map(line).join("\n"),
++  lista: (args, io) => {
++    const since = takeDate(args, "--desde");
++    const until = takeDate(since.rest, "--hasta");
++    return load(until.rest[0], io)
++      .filter((expense) => (since.date === undefined || expense.date >= since.date) && (until.date === undefined || expense.date <= until.date))
++      .map(line)
++      .join("\n");
++  },
+   buscar: (args, io) => {
+     const needle = fold(args.slice(1).join(" "));
+     if (!needle) throw new Error("Falta el texto a buscar");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f35148a..02801c5 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,30 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("filters the list by inclusive date range", () => {
++    const files = {
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-02-28,1.00,A,antes
++2026-03-01,2.00,A,primero
++2026-03-15,3.00,A,ultimo
++2026-03-16,4.00,A,despues
++`,
++    };
++    const names = (args: string[]) => run(["lista", "g.csv", ...args], memoryIo(files)).output.split("\n").map((l) => l.split("  ")[3]);
++    expect(names(["--desde", "2026-03-01", "--hasta", "2026-03-15"])).toEqual(["primero", "ultimo"]);
++    expect(names(["--hasta", "2026-03-15", "--desde", "2026-03-01"])).toEqual(["primero", "ultimo"]);
++    expect(names(["--desde", "2026-03-15"])).toEqual(["ultimo", "despues"]);
++    expect(names(["--hasta", "2026-03-01"])).toEqual(["antes", "primero"]);
++    expect(run(["lista", "--desde", "2026-03-01", "g.csv"], memoryIo(files)).code).toBe(0);
++  });
++
++  it("rejects invalid list dates", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    expect(run(["lista", "g.csv", "--desde", "2026-03-32"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
++    expect(run(["lista", "g.csv", "--hasta", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++    expect(run(["lista", "g.csv", "--desde"], io)).toEqual({ code: 1, output: "Fecha no válida:" });
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

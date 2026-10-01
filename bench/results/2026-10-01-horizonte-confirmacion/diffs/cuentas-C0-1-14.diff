@@ -1,0 +1,40 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 8f63d55..7bb99b2 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -104,8 +104,15 @@ const commands: Record<string, Command> = {
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+   },
+   total: (args, io) => {
+-    const { month, positional } = splitMonth(args);
+-    const expenses = load(positional[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    const flag = args.indexOf("--categoria");
++    const category = flag === -1 ? undefined : args[flag + 1]?.trim();
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const { month, positional } = splitMonth(flag === -1 ? args : [...args.slice(0, flag), ...args.slice(flag + 2)]);
++    const expenses = load(positional[0], io).filter(
++      (expense) =>
++        (month === undefined || expense.date.startsWith(`${month}-`)) &&
++        (category === undefined || fold(expense.category) === fold(category)),
++    );
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   informe: (args, io) => {
+diff --git a/tests/total.test.ts b/tests/total.test.ts
+index 3dd23e0..9b301ee 100644
+--- a/tests/total.test.ts
++++ b/tests/total.test.ts
+@@ -15,6 +15,13 @@ it("sums only the given month", () => {
+   expect(norm(run(["total", "--mes", "2026-03", "g.csv"], memoryIo({ "g.csv": csv })).output)).toBe("Total: 20,00 €");
+ });
+ 
++it("filters by category ignoring case and accents, combinable with --mes", () => {
++  const io = memoryIo({ "g.csv": [HEADER, "2026-02-28,10.00,Cómida,a", "2026-03-01,12.50,comida,b", "2026-03-15,7.50,ocio,c"].join("\n") });
++  expect(norm(run(["total", "g.csv", "--categoria", "COMIDA"], io).output)).toBe("Total: 22,50 €");
++  expect(norm(run(["total", "--categoria", "comida", "g.csv", "--mes", "2026-03"], io).output)).toBe("Total: 12,50 €");
++  expect(run(["total", "g.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++});
++
+ it("rejects a month that does not exist", () => {
+   expect(run(["total", "g.csv", "--mes", "2026-13"], memoryIo({ "g.csv": csv }))).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+ });

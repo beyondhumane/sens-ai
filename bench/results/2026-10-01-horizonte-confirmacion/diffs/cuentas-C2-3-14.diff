@@ -1,0 +1,43 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 4a39751..2072ace 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -119,8 +119,15 @@ const commands: Record<string, Command> = {
+     return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
+   },
+   total: (args, io) => {
+-    const { month, file } = parseMonthFlag(args);
+-    const expenses = load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    const flag = args.indexOf("--categoria");
++    const category = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const { month, file } = parseMonthFlag(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
++    const expenses = load(file, io).filter(
++      (expense) =>
++        (month === undefined || expense.date.startsWith(`${month}-`)) &&
++        (category === undefined || plain(expense.category) === plain(category)),
++    );
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   categorias: (args, io) =>
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6b89adc..e1989b2 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -107,6 +107,16 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("adds up only a category with --categoria, ignoring case and accents, combinable with --mes", () => {
++    const gastos = `${GASTOS}2026-04-01,10.00,Comida,Pizza
++2026-04-02,5.00,Ocio,Cine
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["total", "gastos.csv", "--categoria", "COMIDA"], io).output)).toBe("Total: 22,50 €");
++    expect(shown(run(["total", "--categoria", "cómida", "gastos.csv", "--mes", "2026-04"], io).output)).toBe("Total: 10,00 €");
++    expect(run(["total", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("sums per category, biggest first and alphabetical on ties", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

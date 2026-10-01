@@ -1,0 +1,81 @@
+diff --git a/README.md b/README.md
+index 2cd55d4..bba8129 100644
+--- a/README.md
++++ b/README.md
+@@ -29,6 +29,7 @@ fecha,importe,categoria,descripcion
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`) y añade al final de `<fichero>` solo los importes negativos, en positivo, con el concepto como descripción y categoría `Sin categoría`. Responde `Importados 1 gastos`. Si una línea no se entiende, no importa nada y responde `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo con las veces que sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); si no hay ninguno, `Sin duplicados` |
++| `avisos <fichero> <presupuestos> --mes 2026-03` | Una línea por cada categoría que ese mes se pasa de su presupuesto, de la que más se pasa a la que menos, con el nombre como está en los gastos (`Ocio: te pasas 5,00 €`); gastar justo el presupuesto no es pasarse. El emparejamiento no distingue mayúsculas ni acentos y las categorías sin presupuesto no cuentan. Si ninguna se pasa, `Todo en orden`. `--mes` y el fichero de presupuestos son obligatorios |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index b3ce95e..ded7382 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -177,6 +177,24 @@ const commands: Record<string, Command> = {
+     const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
+     return [`${MONTHS[Number(number) - 1]} de ${year}`, ...rows, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  avisos: (args, io) => {
++    const { month, positional } = splitMonth(args);
++    const [path, budgetPath] = positional;
++    if (month === undefined) throw new Error("Falta el mes");
++    if (!budgetPath) throw new Error("Falta el fichero de presupuestos");
++    const budgets = new Map<string, number>();
++    for (const budget of parseBudgets(io.read(budgetPath))) budgets.set(fold(budget.category), parseAmount(budget.amount));
++    const totals = new Map<string, number>();
++    for (const expense of load(path, io).filter((e) => e.date.startsWith(`${month}-`))) {
++      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
++    }
++    const over = [...totals]
++      .map(([category, cents]) => ({ category, excess: cents - (budgets.get(fold(category)) ?? Infinity) }))
++      .filter(({ excess }) => excess > 0)
++      .sort((a, b) => b.excess - a.excess || a.category.localeCompare(b.category, "es"));
++    if (over.length === 0) return "Todo en orden";
++    return over.map(({ category, excess }) => `${category}: te pasas ${formatMoney(excess)}`).join("\n");
++  },
+   semana: (args, io) => {
+     const [path, date] = args;
+     const expenses = load(path, io);
+diff --git a/tests/avisos.test.ts b/tests/avisos.test.ts
+new file mode 100644
+index 0000000..958e075
+--- /dev/null
++++ b/tests/avisos.test.ts
+@@ -0,0 +1,34 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [
++  HEADER,
++  "2026-02-28,99.00,Ocio,cine",
++  "2026-03-01,20.00,Comida,menu",
++  "2026-03-02,50.00,Ocio,teatro",
++  "2026-03-03,34.65,Comida,cena",
++  "2026-03-04,10.00,Ocio,libro",
++  "2026-03-05,30.00,Viajes,tren",
++].join("\n");
++const norm = (text: string) => text.replace(/ /g, " ");
++
++it("lists the categories over budget, the biggest excess first", () => {
++  const io = memoryIo({ "g.csv": csv, "p.csv": "categoria,importe\nCÓMIDA,50.00\nocio,55.00\nViajes,30.00\n" });
++  const ran = run(["avisos", "g.csv", "p.csv", "--mes", "2026-03"], io);
++  expect(ran.code).toBe(0);
++  expect(norm(ran.output)).toBe("Ocio: te pasas 5,00 €\nComida: te pasas 4,65 €");
++});
++
++it("says all is well when nothing exceeds, ignoring categories without budget", () => {
++  const io = memoryIo({ "g.csv": csv, "p.csv": "categoria,importe\nOcio,60.00\n" });
++  expect(run(["avisos", "g.csv", "p.csv", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Todo en orden" });
++});
++
++it("requires the month and the budget file", () => {
++  const io = memoryIo({ "g.csv": csv, "p.csv": "categoria,importe\n" });
++  expect(run(["avisos", "g.csv", "p.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++  expect(run(["avisos", "g.csv", "--mes", "2026-03"], io)).toEqual({ code: 1, output: "Falta el fichero de presupuestos" });
++  expect(run(["avisos", "g.csv", "p.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});

@@ -1,0 +1,52 @@
+diff --git a/README.md b/README.md
+index 9270cde..9125039 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios; `--desde` y `--hasta` incluyen el día indicado |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--orden fecha|importe]` | Un gasto por línea, por fecha (o de mayor a menor importe con `--orden importe`): fecha, categoría, importe y descripción, separados por dos espacios; `--desde` y `--hasta` incluyen el día indicado |
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `informe <fichero> --anio 2026` | El año, una línea por mes con gasto (`  Marzo: 149,85 €`, en orden de calendario) y `Total: …` |
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría (`  Ocio: 60,00 €`, de más a menos) y `Total: …` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 4049c3c..1f4c09c 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -67,8 +67,12 @@ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const from = dateFlag(args, "--desde");
+     const to = dateFlag(args, "--hasta");
++    const orderFlag = args.indexOf("--orden");
++    const order = orderFlag === -1 ? "fecha" : (args[orderFlag + 1] ?? "");
++    if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+     return load(args[0], io)
+       .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(line)
+       .join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index b0009f6..e573d00 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,17 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("sorts the list by date or by amount", () => {
++    const io = memoryIo({
++      "gastos.csv": "fecha,importe,categoria,descripcion\n2026-03-05,5.00,A,uno\n2026-03-01,9.00,B,dos\n2026-03-05,7.00,C,tres\n",
++    });
++    const names = (...flags: string[]) =>
++      run(["lista", "gastos.csv", ...flags], io).output.split("\n").map((l) => l.split("  ")[3]);
++    expect(names()).toEqual(["dos", "uno", "tres"]);
++    expect(names("--orden", "importe")).toEqual(["dos", "tres", "uno"]);
++    expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
++  });
++
+   it("filters the list by inclusive date range", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const list = (...flags: string[]) => shown(run(["lista", "gastos.csv", ...flags], io).output);

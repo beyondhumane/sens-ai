@@ -1,0 +1,102 @@
+diff --git a/README.md b/README.md
+index de302c4..149b196 100644
+--- a/README.md
++++ b/README.md
+@@ -18,6 +18,7 @@ fecha,importe,categoria,descripcion
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos, con las líneas de `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero>` | `Total: 57,70 €` |
++| `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría del mes (`  Ocio: 60,00 €`, de más a menos) y `Total: …` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 40b9df0..3f5e252 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -21,6 +21,24 @@ const formatLine = (expense: Expense) =>
+ 
+ const plain = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+ 
++const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
++
++function parseMonthFlag(args: string[]): { month: string | undefined; file: string | undefined } {
++  const flag = args.indexOf("--mes");
++  const month = flag === -1 ? undefined : args[flag + 1];
++  if (flag !== -1 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
++  const file = flag === -1 ? args[0] : args.find((_, index) => index !== flag && index !== flag + 1);
++  return { month, file };
++}
++
++const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
++
++function categoryTotals(expenses: Expense[]): [string, number][] {
++  const totals = new Map<string, number>();
++  for (const { category, cents } of expenses) totals.set(category, (totals.get(category) ?? 0) + cents);
++  return [...totals].sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"));
++}
++
+ const commands: Record<string, Command> = {
+   lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
+   buscar: (args, io) => {
+@@ -46,20 +64,24 @@ const commands: Record<string, Command> = {
+     return `Añadido: ${formatLine(expense)}`;
+   },
+   total: (args, io) => {
+-    const flag = args.indexOf("--mes");
+-    const month = flag === -1 ? undefined : args[flag + 1];
+-    if (flag !== -1 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
+-    const file = flag === -1 ? args[0] : args.find((_, index) => index !== flag && index !== flag + 1);
++    const { month, file } = parseMonthFlag(args);
+     const expenses = load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+-    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++    return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+-  categorias: (args, io) => {
+-    const totals = new Map<string, number>();
+-    for (const { category, cents } of load(args[0], io)) totals.set(category, (totals.get(category) ?? 0) + cents);
+-    return [...totals]
+-      .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"))
++  categorias: (args, io) =>
++    categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+-      .join("\n");
++      .join("\n"),
++  informe: (args, io) => {
++    const { month, file } = parseMonthFlag(args);
++    if (month === undefined) throw new Error("Falta el mes");
++    const expenses = load(file, io).filter((expense) => expense.date.startsWith(`${month}-`));
++    const [year, number] = month.split("-");
++    return [
++      `${MONTHS[Number(number) - 1]} de ${year}`,
++      ...categoryTotals(expenses).map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`),
++      `Total: ${formatMoney(sumCents(expenses))}`,
++    ].join("\n");
+   },
+ };
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c9f1c1a..97e34c4 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -72,6 +72,20 @@ describe("cuentas", () => {
+     expect(run(["categorias"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+   });
+ 
++  it("reports a month by category, biggest first, with the total", () => {
++    const gastos = `${GASTOS}2026-03-05,60.00,Ocio,Cine
++2026-03-06,32.15,Comida,Cena
++2026-04-01,99.00,Viajes,Tren
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-03"], io).output)).toBe(
++      "Marzo de 2026\n  Ocio: 60,00 €\n  Transporte: 45,20 €\n  Comida: 44,65 €\nTotal: 149,85 €",
++    );
++    expect(shown(run(["informe", "--mes", "2026-05", "gastos.csv"], io).output)).toBe("Mayo de 2026\nTotal: 0,00 €");
++    expect(run(["informe", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++    expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

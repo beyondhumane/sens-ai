@@ -1,0 +1,70 @@
+diff --git a/README.md b/README.md
+index c131bce..5263fcd 100644
+--- a/README.md
++++ b/README.md
+@@ -16,7 +16,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--categoria <nombre>] [--orden fecha\|importe]` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios; con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos (`Falta la categoría` si no se da el nombre). Se pueden combinar todas las opciones |
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo, por orden de aparición, con las veces que sale y el primero del grupo (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+ | `resumen <fichero>` | Cuatro líneas: `Gastos: 12`, `Desde 03/01/2026 hasta 28/02/2026` (primer y último día con gasto), `Total: 412,30 €` y `Mayor: 120,00 € en Seguro del coche (15/01/2026)` (si hay varios iguales, el primero del fichero); `Sin gastos` si el fichero no tiene ninguno |
+diff --git a/src/cli.ts b/src/cli.ts
+index 47fbe8b..12410e6 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -168,10 +168,20 @@ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { date: since, rest: afterSince } = takeDate(args, "--desde");
+     const { date: until, rest: afterUntil } = takeDate(afterSince, "--hasta");
+-    const { value: order = "fecha", rest } = takeOption(afterUntil, "--orden");
++    const { value: category, rest: afterCategory } = takeOption(afterUntil, "--categoria");
++    if (afterUntil.includes("--categoria") && (category === undefined || category.trim() === "")) {
++      throw new Error("Falta la categoría");
++    }
++    const { value: order = "fecha", rest } = takeOption(afterCategory, "--orden");
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
++    const key = category === undefined ? undefined : fold(category);
+     return load(rest[0], io)
+-      .filter((expense) => (since === undefined || expense.date >= since) && (until === undefined || expense.date <= until))
++      .filter(
++        (expense) =>
++          (since === undefined || expense.date >= since) &&
++          (until === undefined || expense.date <= until) &&
++          (key === undefined || fold(expense.category) === key),
++      )
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+       .map(formatLine)
+       .join("\n");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 22039ae..ab81953 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -36,6 +36,25 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--desde"], io())).toEqual({ code: 1, output: "Fecha no válida: " });
+   });
+ 
++  it("filters lista by --categoria, ignoring case and accents, combinable with --desde, --hasta and --orden", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-05,45.20,Transporte,Gasolina
++2026-03-10,30.00,Comida,Cena
++2026-03-20,2.00,Comida,Café
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    const out = (...args: string[]) => shown(run(["lista", ...args], io()).output);
++    const pan = "01/03/2026  Comida  12,50 €  Pan";
++    const cena = "10/03/2026  Comida  30,00 €  Cena";
++    const cafe = "20/03/2026  Comida  2,00 €  Café";
++    expect(out("gastos.csv", "--categoria", "COMÍDA")).toBe(`${pan}\n${cena}\n${cafe}`);
++    expect(out("--categoria", "comida", "gastos.csv", "--desde", "2026-03-05", "--hasta", "2026-03-15")).toBe(cena);
++    expect(out("gastos.csv", "--categoria", "comida", "--orden", "importe")).toBe(`${cena}\n${pan}\n${cafe}`);
++    expect(out("gastos.csv", "--categoria", "Ocio")).toBe("");
++    expect(run(["lista", "gastos.csv", "--categoria"], io())).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("searches descriptions ignoring case and accents", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,3.00,Ocio,Café con Ana

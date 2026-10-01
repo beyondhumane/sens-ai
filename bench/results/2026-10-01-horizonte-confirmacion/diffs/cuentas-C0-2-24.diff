@@ -1,0 +1,81 @@
+diff --git a/README.md b/README.md
+index dea22f2..2741d79 100644
+--- a/README.md
++++ b/README.md
+@@ -17,7 +17,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--orden fecha\|importe]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. Sale por fecha, de la más antigua a la más reciente (los del mismo día, en el orden del fichero); con `--orden importe`, de mayor a menor importe; `Orden no válido: color` si es otro. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe |
+-| `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
++| `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto (emparejadas sin distinguir mayúsculas ni acentos) dicen cuánto queda o cuánto te pasas: `Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`; las demás no cambian. En lugar de `--mes` se puede dar `--anio 2026`: informe del año con `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y `Total: 179,85 €`; `Año no válido: 26` si no son cuatro cifras (con `--anio` no se aplican presupuestos, y no se puede combinar con `--mes`) |
+diff --git a/src/cli.ts b/src/cli.ts
+index 3dd9c72..7dc7efd 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -47,7 +47,13 @@ function monthArgs(args: string[]): { path: string | undefined; rest: string[];
+   return { path: rest[0], rest, month };
+ }
+ 
+-function rangeArgs(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined; order: string } {
++function rangeArgs(args: string[]): {
++  path: string | undefined;
++  rest: string[];
++  from: string | undefined;
++  to: string | undefined;
++  order: string;
++} {
+   const dates: Record<string, string | undefined> = {};
+   const rest: string[] = [];
+   let order = "fecha";
+@@ -64,7 +70,7 @@ function rangeArgs(args: string[]): { path: string | undefined; from: string | u
+       rest.push(arg);
+     }
+   }
+-  return { path: rest[0], from: dates["--desde"], to: dates["--hasta"], order };
++  return { path: rest[0], rest, from: dates["--desde"], to: dates["--hasta"], order };
+ }
+ 
+ function budgetArgs(args: string[]): { rest: string[]; budgetPath: string | undefined } {
+@@ -212,12 +218,16 @@ const commands:Record<string, Command> = {
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    const expenses = load(args[0], io);
+-    const text = args[1];
++    const { path, rest, from, to } = rangeArgs(args);
++    const expenses = load(path, io);
++    const text = rest[1];
+     if (text === undefined) throw new Error("Falta el texto a buscar");
+     const needle = fold(text);
+     const found = expenses.filter(
+-      (expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle),
++      (expense) =>
++        (from === undefined || expense.date >= from) &&
++        (to === undefined || expense.date <= to) &&
++        (fold(expense.description).includes(needle) || fold(expense.category).includes(needle)),
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 132a9a6..6c70df8 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -199,6 +199,15 @@ describe("cuentas", () => {
+     expect(shown(run(["buscar", "gastos.csv", "transporte"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("filters search results by date range", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-03-03,3.00,Comida,Café con Ana\n` });
++    const search = (...extra: string[]) => run(["buscar", "gastos.csv", "a", ...extra], io);
++    expect(shown(search("--desde", "2026-03-03").output)).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
++    expect(shown(search("--hasta", "2026-03-01").output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta");
++    expect(run(["buscar", "--desde", "2026-03-03", "gastos.csv", "gasolina"], io)).toEqual({ code: 0, output: "Sin resultados" });
++    expect(search("--desde", "2026-03-32")).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
++  });
++
+   it("appends an expense at the end of the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS, "sin-salto.csv": GASTOS.trimEnd() });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.20", "Comida", "Churros", "con", "chocolate"], io);

@@ -1,0 +1,132 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 7adddc8..43fef82 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { HEADER, csvRow, parseExpenses } from "./csv";
++import { BUDGET_HEADER, HEADER, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
+ import { formatDate, formatMonth, isRealDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -33,6 +33,12 @@ function monthFlag(args: string[]): string | undefined {
+   return month;
+ }
+ 
++function parseCents(amount: string): number {
++  const cents = Math.round(Number(amount) * 100);
++  if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++  return cents;
++}
++
+ function dateFlag(args: string[], name: string): string | undefined {
+   const flag = args.indexOf(name);
+   if (flag === -1) return undefined;
+@@ -91,8 +97,7 @@ const commands: Record<string, Command> = {
+       throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+     }
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
+-    const cents = Math.round(Number(amount) * 100);
+-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const cents = parseCents(amount);
+     if (/[,\r\n]/.test(category) || /[\r\n]/.test(description)) throw new Error("Categoría o descripción no válidas");
+     const text = io.read(path);
+     parseExpenses(text);
+@@ -100,6 +105,20 @@ const commands: Record<string, Command> = {
+     io.write(path, text.endsWith("\n") ? text + row : `${text}\n${row}`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, category, amount] = args;
++    if (!path || !category || amount === undefined) {
++      throw new Error("Uso: presupuesto <fichero> <categoría> <importe>");
++    }
++    const cents = parseCents(amount);
++    if (/[,\r\n]/.test(category)) throw new Error("Categoría no válida");
++    const budgets = io.exists(path) ? parseBudgets(io.read(path)) : [];
++    const index = budgets.findIndex((budget) => plain(budget.category) === plain(category));
++    if (index === -1) budgets.push({ category, cents });
++    else budgets[index] = { category, cents };
++    io.write(path, `${[BUDGET_HEADER, ...budgets.map(budgetRow)].join("\n")}\n`);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   exportar: (args, io) => {
+     const [path, out] = args;
+     if (!out) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM]");
+diff --git a/src/csv.ts b/src/csv.ts
+index 9a1d8dc..e09bb54 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -26,16 +26,32 @@ function splitFields(row: string): string[] {
+ 
+ export const csvField = (text: string) => (/[",]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+ 
+-export function parseExpenses(text: string): Expense[] {
++function parseRows(text: string, expectedHeader: string): string[][] {
+   const [header, ...rows] = text.trim().split(/\r?\n/);
+-  if (header !== HEADER) throw new Error(`Cabecera desconocida: ${header}`);
+-  return rows
+-    .filter((row) => row.trim() !== "")
+-    .map((row) => {
+-      const [date, amount, category, ...rest] = splitFields(row);
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
+-    });
++  if (header !== expectedHeader) throw new Error(`Cabecera desconocida: ${header}`);
++  return rows.filter((row) => row.trim() !== "").map(splitFields);
++}
++
++export function parseExpenses(text: string): Expense[] {
++  return parseRows(text, HEADER).map(([date, amount, category, ...rest]) => ({
++    date,
++    cents: Math.round(Number(amount) * 100),
++    category,
++    description: rest.join(","),
++  }));
+ }
+ 
+ export const csvRow = (expense: Expense) =>
+   `${expense.date},${(expense.cents / 100).toFixed(2)},${csvField(expense.category)},${csvField(expense.description)}`;
++
++export const BUDGET_HEADER = "categoria,importe";
++
++export interface Budget {
++  category: string;
++  cents: number;
++}
++
++export const parseBudgets = (text: string): Budget[] =>
++  parseRows(text, BUDGET_HEADER).map(([category, amount]) => ({ category, cents: Math.round(Number(amount) * 100) }));
++
++export const budgetRow = (budget: Budget) => `${csvField(budget.category)},${(budget.cents / 100).toFixed(2)}`;
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index ed5bfc1..715d3e4 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -136,6 +136,28 @@ describe("cuentas", () => {
+     expect(io.files["todo.csv"]).toBe(gastos);
+   });
+ 
++  it("creates the budget file and updates a category in place ignoring case and accents", () => {
++    const io = memoryIo({});
++    const ran = run(["presupuesto", "presupuestos.csv", "Comida", "100"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    expect(io.files["presupuestos.csv"]).toBe("categoria,importe\nComida,100.00\n");
++    run(["presupuesto", "presupuestos.csv", "Ocio", "30.5"], io);
++    expect(shown(run(["presupuesto", "presupuestos.csv", "COMIDA", "120"], io).output)).toBe(
++      "Presupuesto de COMIDA: 120,00 € al mes",
++    );
++    expect(io.files["presupuestos.csv"]).toBe("categoria,importe\nCOMIDA,120.00\nOcio,30.50\n");
++    run(["presupuesto", "presupuestos.csv", "ocío", "40"], io);
++    expect(io.files["presupuestos.csv"]).toBe("categoria,importe\nCOMIDA,120.00\nocío,40.00\n");
++  });
++
++  it("rejects bad budget amounts without touching the file", () => {
++    const io = memoryIo({ "p.csv": "categoria,importe\nComida,100.00\n" });
++    expect(run(["presupuesto", "p.csv", "Comida", "-3"], io)).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(run(["presupuesto", "p.csv", "Comida"], io).code).toBe(1);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

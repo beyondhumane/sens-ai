@@ -1,0 +1,66 @@
+diff --git a/README.md b/README.md
+index 6098889..b75b0b6 100644
+--- a/README.md
++++ b/README.md
+@@ -17,6 +17,7 @@ fecha,importe,categoria,descripcion
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+ | `total <fichero>` | `Total: 57,70 €` |
++| `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index a8880f2..8e2612b 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -15,11 +15,19 @@ function load(path: string | undefined, io: Io): Expense[] {
+   return parseExpenses(io.read(path));
+ }
+ 
++const line = (expense: Expense) =>
++  [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
++
++const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
++
+ const commands: Record<string, Command> = {
+-  lista: (args, io) =>
+-    load(args[0], io)
+-      .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+-      .join("\n"),
++  lista: (args, io) => load(args[0], io).map(line).join("\n"),
++  buscar: (args, io) => {
++    const needle = fold(args.slice(1).join(" "));
++    if (!needle) throw new Error("Falta el texto a buscar");
++    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle));
++    return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--mes");
+     let month: string | undefined;
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 3d93bc4..fe4a1da 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -36,6 +36,21 @@ describe("cuentas", () => {
+     );
+   });
+ 
++  it("searches descriptions ignoring case and accents", () => {
++    const files = {
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-03-01,3.00,Ocio,Café con Ana
++2026-03-02,45.20,Transporte,Gasolina
++2026-03-03,2.50,Ocio,CAFÉ solo
++`,
++    };
++    expect(shown(run(["buscar", "g.csv", "cafe"], memoryIo(files)).output)).toBe(
++      "01/03/2026  Ocio  3,00 €  Café con Ana\n03/03/2026  Ocio  2,50 €  CAFÉ solo",
++    );
++    expect(run(["buscar", "g.csv", "té"], memoryIo(files))).toEqual({ code: 0, output: "Sin resultados" });
++    expect(run(["buscar", "g.csv"], memoryIo(files))).toEqual({ code: 1, output: "Falta el texto a buscar" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

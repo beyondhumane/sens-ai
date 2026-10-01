@@ -1,0 +1,70 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 9357e65..b2f5219 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -25,12 +25,14 @@ const plain = (text: string) =>
+     .replace(/\p{M}/gu, "")
+     .toLowerCase();
+ 
++function validMonth(month: string | undefined): string {
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
++  return month as string;
++}
++
+ function monthFlag(args: string[]): string | undefined {
+   const flag = args.indexOf("--mes");
+-  if (flag === -1) return undefined;
+-  const month = args[flag + 1];
+-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
+-  return month;
++  return flag === -1 ? undefined : validMonth(args[flag + 1]);
+ }
+ 
+ function parseCents(amount: string): number {
+@@ -290,6 +292,21 @@ const commands: Record<string, Command> = {
+       `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
+     ].join("\n");
+   },
++  comparar: (args, io) => {
++    const [path, first, second] = args;
++    if (!path || !first || !second) throw new Error("Uso: comparar <fichero> <AAAA-MM> <AAAA-MM>");
++    const expenses = load(path, io);
++    const before = new Map(categoryTotals(inMonth(expenses, validMonth(first))));
++    const after = new Map(categoryTotals(inMonth(expenses, validMonth(second))));
++    return [...new Set([...before.keys(), ...after.keys()])]
++      .sort((a, b) => a.localeCompare(b, "es"))
++      .map((category) => {
++        const [was, now] = [before.get(category) ?? 0, after.get(category) ?? 0];
++        const sign = now >= was ? "+" : "";
++        return `${category}: ${formatMoney(was)} → ${formatMoney(now)} (${sign}${formatMoney(now - was)})`;
++      })
++      .join("\n");
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 0640f38..7858aac 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -343,6 +343,20 @@ describe("cuentas", () => {
+     expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
+   });
+ 
++  it("compares two months by category with a signed difference", () => {
++    const io = memoryIo({
++      "gastos.csv":
++        "fecha,importe,categoria,descripcion\n2026-02-03,40.00,Comida,a\n2026-02-10,90.00,Ocio,b\n2026-03-04,44.65,Comida,c\n2026-03-09,60.00,Ocio,d\n2026-03-10,5.00,Álbum,e\n",
++    });
++    const ran = run(["comparar", "gastos.csv", "2026-02", "2026-03"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe(
++      "Álbum: 0,00 € → 5,00 € (+5,00 €)\nComida: 40,00 € → 44,65 € (+4,65 €)\nOcio: 90,00 € → 60,00 € (-30,00 €)",
++    );
++    expect(run(["comparar", "gastos.csv", "2026-13", "2026-03"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++    expect(run(["comparar", "gastos.csv", "2026-02"], io).code).toBe(1);
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

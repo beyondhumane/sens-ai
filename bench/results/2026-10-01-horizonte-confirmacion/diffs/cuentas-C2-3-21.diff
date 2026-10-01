@@ -1,0 +1,48 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 51536e0..b602288 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -222,6 +222,21 @@ const commands: Record<string, Command> = {
+           .map(([first, ...others]) => `${others.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`)
+           .join("\n");
+   },
++  avisos: (args, io) => {
++    const { month, positional } = parseMonthFlag(args);
++    if (month === undefined) throw new Error("Falta el mes");
++    if (!positional[1]) throw new Error("Falta el fichero de presupuestos");
++    const expenses = load(positional[0], io).filter((expense) => expense.date.startsWith(`${month}-`));
++    const budgets = parseBudgets(io.read(positional[1]));
++    const over = categoryTotals(expenses)
++      .map(([category, cents]) => ({
++        category,
++        excess: cents - (budgets.find((row) => plain(row.category) === plain(category))?.cents ?? Infinity),
++      }))
++      .filter(({ excess }) => excess > 0)
++      .sort((a, b) => b.excess - a.excess || a.category.localeCompare(b.category, "es"));
++    return over.length === 0 ? "Todo en orden" : over.map(({ category, excess }) => `${category}: te pasas ${formatMoney(excess)}`).join("\n");
++  },
+   informe: (args, io) => {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 5a9a471..c64a970 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -217,6 +217,17 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos", "x.csv"], io)).toEqual({ code: 1, output: "No existe x.csv" });
+   });
+ 
++  it("warns about categories over budget, biggest excess first", () => {
++    const gastos = `${GASTOS}2026-03-05,60.00,Ocio,Cine
++2026-03-06,32.15,Comida,Cena
++`;
++    const io = memoryIo({ "gastos.csv": gastos, "p.csv": "categoria,importe\ncómida,10.00\nOCIO,55.00\n", "ok.csv": "categoria,importe\nOcio,100.00\n" });
++    expect(shown(run(["avisos", "gastos.csv", "p.csv", "--mes", "2026-03"], io).output)).toBe("Comida: te pasas 34,65 €\nOcio: te pasas 5,00 €");
++    expect(run(["avisos", "gastos.csv", "ok.csv", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Todo en orden" });
++    expect(run(["avisos", "gastos.csv", "p.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++    expect(run(["avisos", "gastos.csv", "--mes", "2026-03"], io)).toEqual({ code: 1, output: "Falta el fichero de presupuestos" });
++  });
++
+   it("reports repeated expenses ignoring case, accents and extra spaces", () => {
+     const gastos = `${GASTOS}2026-03-09,8.75,Comida,Café con Ana
+ 2026-03-09,8.75,Ocio,  CAFE   con ana

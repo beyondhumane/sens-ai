@@ -1,0 +1,69 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 227a716..95f0911 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -68,6 +68,18 @@ function withRange(args: string[]): { path: string | undefined; positional: stri
+   return { path: positional[0], positional, from, to, order };
+ }
+ 
++function withCategory(args: string[]): { category: string | undefined; rest: string[] } {
++  const flag = args.indexOf("--categoria");
++  if (flag === -1) return { category: undefined, rest: args };
++  const category = args[flag + 1];
++  if (!category) throw new Error("Falta la categoría");
++  return { category, rest: args.filter((_, i) => i !== flag && i !== flag + 1) };
++}
++
++function inCategory(expenses: Expense[], category: string | undefined): Expense[] {
++  return category === undefined ? expenses : expenses.filter((expense) => fold(expense.category) === fold(category));
++}
++
+ function inRange(expenses: Expense[], from: string | undefined, to: string | undefined): Expense[] {
+   return expenses.filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to));
+ }
+@@ -95,8 +107,9 @@ function loadBudgets(path: string, io: Io): Map<string, number> {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+-    const { path, from, to, order } = withRange(args);
+-    return inRange(load(path, io), from, to)
++    const { category, rest } = withCategory(args);
++    const { path, from, to, order } = withRange(rest);
++    return inCategory(inRange(load(path, io), from, to), category)
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+@@ -109,11 +122,9 @@ const commands: Record<string, Command> = {
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (rawArgs, io) => {
+-    const flag = rawArgs.indexOf("--categoria");
+-    const category = flag === -1 ? undefined : rawArgs[flag + 1];
+-    if (flag !== -1 && !category) throw new Error("Falta la categoría");
+-    const { path, month } = withMonth(rawArgs.filter((_, i) => flag === -1 || (i !== flag && i !== flag + 1)));
+-    const expenses = inMonth(load(path, io), month).filter((expense) => category === undefined || fold(expense.category) === fold(category));
++    const { category, rest } = withCategory(rawArgs);
++    const { path, month } = withMonth(rest);
++    const expenses = inCategory(inMonth(load(path, io), month), category);
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   semana: ([path, date = ""], io) => {
+diff --git a/tests/lista.test.ts b/tests/lista.test.ts
+index f8af9e0..4cd6477 100644
+--- a/tests/lista.test.ts
++++ b/tests/lista.test.ts
+@@ -37,3 +37,14 @@ it("rejects a date that does not exist", () => {
+   expect(lista("g.csv", "--hasta", "2026-03-32")).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
+   expect(lista("g.csv", "--desde", "2026-02-30")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
+ });
++
++it("filters by category ignoring case and accents, combinable with range and order", () => {
++  expect(descriptions(lista("g.csv", "--categoria", "COMIDA").output)).toEqual(["a", "b"]);
++  expect(descriptions(lista("--categoria", "ócio", "g.csv", "--desde", "2026-03-16").output)).toEqual(["d"]);
++  expect(descriptions(lista("u.csv", "--hasta", "2026-03-01", "--categoria", "ocio", "--orden", "importe").output)).toEqual(["b2"]);
++  expect(descriptions(lista("u.csv", "--categoria", "comida", "--orden", "importe").output)).toEqual(["b1", "a"]);
++});
++
++it("rejects --categoria without a value", () => {
++  expect(lista("g.csv", "--categoria")).toEqual({ code: 1, output: "Falta la categoría" });
++});

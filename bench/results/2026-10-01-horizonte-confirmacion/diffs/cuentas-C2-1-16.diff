@@ -1,0 +1,70 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c02148a..367f99d 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -144,6 +144,36 @@ const commands: Record<string, Command> = {
+     io.write(path as string, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${formatLine(expense)}`;
+   },
++  importar: ([bankPath, path], io) => {
++    if (!bankPath) throw new Error("Falta el fichero del banco");
++    load(path, io);
++    const [header, ...lines] = io.read(bankPath).replace(/^﻿/, "").trimEnd().split(/\r?\n/);
++    if (header !== "Fecha;Concepto;Importe") throw new Error("Línea 1 del banco no válida");
++    const rows: string[] = [];
++    lines.forEach((line, i) => {
++      if (line.trim() === "") return;
++      const invalid = new Error(`Línea ${i + 2} del banco no válida`);
++      const fields = line.split(";");
++      if (fields.length !== 3) throw invalid;
++      const [bankDate, concept, amount] = fields;
++      const [day, month, year] = bankDate.split("/");
++      const date = `${year}-${month}-${day}`;
++      const negative = amount.startsWith("-");
++      let cents: number;
++      try {
++        cents = parseCents(negative ? amount.slice(1) : amount);
++      } catch {
++        throw invalid;
++      }
++      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(bankDate) || !isValidDate(date) || concept.trim() === "") throw invalid;
++      if (negative) rows.push([date, (cents / 100).toFixed(2), "Sin categoría", quoteIfNeeded(concept.trim())].join(","));
++    });
++    if (rows.length > 0) {
++      const text = io.read(path as string);
++      io.write(path as string, `${text}${text.endsWith("\n") ? "" : "\n"}${rows.join("\n")}\n`);
++    }
++    return `Importados ${rows.length} gastos`;
++  },
+   presupuesto: ([path, category = "", amount = ""], io) => {
+     if (!path) throw new Error("Falta el fichero de presupuestos");
+     const cents = parseCents(amount);
+diff --git a/tests/importar.test.ts b/tests/importar.test.ts
+new file mode 100644
+index 0000000..de10ce9
+--- /dev/null
++++ b/tests/importar.test.ts
+@@ -0,0 +1,23 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const header = "fecha,importe,categoria,descripcion";
++const target = `${header}\n2026-03-01,3.00,Ocio,Cine\n`;
++const bank = "Fecha;Concepto;Importe\n09/03/2026;Bar Paco;-8,75\n10/03/2026;Nómina;1.850,00\n11/03/2026;Cena, con amigos;-1.200,5\n";
++
++it("appends only the expenses, as positive amounts, without category", () => {
++  const io = memoryIo({ "b.csv": bank, "g.csv": target });
++  expect(run(["importar", "b.csv", "g.csv"], io)).toEqual({ code: 0, output: "Importados 2 gastos" });
++  expect(io.files["g.csv"]).toBe(`${target}2026-03-09,8.75,Sin categoría,Bar Paco\n2026-03-11,1200.50,Sin categoría,"Cena, con amigos"\n`);
++});
++
++it.each([
++  ["Fecha;Concepto;Importe\n09/03/2026;Bar;-1,00\n31/02/2026;X;-2,00\n", "Línea 3 del banco no válida"],
++  ["Fecha;Concepto;Importe\n09/03/2026;Bar;abc\n", "Línea 2 del banco no válida"],
++  ["Fecha;Concepto;Importe\n09/03/2026;Bar\n", "Línea 2 del banco no válida"],
++])("imports nothing when a line is invalid", (content, message) => {
++  const io = memoryIo({ "b.csv": content, "g.csv": target });
++  expect(run(["importar", "b.csv", "g.csv"], io)).toEqual({ code: 1, output: message });
++  expect(io.files["g.csv"]).toBe(target);
++});

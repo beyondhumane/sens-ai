@@ -1,0 +1,91 @@
+diff --git a/README.md b/README.md
+index 276c190..9270cde 100644
+--- a/README.md
++++ b/README.md
+@@ -17,6 +17,7 @@ fecha,importe,categoria,descripcion
+ | --- | --- |
+ | `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios; `--desde` y `--hasta` incluyen el día indicado |
+ | `total <fichero>` | `Total: 57,70 €` |
++| `informe <fichero> --anio 2026` | El año, una línea por mes con gasto (`  Marzo: 149,85 €`, en orden de calendario) y `Total: …` |
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría (`  Ocio: 60,00 €`, de más a menos) y `Total: …` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index 3be0963..4049c3c 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { BUDGET_HEADER, HEADER, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
+-import { daysInMonth, formatDate,formatMonth, formatWeekday, isRealDate, weekOf } from "./date";
++import { daysInMonth, formatDate,formatMonth, formatMonthName, formatWeekday, isRealDate, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -90,6 +90,24 @@ const commands: Record<string, Command> = {
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   informe: (args, io) => {
++    const yearIndex = args.indexOf("--anio");
++    if (yearIndex !== -1) {
++      const year = args[yearIndex + 1];
++      if (!/^\d{4}$/.test(year ?? "")) throw new Error(`Año no válido: ${year ?? ""}`);
++      const expenses = load(args[0], io).filter((expense) => expense.date.startsWith(`${year}-`));
++      const byMonth = new Map<string, Expense[]>();
++      for (const expense of expenses) {
++        const month = expense.date.slice(0, 7);
++        byMonth.set(month, [...(byMonth.get(month) ?? []), expense]);
++      }
++      return [
++        year,
++        ...[...byMonth]
++          .sort(([a], [b]) => a.localeCompare(b))
++          .map(([month, list]) => `  ${formatMonthName(month)}: ${formatMoney(sumCents(list))}`),
++        `Total: ${formatMoney(sumCents(expenses))}`,
++      ].join("\n");
++    }
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Falta --mes");
+     const expenses = inMonth(load(args[0], io), month);
+diff --git a/src/date.ts b/src/date.ts
+index 0578a4d..a8c5003 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -7,6 +7,13 @@ export function formatMonth(month: string): string {
+   return text.charAt(0).toUpperCase() + text.slice(1);
+ }
+ 
++const monthNames = new Intl.DateTimeFormat("es-ES", { month: "long", timeZone: "UTC" });
++
++export function formatMonthName(month: string): string {
++  const text = monthNames.format(new Date(`${month}-01`));
++  return text.charAt(0).toUpperCase() + text.slice(1);
++}
++
+ export function daysInMonth(month: string): number {
+   const [year, number] = month.split("-").map(Number);
+   return new Date(Date.UTC(year, number, 0)).getUTCDate();
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 2d563ed..b0009f6 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -129,6 +129,20 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("reports a whole year month by month with --anio", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,100.00,Comida,Pan
++2026-02-02,30.00,Ocio,Cine
++2026-03-03,49.85,Comida,Cena
++2025-12-01,99.00,Ocio,Concierto
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["informe", "gastos.csv", "--anio", "2026"], io).output)).toBe(
++      "2026\n  Febrero: 30,00 €\n  Marzo: 149,85 €\nTotal: 179,85 €",
++    );
++    expect(run(["informe", "gastos.csv", "--anio", "26"], io)).toEqual({ code: 1, output: "Año no válido: 26" });
++  });
++
+   it("shows remaining or exceeded budget in the report", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

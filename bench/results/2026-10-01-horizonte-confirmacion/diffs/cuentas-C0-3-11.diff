@@ -1,0 +1,104 @@
+diff --git a/README.md b/README.md
+index 591a214..34d4c06 100644
+--- a/README.md
++++ b/README.md
+@@ -23,6 +23,7 @@ fecha,importe,categoria,descripcion
+ | `informe <fichero> --mes AAAA-MM` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato que el original, y responde `Exportados 5 gastos a marzo.csv`. La salida debe ser otro fichero distinto del original |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`; la fecha es `2026-03-19` y debe existir, el importe lleva punto decimal, es mayor que cero y tiene dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
++| `presupuesto <fichero-de-presupuestos> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV con cabecera `categoria,importe` (`Comida,100.00`); si el fichero no existe lo crea, y si la categoría ya estaba (sin distinguir mayúsculas ni acentos) cambia su importe y se queda con el nombre escrito. Importe y categoría se validan como en `añadir`. Responde `Presupuesto de Comida: 100,00 € al mes` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index ee35322..6fc7352 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { formatField, HEADER, parseExpenses } from "./csv";
++import { BUDGET_HEADER, formatField, HEADER, parseExpenses, parseRecords } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -88,6 +88,27 @@ const commands: Record<string, Command> = {
+     io.write(path, (text.endsWith("\n") ? text : `${text}\n`) + row);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, category = "", amount = ""] = args;
++    if (!path) throw new Error("Falta el fichero de presupuestos");
++    if (category.trim() === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    let rows: string[][] = [];
++    if (io.exists(path)) {
++      const [headerFields, ...records] = parseRecords(io.read(path).trim());
++      const header = headerFields.join(",");
++      if (header !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++      rows = records.filter((fields) => fields.some((field) => field.trim() !== ""));
++    }
++    const cents = Math.round(Number(amount) * 100);
++    const row = [category, (cents / 100).toFixed(2)];
++    const key = fold(category);
++    const index = rows.findIndex(([name]) => fold(name) === key);
++    if (index === -1) rows.push(row);
++    else rows[index] = row;
++    io.write(path, `${BUDGET_HEADER}\n${rows.map(([name, value]) => `${formatField(name)},${value}\n`).join("")}`);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   lista: (args, io) => {
+     const { date: since, rest: afterSince } = takeDate(args, "--desde");
+     const { date: until, rest } = takeDate(afterSince, "--hasta");
+diff --git a/src/csv.ts b/src/csv.ts
+index 1bf32a2..9465ab2 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -1,8 +1,9 @@
+ import type { Expense } from "./expense";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
++export const BUDGET_HEADER = "categoria,importe";
+ 
+-function parseRecords(text: string): string[][] {
++export function parseRecords(text: string): string[][] {
+   const records: string[][] = [];
+   let fields: string[] = [];
+   let field = "";
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 4f6ad68..a6e9f45 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -187,4 +187,34 @@ describe("cuentas", () => {
+     expect(run(["exportar", "gastos.csv", "gastos.csv", "--mes", "2026-03"], io).code).toBe(1);
+     expect(io.files["gastos.csv"]).toBe(gastos);
+   });
++
++  it("sets a monthly budget per category", () => {
++    const io = memoryIo({});
++    const ran = run(["presupuesto", "p.csv", "Comida", "100"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++    run(["presupuesto", "p.csv", "Ocio", "30.5"], io);
++    expect(shown(run(["presupuesto", "p.csv", "COMIDA", "120.25"], io).output)).toBe("Presupuesto de COMIDA: 120,25 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\nCOMIDA,120.25\nOcio,30.50\n");
++    run(["presupuesto", "p.csv", "ocio", "5"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nCOMIDA,120.25\nocio,5.00\n");
++    const accents = memoryIo({ "p.csv": "categoria,importe\nCafé,10.00\n" });
++    run(["presupuesto", "p.csv", "cafe", "12"], accents);
++    expect(accents.files["p.csv"]).toBe("categoria,importe\ncafe,12.00\n");
++  });
++
++  it("rejects invalid budgets without touching the file", () => {
++    const text = "categoria,importe\nComida,100.00\n";
++    const io = memoryIo({ "p.csv": text, "g.csv": GASTOS });
++    expect(run(["presupuesto", "p.csv", "Comida", "-3"], io)).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(run(["presupuesto", "p.csv", "Comida", "0"], io)).toEqual({ code: 1, output: "Importe no válido: 0" });
++    expect(run(["presupuesto", "p.csv", "Comida", "1.234"], io).code).toBe(1);
++    expect(run(["presupuesto", "p.csv", "Comida"], io)).toEqual({ code: 1, output: "Importe no válido: " });
++    expect(run(["presupuesto", "p.csv", "A,B", "5"], io)).toEqual({ code: 1, output: "Categoría no válida: A,B" });
++    expect(run(["presupuesto", "g.csv", "Comida", "5"], io).code).toBe(1);
++    expect(io.files["p.csv"]).toBe(text);
++    expect(io.files["g.csv"]).toBe(GASTOS);
++    expect(run(["presupuesto"], io)).toEqual({ code: 1, output: "Falta el fichero de presupuestos" });
++  });
+ });

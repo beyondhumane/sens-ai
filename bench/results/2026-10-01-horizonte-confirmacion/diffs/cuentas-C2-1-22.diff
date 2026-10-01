@@ -1,0 +1,56 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index e45edf7..dda98f9 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -250,6 +250,22 @@ const commands: Record<string, Command> = {
+       .map(([first, ...rest]) => `${rest.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`);
+     return lines.length === 0 ? "Sin duplicados" : lines.join("\n");
+   },
++  renombrar: ([path, category = "", renamed = ""], io) => {
++    load(path, io);
++    checkCategory(renamed);
++    const [header, ...rows] = io.read(path as string).trim().split(/\r?\n/);
++    let count = 0;
++    const updated = rows
++      .filter((row) => row.trim() !== "")
++      .map((row) => {
++        const [date, amount, current, ...rest] = row.split(",");
++        if (fold(current) !== fold(category)) return row;
++        count++;
++        return [date, amount, renamed, ...rest].join(",");
++      });
++    io.write(path as string, `${[header, ...updated].join("\n")}\n`);
++    return `Renombrados ${count} gastos`;
++  },
+   categorias: (args, io) => {
+     return [...sumByCategory(load(args[0], io))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
+   },
+diff --git a/tests/renombrar.test.ts b/tests/renombrar.test.ts
+new file mode 100644
+index 0000000..1f4d02b
+--- /dev/null
++++ b/tests/renombrar.test.ts
+@@ -0,0 +1,23 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++it("renames the category ignoring case and accents, and saves the file", () => {
++  const io = memoryIo({
++    "g.csv": [HEADER, "2026-03-09,8.75,Ocio,\"Café, con Ana\"", "2026-03-10,5.00,OCIO,Cine", "2026-03-11,3.00,ócio,Té", "2026-03-12,4.00,Comida,Pan"].join("\n"),
++  });
++  expect(run(["renombrar", "g.csv", "ocio", "Ocio y cultura"], io)).toEqual({ code: 0, output: "Renombrados 3 gastos" });
++  expect(io.read("g.csv")).toBe(
++    [HEADER, "2026-03-09,8.75,Ocio y cultura,\"Café, con Ana\"", "2026-03-10,5.00,Ocio y cultura,Cine", "2026-03-11,3.00,Ocio y cultura,Té", "2026-03-12,4.00,Comida,Pan"].join("\n") + "\n",
++  );
++});
++
++it("rejects an invalid new category", () => {
++  const io = memoryIo({ "g.csv": [HEADER, "2026-03-09,8.75,Ocio,Café"].join("\n") });
++  expect(run(["renombrar", "g.csv", "Ocio", "A,B"], io)).toEqual({ code: 1, output: "Categoría no válida: A,B" });
++});
++
++it("requires the file", () => {
++  expect(run(["renombrar"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++});

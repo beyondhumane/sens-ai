@@ -1,0 +1,54 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 4fbc9c8..53faaea 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -209,7 +209,25 @@ const commands: Record<string, Command> = {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+     if (flag !== -1 && !budgetPath) throw new Error("Falta el fichero de presupuestos");
+-    const { month, file } = parseMonthFlag(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
++    const rest = flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1);
++    const yearFlag = rest.indexOf("--anio");
++    if (yearFlag !== -1) {
++      const year = rest[yearFlag + 1] ?? "";
++      if (!/^\d{4}$/.test(year)) throw new Error(`Año no válido: ${year}`);
++      const file = rest.find((_, index) => index !== yearFlag && index !== yearFlag + 1);
++      const expenses = load(file, io).filter((expense) => expense.date.startsWith(`${year}-`));
++      const perMonth = new Map<number, number>();
++      for (const { date, cents } of expenses) {
++        const number = Number(date.slice(5, 7));
++        perMonth.set(number, (perMonth.get(number) ?? 0) + cents);
++      }
++      return [
++        year,
++        ...[...perMonth].sort(([a], [b]) => a - b).map(([number, cents]) => `  ${MONTHS[number - 1]}: ${formatMoney(cents)}`),
++        `Total: ${formatMoney(sumCents(expenses))}`,
++      ].join("\n");
++    }
++    const { month, file } = parseMonthFlag(rest);
+     if (month === undefined) throw new Error("Falta el mes");
+     const budgets = budgetPath ? parseBudgets(io.read(budgetPath)) : [];
+     const expenses = load(file, io).filter((expense) => expense.date.startsWith(`${month}-`));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index b1ef638..811bb3d 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -171,6 +171,18 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("reports a year month by month in calendar order, with the total", () => {
++    const gastos = `${GASTOS}2026-03-05,92.15,Ocio,Cine
++2026-02-10,30.00,Comida,Cena
++2025-12-31,5.00,Comida,Pan
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["informe", "gastos.csv", "--anio", "2026"], io).output)).toBe(
++      "2026\n  Febrero: 30,00 €\n  Marzo: 149,85 €\nTotal: 179,85 €",
++    );
++    expect(run(["informe", "gastos.csv", "--anio", "26"], io)).toEqual({ code: 1, output: "Año no válido: 26" });
++  });
++
+   it("averages a month per day counting every day of the month", () => {
+     const gastos = `${GASTOS}2026-04-01,99.00,Viajes,Tren
+ `;

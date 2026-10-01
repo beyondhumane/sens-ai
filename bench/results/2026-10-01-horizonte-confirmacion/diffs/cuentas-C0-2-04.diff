@@ -1,0 +1,66 @@
+diff --git a/README.md b/README.md
+index de1e58e..3002a7e 100644
+--- a/README.md
++++ b/README.md
+@@ -16,6 +16,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios |
++| `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index c7dded5..e6beaf2 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -20,11 +20,24 @@ function formatDate(iso: string): string {
+   return `${day}/${month}/${year}`;
+ }
+ 
++function formatLine(expense: Expense): string {
++  return [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
++}
++
++function fold(text: string): string {
++  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
++}
++
+ const commands:Record<string, Command> = {
+-  lista: (args, io) =>
+-    load(args[0], io)
+-      .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+-      .join("\n"),
++  lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
++  buscar: (args, io) => {
++    const expenses = load(args[0], io);
++    const text = args[1];
++    if (text === undefined) throw new Error("Falta el texto a buscar");
++    const needle = fold(text);
++    const found = expenses.filter((expense) => fold(expense.description).includes(needle));
++    return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--mes");
+     const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index e901b63..4c583de 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -45,6 +45,16 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nCasa: 10,00 €\nZapatos: 10,00 €");
+   });
+ 
++  it("searches descriptions ignoring case and accents", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["buscar", "gastos.csv", "cafe"], io()).output)).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
++    expect(shown(run(["buscar", "gastos.csv", "GASOLINA"], io()).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++    expect(run(["buscar", "gastos.csv", "zzz"], io())).toEqual({ code: 0, output: "Sin resultados" });
++    expect(run(["buscar", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el texto a buscar" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

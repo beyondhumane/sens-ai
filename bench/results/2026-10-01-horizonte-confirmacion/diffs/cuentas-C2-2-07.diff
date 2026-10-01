@@ -1,0 +1,109 @@
+diff --git a/README.md b/README.md
+index c3abd37..276c190 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios; `--desde` y `--hasta` incluyen el día indicado |
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría (`  Ocio: 60,00 €`, de más a menos) y `Total: …` |
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 0316957..c8b1fb7 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { parseExpenses } from "./csv";
+-import { formatDate, formatMonth } from "./date";
++import { formatDate, formatMonth, isRealDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -33,7 +33,15 @@ function monthFlag(args: string[]): string | undefined {
+   return month;
+ }
+ 
+-const inMonth = (expenses: Expense[], month: string | undefined) =>
++function dateFlag(args: string[], name: string): string | undefined {
++  const flag = args.indexOf(name);
++  if (flag === -1) return undefined;
++  const date = args[flag + 1] ?? "";
++  if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++  return date;
++}
++
++const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
+ const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+@@ -47,7 +55,14 @@ function categoryTotals(expenses: Expense[]): [string, number][] {
+ }
+ 
+ const commands: Record<string, Command> = {
+-  lista: (args, io) => load(args[0], io).map(line).join("\n"),
++  lista: (args, io) => {
++    const from = dateFlag(args, "--desde");
++    const to = dateFlag(args, "--hasta");
++    return load(args[0], io)
++      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .map(line)
++      .join("\n");
++  },
+   buscar: (args, io) => {
+     const needle = plain(args.slice(1).join(" "));
+     const found = load(args[0], io).filter((expense) => plain(expense.description).includes(needle));
+@@ -73,10 +88,7 @@ const commands: Record<string, Command> = {
+     if (!path || date === undefined || amount === undefined || !category || !description) {
+       throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+     }
+-    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date) : undefined;
+-    if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+-      throw new Error(`Fecha no válida: ${date}`);
+-    }
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
+     const cents = Math.round(Number(amount) * 100);
+     if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
+     if (/[,\r\n]/.test(category) || /[\r\n]/.test(description)) throw new Error("Categoría o descripción no válidas");
+diff --git a/src/date.ts b/src/date.ts
+index 7b727e9..545fa02 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -7,6 +7,12 @@ export function formatMonth(month: string): string {
+   return text.charAt(0).toUpperCase() + text.slice(1);
+ }
+ 
++export function isRealDate(iso: string): boolean {
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
++  const parsed = new Date(iso);
++  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso;
++}
++
+ export function formatDate(iso: string): string {
+   return dates.format(new Date(iso));
+ }
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f621cb2..6859c58 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,18 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("filters the list by inclusive date range", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const list = (...flags: string[]) => shown(run(["lista", "gastos.csv", ...flags], io).output);
++    expect(list("--desde", "2026-03-02")).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++    expect(list("--hasta", "2026-03-01")).toBe("01/03/2026  Comida  12,50 €  Pan y fruta");
++    expect(list("--desde", "2026-03-01", "--hasta", "2026-03-02").split("\n")).toHaveLength(2);
++    expect(run(["lista", "gastos.csv", "--hasta", "2026-03-32"], io)).toEqual({
++      code: 1,
++      output: "Fecha no válida: 2026-03-32",
++    });
++  });
++
+   it("appends a valid expense to the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

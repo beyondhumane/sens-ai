@@ -1,0 +1,71 @@
+diff --git a/README.md b/README.md
+index 2741d79..9cf1435 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ fecha,importe,categoria,descripcion
+ | `avisos <fichero> <presupuestos> --mes AAAA-MM` | Las categorías que ese mes se pasan de su presupuesto (el CSV de `presupuesto`, emparejando sin distinguir mayúsculas ni acentos), de la que más se pasa a la que menos (empates por orden alfabético), con el nombre como está en los gastos: `Ocio: te pasas 5,00 €`. `Todo en orden` si ninguna se pasa. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no haya gasto, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin contar mayúsculas, acentos ni espacios de más. Una línea por grupo, con cuántas veces sale y el primero del grupo (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
++| `resumen <fichero>` | Cuatro líneas: `Gastos: 12`, `Desde 03/01/2026 hasta 28/02/2026` (del primer al último día), `Total: 412,30 €` y `Mayor: 120,00 € en Seguro del coche (15/01/2026)` (el gasto más grande; si hay varios iguales, el primero del fichero). `Sin gastos` si el fichero no tiene ninguno |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos. Con `--formato banco` escribe `Fecha;Concepto;Importe` con fechas `09/03/2026` e importes en negativo con coma (`-8,75`); otro formato da `Formato no válido: pdf` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 7dc7efd..a6f8234 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -351,6 +351,26 @@ const commands:Record<string, Command> = {
+       .map(({ name, over }) => `${name}: te pasas ${formatMoney(over)}`);
+     return lines.length === 0 ? "Todo en orden" : lines.join("\n");
+   },
++  resumen: (args, io) => {
++    const expenses = load(args[0], io);
++    if (expenses.length === 0) return "Sin gastos";
++    let biggest = expenses[0];
++    let first = expenses[0].date;
++    let last = expenses[0].date;
++    let total = 0;
++    for (const expense of expenses) {
++      if (expense.cents > biggest.cents) biggest = expense;
++      if (expense.date < first) first = expense.date;
++      if (expense.date > last) last = expense.date;
++      total += expense.cents;
++    }
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(first)} hasta ${formatDate(last)}`,
++      `Total: ${formatMoney(total)}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   informe: (args, io) => {
+     const { rest: afterBudgets, budgetPath } = budgetArgs(args);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6c70df8..950d7f6 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -393,3 +393,23 @@ describe("duplicados", () => {
+     expect(run(["duplicados", "g.csv"], memoryIo({ "g.csv": GASTOS }))).toEqual({ code: 0, output: "Sin duplicados" });
+   });
+ });
++
++describe("resumen", () => {
++  it("summarises count, date range, total and the biggest expense (first on ties)", () => {
++    const io = memoryIo({
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-02-28,20.00,Ocio,Cine
++2026-01-15,120.00,Coche,Seguro del coche
++2026-01-03,120.00,Casa,Otro
++`,
++    });
++    expect(shown(run(["resumen", "g.csv"], io).output)).toBe(
++      "Gastos: 3\nDesde 03/01/2026 hasta 28/02/2026\nTotal: 260,00 €\nMayor: 120,00 € en Seguro del coche (15/01/2026)",
++    );
++  });
++
++  it("says so when there are no expenses", () => {
++    const io = memoryIo({ "g.csv": "fecha,importe,categoria,descripcion\n" });
++    expect(run(["resumen", "g.csv"], io)).toEqual({ code: 0, output: "Sin gastos" });
++  });
++});

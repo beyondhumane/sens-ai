@@ -1,0 +1,55 @@
+diff --git a/README.md b/README.md
+index 12f10bd..de1e58e 100644
+--- a/README.md
++++ b/README.md
+@@ -16,7 +16,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios |
+-| `total <fichero>` | `Total: 57,70 €` |
++| `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index 747d1e8..c7dded5 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -25,7 +25,14 @@ const commands:Record<string, Command> = {
+     load(args[0], io)
+       .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  total: (args, io) => {
++    const flag = args.indexOf("--mes");
++    const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
++    if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++    const path = args.find((_, i) => flag === -1 || (i !== flag && i !== flag + 1));
++    const expenses = load(path, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index edd99de..e901b63 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -20,6 +20,17 @@ describe("cuentas", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });
+ 
++  it("adds up only the requested month", () => {
++    const gastos = `${GASTOS}2026-04-01,10.00,Ocio,Cine
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-03"], io()).output)).toBe("Total: 57,70 €");
++    expect(shown(run(["total", "--mes", "2026-04", "gastos.csv"], io()).output)).toBe("Total: 10,00 €");
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-05"], io()).output)).toBe("Total: 0,00 €");
++    expect(shown(run(["total", "gastos.csv"], io()).output)).toBe("Total: 67,70 €");
++    expect(run(["total", "gastos.csv", "--mes", "2026-13"], io())).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("sums each category, biggest first, ties alphabetical", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan y fruta

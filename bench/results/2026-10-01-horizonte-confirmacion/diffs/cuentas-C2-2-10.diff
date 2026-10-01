@@ -1,0 +1,32 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 171a522..7adddc8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -65,7 +65,9 @@ const commands: Record<string, Command> = {
+   },
+   buscar: (args, io) => {
+     const needle = plain(args.slice(1).join(" "));
+-    const found = load(args[0], io).filter((expense) => plain(expense.description).includes(needle));
++    const found = load(args[0], io).filter(
++      (expense) => plain(expense.description).includes(needle) || plain(expense.category).includes(needle),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+   },
+   total: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index ffa739a..ed5bfc1 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -118,6 +118,12 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
+   });
+ 
++  it("searches by category too", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,Transporte,Billete\n`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["buscar", "gastos.csv", "TRANSPORTE"], io).output)).toContain("03/03/2026  Transporte  3,00 €  Billete");
++  });
++
+   it("exports only the requested month with the same format", () => {
+     const gastos = `${GASTOS}2026-04-01,3.00,Ocio,"Cine, con amigos"\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

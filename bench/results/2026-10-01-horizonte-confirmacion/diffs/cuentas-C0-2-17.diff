@@ -1,0 +1,63 @@
+diff --git a/README.md b/README.md
+index deb53be..371b412 100644
+--- a/README.md
++++ b/README.md
+@@ -21,6 +21,7 @@ fecha,importe,categoria,descripcion
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto (emparejadas sin distinguir mayúsculas ni acentos) dicen cuánto queda o cuánto te pasas: `Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`; las demás no cambian |
++| `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no haya gasto, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+diff --git a/src/cli.ts b/src/cli.ts
+index a2a6c49..3990c9f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -254,6 +254,18 @@ const commands:Record<string, Command> = {
+     }
+     return [...lines, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  media: (args, io) => {
++    const { path, rest, month } = monthArgs(args);
++    if (month === undefined) throw new Error("Falta el mes: --mes AAAA-MM");
++    if (rest.length > 1) throw new Error("Uso: media <fichero> --mes AAAA-MM");
++    const [year, number] = month.split("-");
++    const days = new Date(Date.UTC(Number(year), Number(number), 0)).getUTCDate();
++    const total = load(path, io)
++      .filter((expense) => expense.date.startsWith(`${month}-`))
++      .reduce((sum, expense) => sum + expense.cents, 0);
++    const average = Math.floor((2 * total + days) / (2 * days));
++    return `Media diaria en ${MONTHS[Number(number) - 1].toLowerCase()} de ${year}: ${formatMoney(average)}`;
++  },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   informe: (args, io) => {
+     const { rest, budgetPath } = budgetArgs(args);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 3bbbaba..b6ba2bb 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -101,6 +101,23 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv"], io()).code).toBe(1);
+   });
+ 
++  it("averages the daily spending of a month over all its days", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,100.00,Comida,Compra
++2026-03-15,49.73,Ocio,Cine
++2026-04-04,30.00,Ocio,Concierto
++2028-02-10,0.30,Casa,Clavo
++`;
++    const media = (...args: string[]) => shown(run(["media", "gastos.csv", ...args], memoryIo({ "gastos.csv": gastos })).output);
++    expect(media("--mes", "2026-03")).toBe("Media diaria en marzo de 2026: 4,83 €");
++    expect(media("--mes", "2026-04")).toBe("Media diaria en abril de 2026: 1,00 €");
++    expect(media("--mes", "2026-05")).toBe("Media diaria en mayo de 2026: 0,00 €");
++    expect(media("--mes", "2028-02")).toBe("Media diaria en febrero de 2028: 0,01 €");
++    expect(run(["media", "--mes", "2026-03", "gastos.csv"], memoryIo({ "gastos.csv": gastos })).code).toBe(0);
++    expect(media("--mes", "2026-13")).toBe("Mes no válido: 2026-13");
++    expect(media()).toBe("Falta el mes: --mes AAAA-MM");
++  });
++
+   it("shows what is left or exceeded for categories with a budget", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan y fruta

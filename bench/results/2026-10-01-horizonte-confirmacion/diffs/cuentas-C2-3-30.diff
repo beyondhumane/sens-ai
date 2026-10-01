@@ -1,0 +1,75 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 987f776..ad8ea66 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -102,6 +102,16 @@ function parseRangeFlags(args: string[]): {
+   return { from: dates["--desde"], to: dates["--hasta"], file: positional[0], positional };
+ }
+ 
++function parseCategoryFlag(args: string[]): { category: string | undefined; rest: string[] } {
++  const flag = args.indexOf("--categoria");
++  const category = flag === -1 ? undefined : args[flag + 1];
++  if (flag !== -1 && !category) throw new Error("Falta la categoría");
++  return { category, rest: flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1) };
++}
++
++const inCategory = (expense: Expense, category: string | undefined) =>
++  category === undefined || plain(expense.category) === plain(category);
++
+ const inRange = (expense: Expense, from: string | undefined, to: string | undefined) =>
+   (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to);
+ 
+@@ -118,9 +128,10 @@ const commands: Record<string, Command> = {
+     const flag = args.indexOf("--orden");
+     const order = flag === -1 ? "fecha" : args[flag + 1] ?? "";
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+-    const { from, to, file } = parseRangeFlags(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
++    const { category, rest } = parseCategoryFlag(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
++    const { from, to, file } = parseRangeFlags(rest);
+     return load(file, io)
+-      .filter((expense) => inRange(expense, from, to))
++      .filter((expense) => inRange(expense, from, to) && inCategory(expense, category))
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+@@ -190,14 +201,10 @@ const commands: Record<string, Command> = {
+     return `Renombrados ${count} gastos`;
+   },
+   total: (args, io) => {
+-    const flag = args.indexOf("--categoria");
+-    const category = flag === -1 ? undefined : args[flag + 1];
+-    if (flag !== -1 && !category) throw new Error("Falta la categoría");
+-    const { month, file } = parseMonthFlag(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
++    const { category, rest } = parseCategoryFlag(args);
++    const { month, file } = parseMonthFlag(rest);
+     const expenses = load(file, io).filter(
+-      (expense) =>
+-        (month === undefined || expense.date.startsWith(`${month}-`)) &&
+-        (category === undefined || plain(expense.category) === plain(category)),
++      (expense) => (month === undefined || expense.date.startsWith(`${month}-`)) && inCategory(expense, category),
+     );
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c88475c..8a9043f 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -28,6 +28,18 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--orden"], io)).toEqual({ code: 1, output: "Orden no válido: " });
+   });
+ 
++  it("filters the list with --categoria, ignoring case and accents, combinable with --desde, --hasta and --orden", () => {
++    const io = memoryIo({
++      "gastos.csv":
++        "fecha,importe,categoria,descripcion\n2026-03-01,9.00,Comida,A\n2026-03-05,5.00,Ocio,B\n2026-03-07,7.00,Comida,C\n2026-03-09,20.00,Comida,D\n",
++    });
++    const names = (args: string[]) => shown(run(["lista", ...args], io).output).split("\n").map((line) => line.slice(-1));
++    expect(names(["gastos.csv", "--categoria", "cómida"])).toEqual(["A", "C", "D"]);
++    expect(names(["--categoria", "COMIDA", "gastos.csv", "--desde", "2026-03-02", "--hasta", "2026-03-08"])).toEqual(["C"]);
++    expect(names(["gastos.csv", "--categoria", "Comida", "--orden", "importe"])).toEqual(["D", "A", "C"]);
++    expect(run(["lista", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("filters the list with --desde and --hasta, both days included", () => {
+     const gastos = `${GASTOS}2026-03-15,3.00,Comida,Café
+ 2026-03-16,5.00,Ocio,Cine

@@ -1,0 +1,70 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 444f376..8d0d688 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { BUDGET_HEADER, parseExpenses, quoteIfNeeded, readBudgetRows } from "./csv";
+-import { formatDate, formatMonth, isValidDate, weekOf } from "./date";
++import { formatDate, formatMonth, isValidDate, monthName, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -111,6 +111,20 @@ const commands: Record<string, Command> = {
+     const budgetPath = flag === -1 ? undefined : rawArgs[flag + 1];
+     if (flag !== -1 && !budgetPath) throw new Error("Falta el fichero de presupuestos");
+     const args = rawArgs.filter((_, i) => i !== flag && i !== flag + 1 || flag === -1);
++    const yearFlag = args.indexOf("--anio");
++    if (yearFlag !== -1) {
++      const year = args[yearFlag + 1] ?? "";
++      if (!/^\d{4}$/.test(year)) throw new Error(`Año no válido: ${year}`);
++      const yearExpenses = load(args.find((_, i) => i !== yearFlag && i !== yearFlag + 1), io).filter((expense) => expense.date.startsWith(`${year}-`));
++      const byMonth = new Map<string, number>();
++      for (const expense of yearExpenses) {
++        const month = expense.date.slice(5, 7);
++        byMonth.set(month, (byMonth.get(month) ?? 0) + expense.cents);
++      }
++      const monthLines = [...byMonth].sort(([a], [b]) => a.localeCompare(b)).map(([month, cents]) => `  ${monthName(month)}: ${formatMoney(cents)}`);
++      const yearTotal = yearExpenses.reduce((sum, expense) => sum + expense.cents, 0);
++      return [year, ...monthLines, `Total: ${formatMoney(yearTotal)}`].join("\n");
++    }
+     const { path, month } = withMonth(args);
+     if (month === undefined) throw new Error("Falta el mes (--mes AAAA-MM)");
+     const expenses = inMonth(load(path, io), month);
+diff --git a/src/date.ts b/src/date.ts
+index d91bcc7..b47bd7e 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -31,7 +31,11 @@ export function formatDate(iso: string): string {
+   return `${day}/${month}/${year}`;
+ }
+ 
++export function monthName(month: string): string {
++  return MONTHS[Number(month) - 1];
++}
++
+ export function formatMonth(yearMonth: string): string {
+   const [year, month] = yearMonth.split("-");
+-  return `${MONTHS[Number(month) - 1]} de ${year}`;
++  return `${monthName(month)} de ${year}`;
+ }
+diff --git a/tests/informe.test.ts b/tests/informe.test.ts
+index 0d6e0fc..975056f 100644
+--- a/tests/informe.test.ts
++++ b/tests/informe.test.ts
+@@ -34,6 +34,16 @@ it("leaves categories without a budget unchanged", () => {
+   expect(clean(output)).toBe("Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 € de 100,00 € (quedan 55,35 €)\nTotal: 104,65 €");
+ });
+ 
++it("lists each month with spending in calendar order, then the year total", () => {
++  const { code, output } = informe("g.csv", "--anio", "2026");
++  expect(code).toBe(0);
++  expect(clean(output)).toBe("2026\n  Febrero: 10,00 €\n  Marzo: 104,65 €\nTotal: 114,65 €");
++});
++
++it("rejects an invalid year", () => {
++  expect(informe("g.csv", "--anio", "26")).toEqual({ code: 1, output: "Año no válido: 26" });
++});
++
+ it("requires a valid month", () => {
+   expect(informe("g.csv")).toEqual({ code: 1, output: "Falta el mes (--mes AAAA-MM)" });
+   expect(informe("g.csv", "--mes", "2026-13")).toEqual({ code: 1, output: "Mes no válido: 2026-13" });

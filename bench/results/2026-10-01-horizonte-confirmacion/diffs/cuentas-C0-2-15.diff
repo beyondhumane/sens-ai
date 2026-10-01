@@ -1,0 +1,119 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 125274f..df60a64 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,7 +1,7 @@
+ import { BUDGET_HEADER, escapeField, HEADER, parseBudgets, parseExpenses } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+-import { formatMoney } from "./money";
++import { formatMoney, parseAmount } from "./money";
+ 
+ export interface Ran {
+   code: number;
+@@ -95,14 +95,14 @@ const commands:Record<string, Command> = {
+       throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+     }
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
+-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const cents = parseAmount(amount);
++    if (cents === undefined) throw new Error(`Importe no válido: ${amount}`);
+     if (category.trim() === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
+     const description = words.join(" ").replace(/\s+/g, " ").trim();
+     if (description === "") throw new Error("Falta la descripción");
+     if (!io.exists(path)) throw new Error(`No existe ${path}`);
+     const text = io.read(path);
+     parseExpenses(text);
+-    const cents = Math.round(Number(amount) * 100);
+     const eol = text.includes("\r\n") ? "\r\n" : "\n";
+     const row = `${date},${(cents / 100).toFixed(2)},${category},${escapeField(description)}`;
+     io.write(path, `${text}${text === "" || /\n$/.test(text) ? "" : eol}${row}${eol}`);
+@@ -114,11 +114,11 @@ const commands:Record<string, Command> = {
+     if (category === undefined || amount === undefined || extra.length > 0) {
+       throw new Error("Uso: presupuesto <fichero> <categoría> <importe>");
+     }
+-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const cents = parseAmount(amount);
++    if (cents === undefined) throw new Error(`Importe no válido: ${amount}`);
+     if (category.trim() === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
+     const text = io.exists(path) ? io.read(path) : "";
+     const rows = io.exists(path) ? parseBudgets(text) : [];
+-    const cents = Math.round(Number(amount) * 100);
+     const row = [category, (cents / 100).toFixed(2)];
+     const index = rows.findIndex(([name]) => fold(name) === fold(category));
+     if (index === -1) rows.push(row);
+diff --git a/src/money.ts b/src/money.ts
+index 6a62781..7846eb4 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -1,5 +1,18 @@
+ const euros = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+ 
++export function parseAmount(text: string): number | undefined {
++  let plain: string;
++  if (text.includes(",")) {
++    if (!/^(\d+|\d{1,3}(\.\d{3})+),\d{1,2}$/.test(text)) return undefined;
++    plain = text.replace(/\./g, "").replace(",", ".");
++  } else {
++    if (!/^\d+(\.\d{1,2})?$/.test(text)) return undefined;
++    plain = text;
++  }
++  const cents = Math.round(Number(plain) * 100);
++  return cents > 0 ? cents : undefined;
++}
++
+ export function formatMoney(cents: number): string {
+   return euros.format(cents / 100);
+ }
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 5cc63b0..0119659 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -143,6 +143,15 @@ describe("cuentas", () => {
+     expect(io.files["sin-salto.csv"]).toBe(`${GASTOS}2024-02-29,3.00,Ocio,Cine\n`);
+   });
+ 
++  it("accepts a comma amount, with dots as thousands", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    run(["añadir", "gastos.csv", "2026-03-19", "4,20", "Comida", "Churros"], io);
++    run(["añadir", "gastos.csv", "2026-03-20", "1.234,56", "Ocio", "Concierto"], io);
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros\n2026-03-20,1234.56,Ocio,Concierto\n`);
++    expect(shown(run(["presupuesto", "p.csv", "Comida", "1.234,5"], io).output)).toBe("Presupuesto de Comida: 1234,50 € al mes");
++    expect(io.files["p.csv"]).toContain("Comida,1234.50");
++  });
++
+   it("rejects bad expenses without touching the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const add = (...rest: string[]) => run(["añadir", "gastos.csv", ...rest], io);
+@@ -151,7 +160,8 @@ describe("cuentas", () => {
+     expect(add("2026-03-19", "-3", "Comida", "x")).toEqual({ code: 1, output: "Importe no válido: -3" });
+     expect(add("2026-03-19", "0", "Comida", "x").output).toBe("Importe no válido: 0");
+     expect(add("2026-03-19", "1.005", "Comida", "x").output).toBe("Importe no válido: 1.005");
+-    expect(add("2026-03-19", "4,20", "Comida", "x").output).toBe("Importe no válido: 4,20");
++    expect(add("2026-03-19", "4,205", "Comida", "x").output).toBe("Importe no válido: 4,205");
++    expect(add("2026-03-19", "1,234.56", "Comida", "x").output).toBe("Importe no válido: 1,234.56");
+     expect(add("2026-03-19", "4.20", "Co,mida", "x").code).toBe(1);
+     expect(add("2026-03-19", "4.20", "Comida").code).toBe(1);
+     expect(run(["añadir", "otro.csv", "2026-03-19", "4.20", "Comida", "x"], io).output).toBe("No existe otro.csv");
+diff --git a/tests/money.test.ts b/tests/money.test.ts
+index 03536cc..7ee9219 100644
+--- a/tests/money.test.ts
++++ b/tests/money.test.ts
+@@ -1,5 +1,16 @@
+ import { expect, it } from "vitest";
+-import { formatMoney } from "../src/money";
++import { formatMoney, parseAmount } from "../src/money";
++
++it("reads amounts with comma or dot decimals", () => {
++  expect(parseAmount("4,20")).toBe(420);
++  expect(parseAmount("1.234,56")).toBe(123456);
++  expect(parseAmount("1234,5")).toBe(123450);
++  expect(parseAmount("4.20")).toBe(420);
++  expect(parseAmount("4")).toBe(400);
++  for (const bad of ["1.234", "1,234.56", "12.34,5", "4,", ",50", "0,00", "-1,00", "1,234", "abc"]) {
++    expect(parseAmount(bad)).toBeUndefined();
++  }
++});
+ 
+ it("writes euros the Spanish way", () => {
+   expect(formatMoney(1250).replace(/ /g, " ")).toBe("12,50 €");

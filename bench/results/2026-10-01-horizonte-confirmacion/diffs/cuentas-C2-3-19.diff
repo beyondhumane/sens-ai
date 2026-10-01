@@ -1,0 +1,42 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 53faaea..8762760 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -104,9 +104,13 @@ function categoryTotals(expenses: Expense[]): [string, number][] {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+-    const { from, to, file } = parseRangeFlags(args);
++    const flag = args.indexOf("--orden");
++    const order = flag === -1 ? "fecha" : args[flag + 1] ?? "";
++    if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
++    const { from, to, file } = parseRangeFlags(flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1));
+     return load(file, io)
+       .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 811bb3d..930074e 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,18 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("sorts the list by date (stable) or by amount with --orden", () => {
++    const io = memoryIo({
++      "gastos.csv": "fecha,importe,categoria,descripcion\n2026-03-05,5.00,Ocio,B\n2026-03-01,9.00,Comida,A\n2026-03-05,7.00,Ocio,C\n",
++    });
++    const names = (args: string[]) => shown(run(["lista", ...args], io).output).split("\n").map((line) => line.slice(-1));
++    expect(names(["gastos.csv"])).toEqual(["A", "B", "C"]);
++    expect(names(["gastos.csv", "--orden", "fecha"])).toEqual(["A", "B", "C"]);
++    expect(names(["--orden", "importe", "gastos.csv"])).toEqual(["A", "C", "B"]);
++    expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
++    expect(run(["lista", "gastos.csv", "--orden"], io)).toEqual({ code: 1, output: "Orden no válido: " });
++  });
++
+   it("filters the list with --desde and --hasta, both days included", () => {
+     const gastos = `${GASTOS}2026-03-15,3.00,Comida,Café
+ 2026-03-16,5.00,Ocio,Cine

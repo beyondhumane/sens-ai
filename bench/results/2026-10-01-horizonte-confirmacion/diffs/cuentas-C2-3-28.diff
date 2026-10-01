@@ -1,0 +1,52 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index e059a40..c56c7e3 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -305,7 +305,11 @@ const commands: Record<string, Command> = {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+     if (flag !== -1 && !budgetPath) throw new Error("Falta el fichero de presupuestos");
+-    const rest = flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1);
++    const withoutBudgets = flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1);
++    const csvFlag = withoutBudgets.indexOf("--csv");
++    const csvPath = csvFlag === -1 ? undefined : withoutBudgets[csvFlag + 1];
++    if (csvFlag !== -1 && !csvPath) throw new Error("Falta el fichero de salida");
++    const rest = csvFlag === -1 ? withoutBudgets : withoutBudgets.filter((_, index) => index !== csvFlag && index !== csvFlag + 1);
+     const yearFlag = rest.indexOf("--anio");
+     if (yearFlag !== -1) {
+       const year = rest[yearFlag + 1] ?? "";
+@@ -335,9 +339,11 @@ const commands: Record<string, Command> = {
+       const verdict = left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`;
+       return `${formatMoney(cents)} de ${formatMoney(budget.cents)} (${verdict})`;
+     };
++    const totals = categoryTotals(expenses);
++    if (csvPath) io.write(csvPath, `categoria,total\n${totals.map(([category, cents]) => `${category},${(cents / 100).toFixed(2)}\n`).join("")}`);
+     return [
+       `${MONTHS[Number(number) - 1]} de ${year}`,
+-      ...categoryTotals(expenses).map(([category, cents]) => `  ${category}: ${describe(category, cents)}`),
++      ...totals.map(([category, cents]) => `  ${category}: ${describe(category, cents)}`),
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 071eedd..78c1a6e 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -201,6 +201,17 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("saves the monthly report as CSV with --csv", () => {
++    const gastos = `${GASTOS}2026-03-05,60.00,Ocio,Cine
++2026-03-06,32.15,Comida,Cena
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    const ran = run(["informe", "gastos.csv", "--mes", "2026-03", "--csv", "out.csv"], io);
++    expect(shown(ran.output)).toBe("Marzo de 2026\n  Ocio: 60,00 €\n  Transporte: 45,20 €\n  Comida: 44,65 €\nTotal: 149,85 €");
++    expect(io.files["out.csv"]).toBe("categoria,total\nOcio,60.00\nTransporte,45.20\nComida,44.65\n");
++    expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--csv"], io)).toEqual({ code: 1, output: "Falta el fichero de salida" });
++  });
++
+   it("reports a year month by month in calendar order, with the total", () => {
+     const gastos = `${GASTOS}2026-03-05,92.15,Ocio,Cine
+ 2026-02-10,30.00,Comida,Cena

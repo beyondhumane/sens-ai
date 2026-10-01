@@ -1,0 +1,27 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 80decdd..5ae233e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -65,7 +65,9 @@ const commands: Record<string, Command> = {
+     const text = args[1];
+     if (!text) throw new Error("Falta el texto a buscar");
+     const needle = plain(text);
+-    const found = load(args[0], io).filter((expense) => plain(expense.description).includes(needle));
++    const found = load(args[0], io).filter(
++      (expense) => plain(expense.description).includes(needle) || plain(expense.category).includes(needle),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   añadir: ([path, date = "", amount = "", category, ...words], io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 41a0ad9..b5c9603 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -35,6 +35,7 @@ describe("cuentas", () => {
+     const io = memoryIo({ "gastos.csv": gastos });
+     expect(shown(run(["buscar", "gastos.csv", "cafe"], io).output)).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
+     expect(shown(run(["buscar", "gastos.csv", "GASOLINA"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++    expect(shown(run(["buscar", "gastos.csv", "transporte"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
+     expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
+     expect(run(["buscar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });

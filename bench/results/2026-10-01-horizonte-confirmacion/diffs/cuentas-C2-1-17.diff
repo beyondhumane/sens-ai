@@ -1,0 +1,48 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 367f99d..444f376 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -130,6 +130,14 @@ const commands: Record<string, Command> = {
+     const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
+     return [formatMonth(month), ...lines, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  media: (args, io) => {
++    const { path, month } = withMonth(args);
++    if (month === undefined) throw new Error("Falta el mes (--mes AAAA-MM)");
++    const [year, monthNumber] = month.split("-").map(Number);
++    const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
++    const total = inMonth(load(path, io), month).reduce((sum, expense) => sum + expense.cents, 0);
++    return `Media diaria en ${formatMonth(month).toLowerCase()}: ${formatMoney(Math.round(total / days))}`;
++  },
+   añadir: (args, io) => {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+     const description = words.join(" ");
+diff --git a/tests/media.test.ts b/tests/media.test.ts
+new file mode 100644
+index 0000000..d85f6be
+--- /dev/null
++++ b/tests/media.test.ts
+@@ -0,0 +1,23 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [HEADER, "2026-02-10,10,Comida,a", "2026-03-01,20,Comida,b", "2026-03-15,60,Ocio,c", "2026-03-20,24.65,Comida,d"].join("\n");
++const media = (...args: string[]) => run(["media", ...args], memoryIo({ "g.csv": csv }));
++const clean = (text: string) => text.replace(/[^\S\n]/g, " ");
++
++it("divides the month's total by all its days, rounded to the cent", () => {
++  const { code, output } = media("g.csv", "--mes", "2026-03");
++  expect(code).toBe(0);
++  expect(clean(output)).toBe("Media diaria en marzo de 2026: 3,38 €");
++});
++
++it("uses the real length of the month", () => {
++  expect(clean(media("g.csv", "--mes", "2026-02").output)).toBe("Media diaria en febrero de 2026: 0,36 €");
++});
++
++it("requires a valid month", () => {
++  expect(media("g.csv")).toEqual({ code: 1, output: "Falta el mes (--mes AAAA-MM)" });
++  expect(media("g.csv", "--mes", "2026-13")).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});

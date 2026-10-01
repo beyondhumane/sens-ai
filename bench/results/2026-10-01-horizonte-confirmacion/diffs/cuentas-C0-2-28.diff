@@ -1,0 +1,89 @@
+diff --git a/README.md b/README.md
+index 8906c8b..3d2fb10 100644
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+-| `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto (emparejadas sin distinguir mayúsculas ni acentos) dicen cuánto queda o cuánto te pasas: `Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`; las demás no cambian. En lugar de `--mes` se puede dar `--anio 2026`: informe del año con `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y `Total: 179,85 €`; `Año no válido: 26` si no son cuatro cifras (con `--anio` no se aplican presupuestos, y no se puede combinar con `--mes`) |
++| `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>] [--csv <salida>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto (emparejadas sin distinguir mayúsculas ni acentos) dicen cuánto queda o cuánto te pasas: `Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`; las demás no cambian. En lugar de `--mes` se puede dar `--anio 2026`: informe del año con `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y `Total: 179,85 €`; `Año no válido: 26` si no son cuatro cifras (con `--anio` no se aplican presupuestos, y no se puede combinar con `--mes`)  Con `--csv <salida>` además guarda el informe en un CSV `categoria,total`, una línea por categoría en el mismo orden y con el total con punto (`60.00`) |
+ | `avisos <fichero> <presupuestos> --mes AAAA-MM` | Las categorías que ese mes se pasan de su presupuesto (el CSV de `presupuesto`, emparejando sin distinguir mayúsculas ni acentos), de la que más se pasa a la que menos (empates por orden alfabético), con el nombre como está en los gastos: `Ocio: te pasas 5,00 €`. `Todo en orden` si ninguna se pasa. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no haya gasto, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin contar mayúsculas, acentos ni espacios de más. Una línea por grupo, con cuántas veces sale y el primero del grupo (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+diff --git a/src/cli.ts b/src/cli.ts
+index aa0ddde..1457ad8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -89,13 +89,16 @@ function loadBudgets(path: string, io: Io): Map<string, number> {
+   return budgets;
+ }
+ 
+-function categoryLines(expenses: Expense[], budgets = new Map<string, number>()): string[] {
++function sortedCategoryTotals(expenses: Expense[]): [string, number][] {
+   const totals = new Map<string, number>();
+   for (const expense of expenses) {
+     totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
+   }
+-  return [...totals]
+-    .sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"))
++  return [...totals].sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"));
++}
++
++function categoryLines(expenses: Expense[], budgets = new Map<string, number>()): string[] {
++  return sortedCategoryTotals(expenses)
+     .map(([name, cents]) => {
+       const budget = budgets.get(fold(name));
+       if (budget === undefined) return `${name}: ${formatMoney(cents)}`;
+@@ -399,9 +402,13 @@ const commands:Record<string, Command> = {
+   },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   informe: (args, io) => {
+-    const { rest: afterBudgets, budgetPath } = budgetArgs(args);
++    const csvFlag = args.indexOf("--csv");
++    const csvPath = csvFlag === -1 ? undefined : args[csvFlag + 1];
++    if (csvFlag !== -1 && !csvPath) throw new Error("Falta el fichero CSV de salida");
++    const { rest: afterBudgets, budgetPath } = budgetArgs(args.filter((_, i) => csvFlag === -1 || (i !== csvFlag && i !== csvFlag + 1)));
+     const yearFlag = afterBudgets.indexOf("--anio");
+     if (yearFlag !== -1) {
++      if (csvPath !== undefined) throw new Error("--csv solo se puede usar con --mes");
+       if (afterBudgets.includes("--mes")) throw new Error("Usa --mes o --anio, no los dos");
+       const year = afterBudgets[yearFlag + 1] ?? "";
+       if (!/^\d{4}$/.test(year)) throw new Error(`Año no válido: ${year}`);
+@@ -421,6 +428,10 @@ const commands:Record<string, Command> = {
+     const expenses = load(path, io).filter((expense) => expense.date.startsWith(`${month}-`));
+     const budgets = budgetPath === undefined ? new Map<string, number>() : loadBudgets(budgetPath, io);
+     const [year, number] = month.split("-");
++    if (csvPath !== undefined) {
++      const rows = sortedCategoryTotals(expenses).map(([name, cents]) => `${escapeField(name)},${(cents / 100).toFixed(2)}`);
++      io.write(csvPath, ["categoria,total", ...rows].join("\n") + "\n");
++    }
+     return [
+       `${MONTHS[Number(number) - 1]} de ${year}`,
+       ...categoryLines(expenses, budgets).map((line) => `  ${line}`),
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 64aa544..4cd2b48 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -118,6 +118,21 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv"], io()).code).toBe(1);
+   });
+ 
++  it("saves the monthly report as CSV with --csv", () => {
++    const io = memoryIo({
++      "gastos.csv": `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan y fruta
++2026-03-02,60.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++`,
++    });
++    const ran = run(["informe", "gastos.csv", "--mes", "2026-03", "--csv", "o.csv"], io);
++    expect(shown(ran.output)).toBe("Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 €\nTotal: 104,65 €");
++    expect(io.read("o.csv")).toBe("categoria,total\nOcio,60.00\nComida,44.65\n");
++    expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--csv"], io).code).toBe(1);
++    expect(run(["informe", "gastos.csv", "--anio", "2026", "--csv", "o.csv"], io).code).toBe(1);
++  });
++
+   it("reports a whole year month by month", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,100.00,Comida,Compra

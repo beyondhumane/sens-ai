@@ -1,0 +1,73 @@
+diff --git a/README.md b/README.md
+index 7db826c..e683ec3 100644
+--- a/README.md
++++ b/README.md
+@@ -23,6 +23,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <nombre>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos (`Falta la categoría` si no se da el nombre). Se pueden combinar |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio, salvo que se use `--anio AAAA` en su lugar: primera línea el año (`2026`), luego una línea por mes con gasto, en orden de calendario (`  Marzo: 149,85 €`), y al final el total del año; `Año no válido: 26` si no son cuatro cifras. `--anio` no se combina con `--mes` ni con `--presupuestos`. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto dicen cuánto queda o cuánto te pasas (`  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`); se emparejan sin distinguir mayúsculas ni acentos y las demás quedan igual |
++| `comparar <fichero> AAAA-MM AAAA-MM` | Por cada categoría con gasto en alguno de los dos meses, lo de cada mes y la diferencia con signo (`+` si sube o se queda igual, `-` si baja), por orden alfabético: `Ocio: 90,00 € → 60,00 € (-30,00 €)`. `Sin gastos` si ninguno de los dos meses tiene; `Mes no válido: 2026-13` si un mes no existe |
+ | `avisos <fichero> <presupuestos> --mes AAAA-MM` | Una línea por cada categoría que ese mes se ha pasado de su presupuesto (el CSV de `presupuesto`), de la que más se pasa a la que menos (si empatan, por orden alfabético), con el nombre como está en los gastos: `Ocio: te pasas 5,00 €`. Se emparejan sin distinguir mayúsculas ni acentos; las categorías sin presupuesto no cuentan. `Todo en orden` si ninguna se pasa. `--mes` es obligatorio |
+ | `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no gastes nada, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio (`Falta el mes (--mes AAAA-MM)`) |
+ | `semana <fichero> <fecha>` | Los gastos de la semana, de lunes a domingo, en la que cae la fecha (`2026-03-04`): una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y al final `Total: 48,30 €`. Si la fecha no existe, `Fecha no válida: 2026-02-30` |
+diff --git a/src/cli.ts b/src/cli.ts
+index f65feaa..6309b93 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -295,6 +295,25 @@ const commands: Record<string, Command> = {
+       .map(([name, over]) => `${name}: te pasas ${formatMoney(over)}`);
+     return lines.length === 0 ? "Todo en orden" : lines.join("\n");
+   },
++  comparar: (args, io) => {
++    const [path, first = "", second = ""] = args;
++    for (const month of [first, second]) {
++      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++    }
++    const expenses = load(path, io);
++    const before = new Map(sumByCategory(inMonth(expenses, first)));
++    const after = new Map(sumByCategory(inMonth(expenses, second)));
++    const names = [...new Set([...before.keys(), ...after.keys()])].sort((a, b) => a.localeCompare(b, "es"));
++    if (names.length === 0) return "Sin gastos";
++    return names
++      .map((name) => {
++        const from = before.get(name) ?? 0;
++        const to = after.get(name) ?? 0;
++        const diff = to - from;
++        return `${name}: ${formatMoney(from)} → ${formatMoney(to)} (${diff < 0 ? "-" : "+"}${formatMoney(Math.abs(diff))})`;
++      })
++      .join("\n");
++  },
+   informe: (args, io) => {
+     const { value: budgetPath, rest: afterBudgets } = takeOption(args, "--presupuestos");
+     const { value: yearText, rest: afterYear } = takeOption(afterBudgets, "--anio");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 5269fc1..5e7e876 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -420,6 +420,26 @@ COMIDA,100.00
+     expect(run(["media", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el mes (--mes AAAA-MM)" });
+   });
+ 
++  it("compares the categories of two months", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-02-03,40.00,Comida,Pan
++2026-02-10,90.00,Ocio,Cine
++2026-02-11,5.00,Transporte,Bus
++2026-03-01,44.65,Comida,Pan
++2026-03-02,60.00,Ocio,Teatro
++2026-03-03,5.00,Transporte,Bus
++2026-03-04,7.00,Álbum,Foto
++2026-04-01,9.00,Comida,Pan
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["comparar", "gastos.csv", "2026-02", "2026-03"], io()).output)).toBe(
++      "Álbum: 0,00 € → 7,00 € (+7,00 €)\nComida: 40,00 € → 44,65 € (+4,65 €)\nOcio: 90,00 € → 60,00 € (-30,00 €)\nTransporte: 5,00 € → 5,00 € (+0,00 €)",
++    );
++    expect(run(["comparar", "gastos.csv", "2026-05", "2026-06"], io())).toEqual({ code: 0, output: "Sin gastos" });
++    expect(run(["comparar", "gastos.csv", "2026-13", "2026-03"], io())).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++    expect(run(["comparar", "gastos.csv", "2026-02"], io())).toEqual({ code: 1, output: "Mes no válido: " });
++  });
++
+   it("imports only the bank's expenses", () => {
+     const banco = 'Fecha;Concepto;Importe\n09/03/2026;Bar Paco;-8,75\n10/03/2026;Nómina;1.850,00\n11/03/2026;"Cena; con amigos";-1.234,5\n12/03/2026;Nada;0,00\n';
+     const io = memoryIo({ "banco.csv": banco, "gastos.csv": GASTOS });

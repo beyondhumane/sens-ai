@@ -1,0 +1,43 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c56c7e3..987f776 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -201,10 +201,12 @@ const commands: Record<string, Command> = {
+     );
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+-  categorias: (args, io) =>
+-    categoryTotals(load(args[0], io))
++  categorias: (args, io) => {
++    const { month, file } = parseMonthFlag(args);
++    return categoryTotals(load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`)))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+-      .join("\n"),
++      .join("\n");
++  },
+   exportar: (args, io) => {
+     const formatFlag = args.indexOf("--formato");
+     const format = formatFlag === -1 ? undefined : args[formatFlag + 1] ?? "";
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 78c1a6e..c88475c 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -173,6 +173,18 @@ describe("cuentas", () => {
+     expect(run(["categorias"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+   });
+ 
++  it("limits categorias to a month with --mes", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-04-02,90.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["categorias", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Comida: 44,65 €");
++    expect(shown(run(["categorias", "--mes", "2026-04", "gastos.csv"], io).output)).toBe("Ocio: 90,00 €");
++    expect(run(["categorias", "gastos.csv", "--mes", "marzo"], io)).toEqual({ code: 1, output: "Mes no válido: marzo" });
++  });
++
+   it("shows the expenses of the Monday-to-Sunday week of a date, day by day", () => {
+     const gastos = `${GASTOS}2026-03-04,3.10,Comida,Café
+ 2026-03-04,1.00,Comida,Pan

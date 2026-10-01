@@ -1,0 +1,70 @@
+diff --git a/README.md b/README.md
+index c50c1f3..25aca1c 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ fecha,importe,categoria,descripcion
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero y con dos decimales como mucho: con coma decimal (`4,20`, y entonces los puntos son de miles: `1.234,56`) o, sin coma, con punto decimal (`4.20`). Si algo no vale, no toca el fichero |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y `Total: 48,30 €` al final. Una fecha que no existe da `Fecha no válida: 2026-02-30` |
++| `media <fichero> --mes 2026-03` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no haya gasto, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio |
+ | `exportar <fichero> <salida> --mes 2026-03` | Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`) y añade al final de `<fichero>` solo los importes negativos, en positivo, con el concepto como descripción y categoría `Sin categoría`. Responde `Importados 1 gastos`. Si una línea no se entiende, no importa nada y responde `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+diff --git a/src/cli.ts b/src/cli.ts
+index 5f365e5..cf883a4 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -169,6 +169,15 @@ const commands: Record<string, Command> = {
+     }
+     return [...rows, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  media: (args, io) => {
++    const { month, positional } = splitMonth(args);
++    if (month === undefined) throw new Error("Falta el mes");
++    const expenses = load(positional[0], io).filter((expense) => expense.date.startsWith(`${month}-`));
++    const [year, number] = month.split("-").map(Number);
++    const days = new Date(Date.UTC(year, number, 0)).getUTCDate();
++    const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
++    return `Media diaria en ${MONTHS[number - 1].toLowerCase()} de ${year}: ${formatMoney(Math.round(total / days))}`;
++  },
+   exportar: (args, io) => {
+     const { month, positional } = splitMonth(args);
+     const [path, output] = positional;
+diff --git a/tests/media.test.ts b/tests/media.test.ts
+new file mode 100644
+index 0000000..5946714
+--- /dev/null
++++ b/tests/media.test.ts
+@@ -0,0 +1,32 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const norm = (text: string) => text.replace(/ /g, " ");
++const csv = (rows: string[]) => [HEADER, ...rows].join("\n");
++
++it("divides the month total by all the days of the month", () => {
++  const io = memoryIo({ "g.csv": csv(["2026-03-01,100.00,Ocio,a", "2026-03-15,50.00,Comida,b", "2026-04-01,999.00,Ocio,otro mes"]) });
++  const ran = run(["media", "g.csv", "--mes", "2026-03"], io);
++  expect(ran.code).toBe(0);
++  expect(norm(ran.output)).toBe("Media diaria en marzo de 2026: 4,84 €");
++});
++
++it("uses the real length of the month and rounds to the cent", () => {
++  const io = memoryIo({ "g.csv": csv(["2028-02-10,29.00,Ocio,bisiesto", "2026-02-10,10.00,Ocio,normal"]) });
++  expect(norm(run(["media", "g.csv", "--mes", "2028-02"], io).output)).toBe("Media diaria en febrero de 2028: 1,00 €");
++  expect(norm(run(["media", "g.csv", "--mes", "2026-02"], io).output)).toBe("Media diaria en febrero de 2026: 0,36 €");
++});
++
++it("gives zero for a month without expenses and accepts the flag first", () => {
++  const io = memoryIo({ "g.csv": csv(["2026-03-01,10.00,Ocio,a"]) });
++  expect(norm(run(["media", "--mes", "2026-05", "g.csv"], io).output)).toBe("Media diaria en mayo de 2026: 0,00 €");
++});
++
++it("requires a valid month and a file", () => {
++  const io = memoryIo({ "g.csv": csv([]) });
++  expect(run(["media", "g.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++  expect(run(["media", "g.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  expect(run(["media", "--mes", "2026-03"], io)).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++});

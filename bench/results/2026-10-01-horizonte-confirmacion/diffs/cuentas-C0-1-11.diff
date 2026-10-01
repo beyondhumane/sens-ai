@@ -1,0 +1,140 @@
+diff --git a/README.md b/README.md
+index dd587c3..e36c963 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ fecha,importe,categoria,descripcion
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero, con punto y dos decimales como mucho. Si algo no vale, no toca el fichero |
+ | `exportar <fichero> <salida> --mes 2026-03` | Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
++| `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index fa796df..5827f37 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { HEADER, parseExpenses, quoteField } from "./csv";
++import { BUDGET_HEADER, HEADER, parseBudgets, parseExpenses, quoteField } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatDate, formatMoney } from "./money";
+@@ -28,6 +28,10 @@ function isRealDate(text: string): boolean {
+   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+ }
+ 
++function checkAmount(amount: string): void {
++  if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++}
++
+ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+ 
+ function splitMonth(args: string[]): { month: string | undefined; positional: string[] } {
+@@ -53,7 +57,7 @@ const commands: Record<string, Command> = {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
+-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    checkAmount(amount);
+     const description = words.join(" ").trim();
+     if (!category.trim()) throw new Error("Falta la categoría");
+     if (/[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
+@@ -66,6 +70,23 @@ const commands: Record<string, Command> = {
+     io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, rawCategory = "", amount = ""] = args;
++    if (!path) throw new Error("Falta el fichero de presupuestos");
++    const category = rawCategory.trim();
++    if (!category) throw new Error("Falta la categoría");
++    if (/[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${rawCategory}`);
++    checkAmount(amount);
++    const cents = Math.round(Number(amount) * 100);
++    const budgets = io.exists(path) ? parseBudgets(io.read(path)) : [];
++    const entry = { category, amount: (cents / 100).toFixed(2) };
++    const index = budgets.findIndex((budget) => fold(budget.category) === fold(category));
++    if (index === -1) budgets.push(entry);
++    else budgets[index] = entry;
++    const rows = budgets.map((budget) => [quoteField(budget.category), budget.amount].join(","));
++    io.write(path, `${[BUDGET_HEADER, ...rows].join("\n")}\n`);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   lista: (args, io) => {
+     const since = takeDate(args, "--desde");
+     const until = takeDate(since.rest, "--hasta");
+diff --git a/src/csv.ts b/src/csv.ts
+index 21df691..9a15c01 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -1,12 +1,13 @@
+ import type { Expense } from "./expense";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
++export const BUDGET_HEADER = "categoria,importe";
+ 
+ export function quoteField(text: string): string {
+   return /[,"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+ }
+ 
+-function splitRecords(text: string): string[][] {
++export function splitRecords(text: string): string[][] {
+   const records: string[][] = [];
+   let i = 0;
+   while (i < text.length) {
+@@ -62,3 +63,9 @@ export function parseExpenses(text: string): Expense[] {
+       description: rest.join(","),
+     }));
+ }
++
++export function parseBudgets(text: string): { category: string; amount: string }[] {
++  const [header, ...rows] = splitRecords(text.trim());
++  if (header?.join(",") !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header?.join(",") ?? ""}`);
++  return rows.filter((row) => row.some((field) => field.trim() !== "")).map(([category, amount]) => ({ category, amount }));
++}
+diff --git a/tests/presupuesto.test.ts b/tests/presupuesto.test.ts
+new file mode 100644
+index 0000000..5af896e
+--- /dev/null
++++ b/tests/presupuesto.test.ts
+@@ -0,0 +1,39 @@
++import { describe, expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const shown = (output: string) => output.replace(/ /g, " ");
++
++describe("presupuesto", () => {
++  it("creates the file when missing", () => {
++    const io = memoryIo({});
++    const ran = run(["presupuesto", "p.csv", "Comida", "100"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++  });
++
++  it("replaces in place ignoring case and accents, keeping the new name", () => {
++    const io = memoryIo({ "p.csv": "categoria,importe\nComida,100.00\nOcio,50.00\n" });
++    run(["presupuesto", "p.csv", "CÓMIDA", "120.5"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nCÓMIDA,120.50\nOcio,50.00\n");
++  });
++
++  it("appends a new category", () => {
++    const io = memoryIo({ "p.csv": "categoria,importe\nComida,100.00\n" });
++    run(["presupuesto", "p.csv", "Ocio", "50"], io);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\nOcio,50.00\n");
++  });
++
++  it("rejects bad input without touching the file", () => {
++    const files = { "p.csv": "categoria,importe\nComida,100.00\n" };
++    for (const amount of ["0", "-1", "abc", "1.234", "1,5"]) {
++      const ran = run(["presupuesto", "p.csv", "Comida", amount], memoryIo(files));
++      expect(ran).toEqual({ code: 1, output: `Importe no válido: ${amount}` });
++    }
++    expect(run(["presupuesto", "p.csv", "A,B", "5"], memoryIo(files)).code).toBe(1);
++    expect(run(["presupuesto", "p.csv", " ", "5"], memoryIo(files)).output).toBe("Falta la categoría");
++    expect(run(["presupuesto", "p.csv", "Comida", "5"], memoryIo({ "p.csv": "x,y\n" })).code).toBe(1);
++    expect(files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++  });
++});

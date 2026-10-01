@@ -1,0 +1,59 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 27edee0..e059a40 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -72,10 +72,12 @@ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
+ 
+ const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+ 
++const isValidMonth = (month: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
++
+ function parseMonthFlag(args: string[]): { month: string | undefined; file: string | undefined; positional: string[] } {
+   const flag = args.indexOf("--mes");
+   const month = flag === -1 ? undefined : args[flag + 1];
+-  if (flag !== -1 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
++  if (flag !== -1 && !isValidMonth(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
+   const positional = flag === -1 ? args : args.filter((_, index) => index !== flag && index !== flag + 1);
+   return { month, file: positional[0], positional };
+ }
+@@ -271,6 +273,19 @@ const commands: Record<string, Command> = {
+       `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
+     ].join("\n");
+   },
++  comparar: ([path, first = "", second = ""], io) => {
++    for (const month of [first, second]) if (!isValidMonth(month)) throw new Error(`Mes no válido: ${month}`);
++    const expenses = load(path, io);
++    const totalsOf = (month: string) => new Map(categoryTotals(expenses.filter((expense) => expense.date.startsWith(`${month}-`))));
++    const [before, after] = [totalsOf(first), totalsOf(second)];
++    return [...new Set([...before.keys(), ...after.keys()])]
++      .sort((a, b) => a.localeCompare(b, "es"))
++      .map((category) => {
++        const [from, to] = [before.get(category) ?? 0, after.get(category) ?? 0];
++        return `${category}: ${formatMoney(from)} → ${formatMoney(to)} (${to < from ? "-" : "+"}${formatMoney(Math.abs(to - from))})`;
++      })
++      .join("\n");
++  },
+   avisos: (args, io) => {
+     const { month, positional } = parseMonthFlag(args);
+     if (month === undefined) throw new Error("Falta el mes");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 9379019..071eedd 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -333,4 +333,16 @@ describe("cuentas", () => {
+     expect(run(["resumen", "vacio.csv"], io)).toEqual({ code: 0, output: "Sin gastos" });
+     expect(run(["resumen"], io)).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+   });
++
++  it("compares categories between two months with signed differences", () => {
++    const io = memoryIo({
++      "gastos.csv":
++        "fecha,importe,categoria,descripcion\n2026-02-03,40.00,Comida,A\n2026-03-04,44.65,Comida,B\n2026-02-05,90.00,Ocio,C\n2026-03-06,60.00,Ocio,D\n2026-03-07,10.00,Ahorro,E\n2026-01-08,5.00,Otro,F\n",
++    });
++    expect(shown(run(["comparar", "gastos.csv", "2026-02", "2026-03"], io).output)).toBe(
++      "Ahorro: 0,00 € → 10,00 € (+10,00 €)\nComida: 40,00 € → 44,65 € (+4,65 €)\nOcio: 90,00 € → 60,00 € (-30,00 €)",
++    );
++    expect(run(["comparar", "gastos.csv", "2026-02", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++    expect(run(["comparar"], io)).toEqual({ code: 1, output: "Mes no válido: " });
++  });
+ });

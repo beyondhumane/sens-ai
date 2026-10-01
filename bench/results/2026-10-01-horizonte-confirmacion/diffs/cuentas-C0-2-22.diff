@@ -1,0 +1,79 @@
+diff --git a/README.md b/README.md
+index 0ca2074..0f04c20 100644
+--- a/README.md
++++ b/README.md
+@@ -27,6 +27,7 @@ fecha,importe,categoria,descripcion
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
++| `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría (sin distinguir mayúsculas ni acentos) por la nueva en todos los gastos y guarda el fichero; responde `Renombrados 3 gastos`. Si ninguno coincide no toca el fichero y responde `Renombrados 0 gastos` |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (sumando sus gastos), `Lunes 02/03/2026: 45,20 €`, y `Total: 48,30 €` al final; sin gastos solo sale el total. `Fecha no válida: 2026-02-30` si no existe |
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, separado por `;`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`; la primera línea es la cabecera) y añade al final de `<fichero>` solo los gastos (importes negativos, en positivo) con el concepto como descripción y la categoría `Sin categoría`. Responde `Importados 1 gastos`. Los ingresos se ignoran. Si alguna línea no se entiende no importa nada: `Línea 3 del banco no válida` |
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 19b7931..3d40fc9 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -248,6 +248,30 @@ const commands:Record<string, Command> = {
+     io.write(out, [HEADER, ...rows].join(eol) + eol);
+     return `Exportados ${expenses.length} gastos a ${out}`;
+   },
++  renombrar: (args, io) => {
++    const [path, oldName, newName, ...extra] = args;
++    if (!path || oldName === undefined || newName === undefined || extra.length > 0) {
++      throw new Error("Uso: renombrar <fichero> <categoría> <nueva>");
++    }
++    if (newName.trim() === "" || /[,\r\n]/.test(newName)) throw new Error(`Categoría no válida: ${newName}`);
++    const text = io.read(path);
++    const expenses = parseExpenses(text);
++    const wanted = fold(oldName);
++    let count = 0;
++    for (const expense of expenses) {
++      if (fold(expense.category) !== wanted) continue;
++      expense.category = newName;
++      count++;
++    }
++    if (count > 0) {
++      const eol = text.includes("\r\n") ? "\r\n" : "\n";
++      const rows = expenses.map(
++        (e) => `${e.date},${(e.cents / 100).toFixed(2)},${escapeField(e.category)},${escapeField(e.description)}`,
++      );
++      io.write(path, [HEADER, ...rows].join(eol) + eol);
++    }
++    return `Renombrados ${count} gastos`;
++  },
+   semana: (args, io) => {
+     const [path, date, ...extra] = args;
+     if (!path) throw new Error("Falta el fichero de gastos");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index b8db68f..6d9806c 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -282,6 +282,27 @@ describe("cuentas", () => {
+   });
+ });
+ 
++describe("renombrar", () => {
++  it("renames a category ignoring case and accents and saves the file", () => {
++    const io = memoryIo({
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-03-05,18.00,Ocio,"Cena, con amigos"
++2026-03-06,2.00,OCIO,Cine
++2026-03-07,3.00,Comida,Pan
++`,
++    });
++    expect(run(["renombrar", "g.csv", "ocío", "Diversión"], io)).toEqual({ code: 0, output: "Renombrados 2 gastos" });
++    expect(io.files["g.csv"]).toBe(`fecha,importe,categoria,descripcion
++2026-03-05,18.00,Diversión,"Cena, con amigos"
++2026-03-06,2.00,Diversión,Cine
++2026-03-07,3.00,Comida,Pan
++`);
++    const before = io.files["g.csv"];
++    expect(run(["renombrar", "g.csv", "Nada", "X"], io).output).toBe("Renombrados 0 gastos");
++    expect(io.files["g.csv"]).toBe(before);
++  });
++});
++
+ describe("presupuesto", () => {
+   it("creates the file, then changes a category in place ignoring case and accents", () => {
+     const io = memoryIo({});

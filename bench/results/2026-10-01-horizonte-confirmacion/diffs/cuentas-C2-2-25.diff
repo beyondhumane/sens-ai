@@ -1,0 +1,45 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index ee99322..f0bfe19 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -277,6 +277,18 @@ const commands: Record<string, Command> = {
+     io.write(path, `${[HEADER, ...updated.map(csvRow)].join("\n")}\n`);
+     return `Renombrados ${count} gastos`;
+   },
++  resumen: (args, io) => {
++    const expenses = load(args[0], io);
++    if (expenses.length === 0) return "Sin gastos";
++    const dates = expenses.map((expense) => expense.date).sort();
++    const biggest = expenses.reduce((best, expense) => (expense.cents > best.cents ? expense : best));
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(dates[0])} hasta ${formatDate(dates[dates.length - 1])}`,
++      `Total: ${formatMoney(sumCents(expenses))}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   categorias: (args, io) => {
+     return categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index fe581a8..fd4cd82 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -244,6 +244,17 @@ describe("cuentas", () => {
+     });
+   });
+ 
++  it("summarizes the expenses", () => {
++    const gastos = `${GASTOS}2026-02-20,45.20,Ocio,Cena\n2026-01-15,3.00,Ocio,Café\n`;
++    expect(shown(run(["resumen", "gastos.csv"], memoryIo({ "gastos.csv": gastos })).output)).toBe(
++      "Gastos: 4\nDesde 15/01/2026 hasta 02/03/2026\nTotal: 105,90 €\nMayor: 45,20 € en Gasolina (02/03/2026)",
++    );
++    expect(run(["resumen", "gastos.csv"], memoryIo({ "gastos.csv": "fecha,importe,categoria,descripcion\n" }))).toEqual({
++      code: 0,
++      output: "Sin gastos",
++    });
++  });
++
+   it("renames a category ignoring case and accents", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,transporte,Billete\n2026-03-04,2.00,Ocio,Cine\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

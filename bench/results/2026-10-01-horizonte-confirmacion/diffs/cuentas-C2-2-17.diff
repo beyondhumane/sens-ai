@@ -1,0 +1,58 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 24efbad..3be0963 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { BUDGET_HEADER, HEADER, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
+-import { formatDate, formatMonth, formatWeekday, isRealDate, weekOf } from "./date";
++import { daysInMonth, formatDate,formatMonth, formatWeekday, isRealDate, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -110,6 +110,12 @@ const commands: Record<string, Command> = {
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
++  media: (args, io) => {
++    const month = monthFlag(args);
++    if (month === undefined) throw new Error("Falta --mes");
++    const total = sumCents(inMonth(load(args[0], io), month));
++    return `Media diaria en ${formatMonth(month).toLowerCase()}: ${formatMoney(Math.round(total / daysInMonth(month)))}`;
++  },
+   semana: (args, io) => {
+     const date = args[1] ?? "";
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
+diff --git a/src/date.ts b/src/date.ts
+index 4fe80d6..0578a4d 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -7,6 +7,11 @@ export function formatMonth(month: string): string {
+   return text.charAt(0).toUpperCase() + text.slice(1);
+ }
+ 
++export function daysInMonth(month: string): number {
++  const [year, number] = month.split("-").map(Number);
++  return new Date(Date.UTC(year, number, 0)).getUTCDate();
++}
++
+ export function isRealDate(iso: string): boolean {
+   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+   const parsed = new Date(iso);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c5052cb..2d563ed 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -148,6 +148,13 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos"], io).code).toBe(1);
+   });
+ 
++  it("shows the daily average of a month counting every day", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    expect(shown(run(["media", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Media diaria en marzo de 2026: 1,86 €");
++    expect(shown(run(["media", "gastos.csv", "--mes", "2026-02"], io).output)).toBe("Media diaria en febrero de 2026: 0,00 €");
++    expect(run(["media", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta --mes" });
++  });
++
+   it("shows the week of a date, Monday to Sunday", () => {
+     const gastos = `${GASTOS}2026-03-04,3.10,Comida,Café
+ 2026-03-04,1.00,Comida,Pan

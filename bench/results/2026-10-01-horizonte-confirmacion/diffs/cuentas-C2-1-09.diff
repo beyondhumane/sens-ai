@@ -1,0 +1,74 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c249d7f..d7feb8b 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -24,12 +24,13 @@ function fold(text: string): string {
+   return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+ }
+ 
+-function withMonth(args: string[]): { path: string | undefined; month: string | undefined } {
++function withMonth(args: string[]): { path: string | undefined; month: string | undefined; positional: string[] } {
+   const flag = args.indexOf("--mes");
+-  if (flag === -1) return { path: args[0], month: undefined };
++  if (flag === -1) return { path: args[0], month: undefined, positional: args };
+   const month = args[flag + 1];
+   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
+-  return { path: args.find((_, i) => i !== flag && i !== flag + 1), month };
++  const positional = args.filter((_, i) => i !== flag && i !== flag + 1);
++  return { path: positional[0], month, positional };
+ }
+ 
+ function dateFlag(args: string[], flag: string): string | undefined {
+@@ -100,6 +101,16 @@ const commands: Record<string, Command> = {
+     io.write(path as string, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${formatLine(expense)}`;
+   },
++  exportar: (args, io) => {
++    const { path, month, positional } = withMonth(args);
++    const output = positional[1];
++    if (output === undefined) throw new Error("Falta el fichero de salida");
++    load(path, io);
++    const [header, ...rows] = io.read(path as string).trim().split(/\r?\n/);
++    const kept = rows.filter((row) => row.trim() !== "" && (month === undefined || row.startsWith(`${month}-`)));
++    io.write(output, `${[header, ...kept].join("\n")}\n`);
++    return `Exportados ${kept.length} gastos a ${output}`;
++  },
+   categorias: (args, io) => {
+     return [...sumByCategory(load(args[0], io))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
+   },
+diff --git a/tests/exportar.test.ts b/tests/exportar.test.ts
+new file mode 100644
+index 0000000..8bdaa0c
+--- /dev/null
++++ b/tests/exportar.test.ts
+@@ -0,0 +1,30 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const header = "fecha,importe,categoria,descripcion";
++const source = `${header}\n2026-02-28,1.50,Ocio,Cine\n2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,2.5,Comida,Pan\n2026-04-01,9.00,Ocio,Libro\n`;
++
++it("exports only the given month keeping header and row format", () => {
++  const io = memoryIo({ "g.csv": source });
++  const ran = run(["exportar", "g.csv", "marzo.csv", "--mes", "2026-03"], io);
++  expect(ran).toEqual({ code: 0, output: "Exportados 2 gastos a marzo.csv" });
++  expect(io.files["marzo.csv"]).toBe(`${header}\n2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,2.5,Comida,Pan\n`);
++  expect(io.files["g.csv"]).toBe(source);
++});
++
++it("exports everything without --mes, and accepts the flag first", () => {
++  const io = memoryIo({ "g.csv": source });
++  expect(run(["exportar", "g.csv", "todo.csv"], io).output).toBe("Exportados 4 gastos a todo.csv");
++  expect(io.files["todo.csv"]).toBe(source);
++  expect(run(["exportar", "--mes", "2026-04", "g.csv", "abril.csv"], io).output).toBe("Exportados 1 gastos a abril.csv");
++});
++
++it.each([
++  [["exportar", "g.csv"], "Falta el fichero de salida"],
++  [["exportar", "g.csv", "o.csv", "--mes", "2026-13"], "Mes no válido: 2026-13"],
++])("rejects %j", (argv, message) => {
++  const io = memoryIo({ "g.csv": source });
++  expect(run(argv, io)).toEqual({ code: 1, output: message });
++  expect(io.files["o.csv"]).toBeUndefined();
++});

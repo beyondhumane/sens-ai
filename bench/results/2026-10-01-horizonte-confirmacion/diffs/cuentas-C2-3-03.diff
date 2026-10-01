@@ -1,0 +1,40 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 6d359ae..d8b98a1 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -21,7 +21,14 @@ const commands: Record<string, Command> = {
+     load(args[0], io)
+       .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  total: (args, io) => {
++    const flag = args.indexOf("--mes");
++    const month = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month ?? "")) throw new Error(`Mes no válido: ${month ?? ""}`);
++    const file = flag === -1 ? args[0] : args.find((_, index) => index !== flag && index !== flag + 1);
++    const expenses = load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const { category, cents } of load(args[0], io)) totals.set(category, (totals.get(category) ?? 0) + cents);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 83926d5..6801c4c 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -20,6 +20,15 @@ describe("cuentas", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });
+ 
++  it("adds up only the month given with --mes", () => {
++    const gastos = `${GASTOS}2026-04-01,10.00,Ocio,Cine
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Total: 57,70 €");
++    expect(shown(run(["total", "--mes", "2026-04", "gastos.csv"], io).output)).toBe("Total: 10,00 €");
++    expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("sums per category, biggest first and alphabetical on ties", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

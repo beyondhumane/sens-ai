@@ -1,0 +1,44 @@
+diff --git a/README.md b/README.md
+index c705dd6..5baa387 100644
+--- a/README.md
++++ b/README.md
+@@ -17,7 +17,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe |
+-| `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
++| `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+diff --git a/src/cli.ts b/src/cli.ts
+index 3f3ca2f..e328f31 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -104,7 +104,9 @@ const commands:Record<string, Command> = {
+     const text = args[1];
+     if (text === undefined) throw new Error("Falta el texto a buscar");
+     const needle = fold(text);
+-    const found = expenses.filter((expense) => fold(expense.description).includes(needle));
++    const found = expenses.filter(
++      (expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 96d7367..76034f2 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -82,6 +82,11 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("searches by category too", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    expect(shown(run(["buscar", "gastos.csv", "transporte"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++  });
++
+   it("appends an expense at the end of the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS, "sin-salto.csv": GASTOS.trimEnd() });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.20", "Comida", "Churros", "con", "chocolate"], io);

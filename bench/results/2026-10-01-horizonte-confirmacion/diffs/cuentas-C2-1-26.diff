@@ -1,0 +1,31 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 9f5e5fd..146aa7f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -182,6 +182,7 @@ const commands: Record<string, Command> = {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+     const description = words.join(" ");
+     if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseCents(amount);
+     checkCategory(category);
+     if (description === "" || /[\r\n]/.test(description)) throw new Error(`Descripción no válida: ${description}`);
+diff --git a/tests/anadir.test.ts b/tests/anadir.test.ts
+index 76cabb3..2e3cf8f 100644
+--- a/tests/anadir.test.ts
++++ b/tests/anadir.test.ts
+@@ -44,6 +44,14 @@ it("reads quoted descriptions written by other apps in every command", () => {
+   expect(run(["total", "g.csv"], io).code).toBe(0);
+ });
+ 
++it("accepts today's date but rejects later ones without touching the file", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["añadir", "g.csv", "2026-03-20", "4.20", "Comida", "Churros"], io).code).toBe(0);
++  const after = io.files["g.csv"];
++  expect(run(["añadir", "g.csv", "2026-03-25", "4.20", "Comida", "Churros"], io)).toEqual({ code: 1, output: "La fecha 2026-03-25 es futura" });
++  expect(io.files["g.csv"]).toBe(after);
++});
++
+ it.each([
+   [["2026-02-30", "4.20"], "Fecha no válida: 2026-02-30"],
+   [["19/03/2026", "4.20"], "Fecha no válida: 19/03/2026"],

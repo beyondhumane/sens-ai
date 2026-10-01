@@ -1,0 +1,44 @@
+diff --git a/README.md b/README.md
+index e91aca0..591a214 100644
+--- a/README.md
++++ b/README.md
+@@ -17,7 +17,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+-| `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
++| `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `informe <fichero> --mes AAAA-MM` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio |
+diff --git a/src/cli.ts b/src/cli.ts
+index c5f7443..ee35322 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -99,7 +99,9 @@ const commands: Record<string, Command> = {
+   buscar: (args, io) => {
+     const needle = fold(args.slice(1).join(" "));
+     if (needle === "") throw new Error("Falta el texto a buscar");
+-    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle));
++    const found = load(args[0], io).filter(
++      (expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   categorias: (args, io) =>
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 3a25f45..4f6ad68 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -50,6 +50,11 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("searches by category too", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    expect(shown(run(["buscar", "gastos.csv", "TRANSPORTE"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

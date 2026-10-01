@@ -1,0 +1,144 @@
+diff --git a/README.md b/README.md
+index 4ff9445..45347b1 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,7 @@ fecha,importe,categoria,descripcion
+ 
+ - `fecha`: año-mes-día.
+ - `importe`: euros con punto decimal.
++- `descripcion`: si lleva comas o comillas va entre comillas y las comillas de dentro se doblan (`"Dijo ""hola"""`). `añadir` lo escribe así.
+ 
+ ## Órdenes
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index a780bbd..a4e3ada 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseExpenses } from "./csv";
++import { parseExpenses, quoteField } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatDate, formatMoney } from "./money";
+@@ -62,7 +62,7 @@ const commands: Record<string, Command> = {
+     const text = io.read(path);
+     parseExpenses(text);
+     const cents = Math.round(Number(amount) * 100);
+-    const row = [date, (cents / 100).toFixed(2), category, description].join(",");
++    const row = [date, (cents / 100).toFixed(2), category, quoteField(description)].join(",");
+     io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${row}\n`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
+diff --git a/src/csv.ts b/src/csv.ts
+index f21bd0a..21df691 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -2,13 +2,63 @@ import type { Expense } from "./expense";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
+ 
++export function quoteField(text: string): string {
++  return /[,"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
++}
++
++function splitRecords(text: string): string[][] {
++  const records: string[][] = [];
++  let i = 0;
++  while (i < text.length) {
++    const fields: string[] = [];
++    let atEnd = false;
++    while (!atEnd) {
++      if (text[i] === '"') {
++        let value = "";
++        i++;
++        for (;;) {
++          if (i >= text.length) throw new Error("Comillas sin cerrar en el fichero");
++          if (text[i] === '"') {
++            if (text[i + 1] === '"') {
++              value += '"';
++              i += 2;
++              continue;
++            }
++            i++;
++            break;
++          }
++          value += text[i++];
++        }
++        fields.push(value);
++        if (text[i] === ",") i++;
++        else if (i >= text.length || text[i] === "\n" || text[i] === "\r") atEnd = true;
++        else throw new Error("Comillas mal colocadas en el fichero");
++      } else {
++        const start = i;
++        while (i < text.length && text[i] !== "," && text[i] !== "\n" && text[i] !== "\r") i++;
++        fields.push(text.slice(start, i));
++        if (text[i] === ",") i++;
++        else atEnd = true;
++      }
++      if (atEnd) {
++        if (text[i] === "\r") i++;
++        if (text[i] === "\n") i++;
++      }
++    }
++    records.push(fields);
++  }
++  return records;
++}
++
+ export function parseExpenses(text: string): Expense[] {
+-  const [header, ...rows] = text.trim().split(/\r?\n/);
+-  if (header !== HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++  const [header, ...rows] = splitRecords(text.trim());
++  if (header?.join(",") !== HEADER) throw new Error(`Cabecera desconocida: ${header?.join(",") ?? ""}`);
+   return rows
+-    .filter((row) => row.trim() !== "")
+-    .map((row) => {
+-      const [date, amount, category, ...rest] = row.split(",");
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
+-    });
++    .filter((row) => row.some((field) => field.trim() !== ""))
++    .map(([date, amount, category, ...rest]) => ({
++      date,
++      cents: Math.round(Number(amount) * 100),
++      category,
++      description: rest.join(","),
++    }));
+ }
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 02801c5..fb65a81 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -96,6 +96,33 @@ describe("cuentas", () => {
+     expect(io.files["g.csv"]).toBe(GASTOS + "2026-03-19,4.20,Comida,Churros\n");
+   });
+ 
++  it("reads quoted descriptions with commas and doubled quotes in every command", () => {
++    const files = {
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-03-05,18.00,Ocio,"Cena, con amigos"
++2026-03-06,2.00,Ocio,"Dijo ""hola"""
++2026-03-07,1.00,Casa,sin comillas, con coma
++`,
++    };
++    const io = () => memoryIo(files);
++    expect(shown(run(["lista", "g.csv"], io()).output)).toBe(
++      '05/03/2026  Ocio  18,00 €  Cena, con amigos\n06/03/2026  Ocio  2,00 €  Dijo "hola"\n07/03/2026  Casa  1,00 €  sin comillas, con coma',
++    );
++    expect(shown(run(["buscar", "g.csv", "con amigos"], io()).output)).toBe("05/03/2026  Ocio  18,00 €  Cena, con amigos");
++    expect(shown(run(["total", "g.csv"], io()).output)).toBe("Total: 21,00 €");
++    expect(shown(run(["categorias", "g.csv"], io()).output)).toBe("Ocio: 20,00 €\nCasa: 1,00 €");
++    expect(shown(run(["informe", "g.csv", "--mes", "2026-03"], io()).output)).toBe("Marzo de 2026\n  Ocio: 20,00 €\n  Casa: 1,00 €\nTotal: 21,00 €");
++  });
++
++  it("writes descriptions with commas or quotes in quotes", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    run(["añadir", "g.csv", "2026-03-05", "18", "Ocio", "Cena,", "con", "amigos"], io);
++    run(["añadir", "g.csv", "2026-03-06", "2", "Ocio", 'Dijo "hola"'], io);
++    expect(io.files["g.csv"]).toBe(GASTOS + '2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,2.00,Ocio,"Dijo ""hola"""\n');
++    expect(shown(run(["buscar", "g.csv", "hola"], io).output)).toBe('06/03/2026  Ocio  2,00 €  Dijo "hola"');
++    expect(run(["buscar", "g.csv", "cena, con"], io).output).toContain("Cena, con amigos");
++  });
++
+   it("refuses bad input and leaves the file alone", () => {
+     const bad = (args: string[]) => {
+       const io = memoryIo({ "g.csv": GASTOS });

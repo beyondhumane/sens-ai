@@ -1,0 +1,63 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index e29bb88..9f5e5fd 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -282,6 +282,19 @@ const commands: Record<string, Command> = {
+     io.write(path as string, `${[header, ...updated].join("\n")}\n`);
+     return `Renombrados ${count} gastos`;
+   },
++  resumen: ([path], io) => {
++    const expenses = load(path, io);
++    if (expenses.length === 0) return "Sin gastos";
++    const dates = expenses.map((expense) => expense.date).sort();
++    const biggest = expenses.reduce((best, expense) => (expense.cents > best.cents ? expense : best));
++    const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(dates[0])} hasta ${formatDate(dates[dates.length - 1])}`,
++      `Total: ${formatMoney(total)}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   categorias: (args, io) => {
+     return [...sumByCategory(load(args[0], io))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
+   },
+diff --git a/tests/resumen.test.ts b/tests/resumen.test.ts
+new file mode 100644
+index 0000000..6b7222b
+--- /dev/null
++++ b/tests/resumen.test.ts
+@@ -0,0 +1,33 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const resumen = (rows: string[]) => run(["resumen", "g.csv"], memoryIo({ "g.csv": [HEADER, ...rows].join("\n") }));
++const clean = (text: string) => text.replace(/[^\S\n]/g, " ");
++
++it("summarizes count, date span, total and the biggest expense (first one on ties)", () => {
++  const { code, output } = resumen([
++    "2026-02-28,20.30,Ocio,Cena",
++    "2026-01-15,120,Coche,Seguro del coche",
++    "2026-01-03,120,Casa,Otro igual",
++    "2026-01-20,152,Casa,Reparación",
++  ]);
++  expect(code).toBe(0);
++  expect(clean(output)).toBe(
++    "Gastos: 4\nDesde 03/01/2026 hasta 28/02/2026\nTotal: 412,30 €\nMayor: 152,00 € en Reparación (20/01/2026)",
++  );
++});
++
++it("picks the first of several equal biggest expenses", () => {
++  const { output } = resumen(["2026-01-15,120,Coche,Seguro del coche", "2026-01-03,120,Casa,Otro igual"]);
++  expect(clean(output).split("\n")[3]).toBe("Mayor: 120,00 € en Seguro del coche (15/01/2026)");
++});
++
++it("says so when there are no expenses", () => {
++  expect(resumen([])).toEqual({ code: 0, output: "Sin gastos" });
++});
++
++it("requires the file", () => {
++  expect(run(["resumen"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++});

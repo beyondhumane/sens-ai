@@ -1,0 +1,67 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 8d0d688..75e812b 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -53,11 +53,14 @@ function dateFlag(args: string[], flag: string): string | undefined {
+   return date;
+ }
+ 
+-function withRange(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined } {
++function withRange(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined; order: string } {
+   const from = dateFlag(args, "--desde");
+   const to = dateFlag(args, "--hasta");
+-  const flags = ["--desde", "--hasta"].map((flag) => args.indexOf(flag)).filter((i) => i !== -1);
+-  return { path: args.find((_, i) => !flags.includes(i) && !flags.includes(i - 1)), from, to };
++  const orderFlag = args.indexOf("--orden");
++  const order = orderFlag === -1 ? "fecha" : (args[orderFlag + 1] ?? "");
++  if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
++  const flags = ["--desde", "--hasta", "--orden"].map((flag) => args.indexOf(flag)).filter((i) => i !== -1);
++  return { path: args.find((_, i) => !flags.includes(i) && !flags.includes(i - 1)), from, to, order };
+ }
+ 
+ function inMonth(expenses: Expense[], month: string | undefined): Expense[] {
+@@ -74,9 +77,10 @@ function sumByCategory(expenses: Expense[]): [string, number][] {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+-    const { path, from, to } = withRange(args);
++    const { path, from, to, order } = withRange(args);
+     return load(path, io)
+       .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(formatLine)
+       .join("\n");
+   },
+diff --git a/tests/lista.test.ts b/tests/lista.test.ts
+index 4ade882..f8af9e0 100644
+--- a/tests/lista.test.ts
++++ b/tests/lista.test.ts
+@@ -4,7 +4,8 @@ import { HEADER } from "../src/csv";
+ import { memoryIo } from "../src/io";
+ 
+ const csv = [HEADER, "2026-02-28,10,comida,a", "2026-03-01,20,comida,b", "2026-03-15,5.5,ocio,c", "2026-03-16,1,ocio,d"].join("\n");
+-const lista = (...args: string[]) => run(["lista", ...args], memoryIo({ "g.csv": csv }));
++const unsorted = [HEADER, "2026-03-15,5,ocio,c", "2026-03-01,20,comida,b1", "2026-02-28,10,comida,a", "2026-03-01,7,ocio,b2"].join("\n");
++const lista = (...args: string[]) => run(["lista", ...args], memoryIo({ "g.csv": csv, "u.csv": unsorted }));
+ const descriptions = (output: string) => output.split("\n").map((line) => line.split("  ").pop());
+ 
+ it("lists everything without flags", () => {
+@@ -20,6 +21,18 @@ it("accepts --desde or --hasta alone, in any position", () => {
+   expect(descriptions(lista("g.csv", "--hasta", "2026-03-01").output)).toEqual(["a", "b"]);
+ });
+ 
++it("sorts by date, keeping file order within the same day", () => {
++  expect(descriptions(lista("u.csv").output)).toEqual(["a", "b1", "b2", "c"]);
++});
++
++it("sorts by amount, highest first, with --orden importe", () => {
++  expect(descriptions(lista("u.csv", "--orden", "importe").output)).toEqual(["b1", "a", "b2", "c"]);
++});
++
++it("rejects an unknown order", () => {
++  expect(lista("g.csv", "--orden", "color")).toEqual({ code: 1, output: "Orden no válido: color" });
++});
++
+ it("rejects a date that does not exist", () => {
+   expect(lista("g.csv", "--hasta", "2026-03-32")).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
+   expect(lista("g.csv", "--desde", "2026-02-30")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });

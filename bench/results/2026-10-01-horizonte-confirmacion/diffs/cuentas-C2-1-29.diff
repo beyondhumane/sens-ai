@@ -1,0 +1,41 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 1b94d66..227a716 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -322,7 +322,8 @@ const commands: Record<string, Command> = {
+       .join("\n");
+   },
+   categorias: (args, io) => {
+-    return [...sumByCategory(load(args[0], io))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
++    const { path, month } = withMonth(args);
++    return [...sumByCategory(inMonth(load(path, io), month))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
+   },
+ };
+ 
+diff --git a/tests/categorias.test.ts b/tests/categorias.test.ts
+new file mode 100644
+index 0000000..633cde0
+--- /dev/null
++++ b/tests/categorias.test.ts
+@@ -0,0 +1,21 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [HEADER, "2026-02-10,10,comida,a", "2026-03-01,20,comida,b", "2026-03-15,5.5,ocio,c"].join("\n");
++const categorias = (...args: string[]) => run(["categorias", ...args], memoryIo({ "g.csv": csv }));
++const clean = (text: string) => text.replace(/\s/g, " ");
++
++it("groups everything without --mes", () => {
++  expect(clean(categorias("g.csv").output)).toBe("comida: 30,00 € ocio: 5,50 €");
++});
++
++it("groups only the given month", () => {
++  expect(clean(categorias("g.csv", "--mes", "2026-03").output)).toBe("comida: 20,00 € ocio: 5,50 €");
++  expect(clean(categorias("--mes", "2026-02", "g.csv").output)).toBe("comida: 10,00 €");
++});
++
++it("rejects an invalid month", () => {
++  expect(categorias("g.csv", "--mes", "2026-13")).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});
