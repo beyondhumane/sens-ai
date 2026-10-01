@@ -53,10 +53,23 @@ fn a_real_reviewer_names_an_interface_with_one_implementation_and_leaves_a_plain
     let reviewer = Haiku::default();
 
     let review = Review::of(&index, &catalog, "Add a way to run jobs from the index.", ONE_USE);
-    let found = review.findings(&reviewer.review(&review.prompt()).unwrap().answer);
+    let found = review.findings(&reviewer.review(&review.prompt("English")).unwrap().answer);
     assert!(found.iter().any(|finding| finding.rule == Rule::S1 && finding.file == "src/runner.ts"), "{found:?}");
 
     let review = Review::of(&index, &catalog, "total() crashes on an empty list; fix it.", PLAIN);
-    let found = review.findings(&reviewer.review(&review.prompt()).unwrap().answer);
+    let found = review.findings(&reviewer.review(&review.prompt("English")).unwrap().answer);
     assert!(!found.iter().any(|finding| finding.severity == Severity::Block), "{found:?}");
+}
+
+#[test]
+#[ignore]
+fn a_real_reviewer_writes_in_the_person_s_language_and_still_quotes_the_diff_as_is() {
+    let root = project();
+    let index = sens_index::build::build(&root);
+    let catalog = Catalog::of(&index);
+    let review = Review::of(&index, &catalog, "Añade una forma de ejecutar tareas desde el índice.", ONE_USE);
+    let found = review.findings(&Haiku::default().review(&review.prompt("Spanish as spoken in Spain")).unwrap().answer);
+    let interface = found.iter().find(|finding| finding.rule == Rule::S1 && finding.file == "src/runner.ts").unwrap_or_else(|| panic!("{found:?}"));
+    let spanish = [" la ", " el ", " una ", " un ", " que ", " de ", " es "];
+    assert!(spanish.iter().any(|word| format!(" {} ", interface.message.to_lowercase()).contains(word)), "{}", interface.message);
 }

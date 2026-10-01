@@ -200,9 +200,10 @@ impl Review {
         Review { request: request.to_string(), diff: diff.to_string(), sides, candidates, installed: installed(index) }
     }
 
-    pub fn prompt(&self) -> String {
+    pub fn prompt(&self, tongue: &str) -> String {
         let mut out = String::new();
         let _ = writeln!(out, "# The person's request\n\n{}\n", self.request.trim());
+        let _ = writeln!(out, "# Language\n\nThe person reads your findings: write `why` and `fix` in {tongue}. Copy `quote` from the diff exactly as it is.\n");
         let _ = writeln!(out, "# Installed dependencies\n");
         if self.installed.is_empty() {
             let _ = writeln!(out, "None.");
@@ -357,8 +358,8 @@ deleted file mode 100644
 
     #[test]
     fn the_prompt_carries_the_request_the_candidates_the_dependencies_and_the_diff() {
-        let prompt = review().prompt();
-        for part in ["Find sessions without accents.", "dayjs (package.json)", "src/market/search.js:3 (exported, used 9 times)", "src/clip.ts:7 (private to its file", "+export interface Picker", "~~~diff"] {
+        let prompt = review().prompt("Spanish as spoken in Spain");
+        for part in ["Find sessions without accents.", "write `why` and `fix` in Spanish as spoken in Spain","dayjs (package.json)", "src/market/search.js:3 (exported, used 9 times)", "src/clip.ts:7 (private to its file", "+export interface Picker", "~~~diff"] {
             assert!(prompt.contains(part), "{part} missing in:\n{prompt}");
         }
         assert!(schema().contains("\"S7\""));

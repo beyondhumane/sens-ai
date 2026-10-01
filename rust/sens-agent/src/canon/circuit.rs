@@ -17,6 +17,7 @@ use super::log::{self, Decision, Entry};
 use super::review::Reviewer;
 use super::state::{self, State};
 use crate::chat::Event;
+use crate::language;
 use crate::said;
 
 pub const PROMPT: &str = "sens-prompt";
@@ -508,7 +509,7 @@ impl Circuit {
         };
         let diff = checkpoints.diff(approved, now)?;
         let review = Review::of(&project.index, &project.catalog, request, &diff);
-        let reviewed = reviewer.review(&review.prompt())?;
+        let reviewed = reviewer.review(&review.prompt(language::now().tongue()))?;
         self.logged("reviewed", vec![Entry { at: log::now(), decision: Some(Decision::Reviewed), cost: reviewed.cost, ..Entry::default() }]);
         let findings = review.findings(&reviewed.answer);
         voice.say(Event::Canon { stage: "reviewed".into(), findings: findings.clone(), suggestions: Vec::new() });
@@ -941,6 +942,7 @@ test('plain again', () => {{
     impl Reviewer for Scripted {
         fn review(&self, prompt: &str) -> Result<super::super::review::Reviewed, String> {
             assert!(prompt.contains("+import { totals }"), "{prompt}");
+            assert!(prompt.contains(&format!("write `why` and `fix` in {}.", language::now().tongue())), "{prompt}");
             self.0.clone().map(|answer| super::super::review::Reviewed { answer, cost: 0.002 })
         }
     }

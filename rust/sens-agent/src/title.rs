@@ -3,7 +3,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::chat::Event;
-use crate::language::{self, Language};
+use crate::language;
 use crate::process::{claude, run};
 use crate::said;
 use crate::session::{self, Entry, Namer};
@@ -32,19 +32,8 @@ const EXCERPT_CAP: usize = 1_500;
 const WRAPPERS: &[char] = &['"', '\'', '«', '»', '“', '”', '「', '」', '『', '』', '《', '》', '*', '`', '#'];
 const LABELS: &[&str] = &["title", "título", "titulo", "titre", "titel", "タイトル", "标题"];
 
-fn tongue(language: Language) -> &'static str {
-    match language {
-        Language::En => "English",
-        Language::Es => "Spanish as spoken in Spain",
-        Language::Fr => "French",
-        Language::De => "German",
-        Language::Ja => "Japanese",
-        Language::Zh => "Simplified Chinese",
-    }
-}
-
 fn brief() -> String {
-    let tongue = tongue(language::now());
+    let tongue = language::now().tongue();
     format!(
         "You title conversations between a person and a coding agent. Reply with the title only, written in {tongue} whatever language the conversation is in: a short phrase of about 3 to 6 words that says what the work is about. No quotes, no final period, no emojis and no prefix such as \"Title:\"."
     )
@@ -129,7 +118,7 @@ fn cleaned(answer: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::language::speaking;
+    use crate::language::{Language, speaking};
 
     fn task(text: &str) -> Entry {
         Entry::Task { at: 1, text: text.into(), files: Vec::new(), images: Vec::new() }

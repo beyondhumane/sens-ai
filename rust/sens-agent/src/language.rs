@@ -24,6 +24,17 @@ thread_local! {
 }
 
 impl Language {
+    pub fn tongue(self) -> &'static str {
+        match self {
+            Language::En => "English",
+            Language::Es => "Spanish as spoken in Spain",
+            Language::Fr => "French",
+            Language::De => "German",
+            Language::Ja => "Japanese",
+            Language::Zh => "Simplified Chinese",
+        }
+    }
+
     pub fn id(self) -> &'static str {
         match self {
             Language::En => "en",
