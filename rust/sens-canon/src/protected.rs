@@ -5,7 +5,7 @@ use sens_index::testfile::is_test_file;
 
 use crate::verdict::{Change, Finding, Rule, Severity};
 
-const CHECKS: [&str; 7] = ["assert", "expect(", ".should", "t.Error", "t.Fatal", "Assert.", "verify("];
+const CHECKS: [&str; 15] = ["assert", "expect(", ".should", "t.Error", "t.Fatal", "Assert.", "verify(", "XCTAssert", "shouldBe", "should.", "Should -", "expect_", "@test", "Expect.", "expectEqual"];
 
 fn spanned<'a>(lines: &[&'a str], unit: &sens_index::fingerprint::Unit) -> Vec<&'a str> {
     lines.iter().skip(unit.start_line.saturating_sub(1) as usize).take((unit.end_line + 1 - unit.start_line) as usize).copied().collect()
@@ -114,6 +114,15 @@ mod tests {
         assert!(findings(&change("test/add.test.ts", &with_helper, Some(SPEC))).is_empty());
         let without_test = with_helper.replace("test('adds', () => {\n  assert.equal(add(1), 2);\n  assert.equal(add(2), 3);\n});\n", "");
         assert!(!findings(&change("test/add.test.ts", &with_helper, Some(&without_test))).is_empty());
+    }
+
+    #[test]
+    fn a_test_removed_in_a_language_read_by_shape_asks_the_person() {
+        let before = "import XCTest\n\nfinal class ShelfTests: XCTestCase {\n    func testSize() {\n        XCTAssertEqual(Shelf().size(), 1)\n    }\n\n    func testEmpty() {\n        XCTAssertTrue(Shelf().isEmpty)\n    }\n}\n";
+        let after = before.replace("\n    func testEmpty() {\n        XCTAssertTrue(Shelf().isEmpty)\n    }\n", "");
+        let found = findings(&change("Tests/ShelfTests.swift", before, Some(&after)));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].message.contains("`ShelfTests.testEmpty`"), "{}", found[0].message);
     }
 
     #[test]

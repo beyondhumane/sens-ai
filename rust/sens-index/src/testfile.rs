@@ -16,11 +16,14 @@ fn file_pattern() -> &'static Regex {
     RE.get_or_init(|| {
         Regex::new(concat!(
             r"(\.(test|spec)\.[cm]?[jt]sx?",
-            r"|_test\.(go|py|rb|exs?)",
-            r"|_spec\.rb",
+            r"|_test\.(go|py|rb|exs?|dart|gleam)",
+            r"|_spec\.(rb|lua)",
+            r"|_(SUITE|tests)\.erl",
+            r"|\.Tests\.ps1",
+            r"|\.t\.sol",
             r"|(^|/)test_[^/]*\.py",
             r"|(^|/)conftest\.py",
-            r"|(Test|Tests|Spec)\.(java|kt|kts|cs|scala))$",
+            r"|(Test|Tests|Spec)\.(java|kt|kts|cs|scala|swift|groovy|m|hs|fs))$",
         ))
         .unwrap()
     })
@@ -48,6 +51,13 @@ mod tests {
             "src/__tests__/a.ts",
             "test/fixtures/sample/app.ts",
             "e2e/flow.ts",
+            "Sources/ShelfTests.swift",
+            "lib/shelf_test.dart",
+            "spec/shelf_spec.lua",
+            "src/shelf_SUITE.erl",
+            "Shelf.Tests.ps1",
+            "src/Shelf.t.sol",
+            "app/ShelfSpec.hs",
         ] {
             assert!(is_test_file(yes), "{yes} should be a test file");
         }
@@ -57,6 +67,9 @@ mod tests {
             "src/contest.py",
             "src/testing.go",
             "lib/protest.rb",
+            "Sources/Shelf.swift",
+            "lib/shelf.dart",
+            "src/Shelf.sol",
         ] {
             assert!(!is_test_file(no), "{no} should not be a test file");
         }

@@ -76,6 +76,22 @@ mod tests {
     }
 
     #[test]
+    fn a_new_comment_is_blocked_in_the_languages_read_by_shape_too() {
+        let written = [
+            ("Shelf.swift", "func size() -> Int {\n    // why\n    return 1\n}\n"),
+            ("shelf.ex", "defmodule Shelf do\n  # why\n  def size, do: 1\nend\n"),
+            ("shelf.lua", "local function size()\n  -- why\n  return 1\nend\n"),
+            ("Shelf.hs", "size :: Int\n-- why\nsize = 1\n"),
+            ("shelf.ml", "let size () =\n  (* why *)\n  1\n"),
+            ("backup.sh", "#!/bin/bash\n# why\nbackup() { echo 1; }\n"),
+        ];
+        for (path, source) in written {
+            let lines: Vec<u32> = findings(&change(path, None, source)).iter().map(|finding| finding.line).collect();
+            assert_eq!(lines, [2], "{path}");
+        }
+    }
+
+    #[test]
     fn comments_already_there_and_the_shebang_are_not_the_turn_s() {
         let before = "#!/usr/bin/env node\n// old\nexport const a = 1;\n";
         let after = "#!/usr/bin/env node\n// old\nexport const a = 2;\n";

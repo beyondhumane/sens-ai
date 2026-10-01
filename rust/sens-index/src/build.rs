@@ -7,7 +7,7 @@ use crate::lang::treesitter::Emitted;
 use crate::testfile::is_test_file;
 use crate::index::Index;
 use crate::lang::treesitter::{self, Extract, Grammar, Options, Prepare, as_is};
-use crate::lang::{cfamily, csharp, go, java, kotlin, php, python, ruby, rust, typescript};
+use crate::lang::{cfamily, csharp, generic, go, java, kotlin, php, python, ruby, rust, typescript};
 
 const SKIP_DIRS: [&str; 8] = ["node_modules", "dist", ".sens", ".git", "target", "__pycache__", ".venv", "venv"];
 
@@ -20,7 +20,7 @@ struct Language {
     options: fn() -> Options,
 }
 
-const LANGUAGES: [Language; 11] = [
+const LANGUAGES: [Language; 30] = [
     Language { name: "typescript", extensions: &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "svelte"], grammar: typescript::grammar, prepare: typescript::prepare, extract: typescript::extract, options: typescript::options },
     Language { name: "go", extensions: &["go"], grammar: |_| tree_sitter_go::LANGUAGE.into(), prepare: as_is, extract: go::extract, options: go::options },
     Language { name: "ruby", extensions: &["rb"], grammar: |_| tree_sitter_ruby::LANGUAGE.into(), prepare: as_is, extract: ruby::extract, options: ruby::options },
@@ -32,6 +32,25 @@ const LANGUAGES: [Language; 11] = [
     Language { name: "rust", extensions: &["rs"], grammar: |_| tree_sitter_rust::LANGUAGE.into(), prepare: as_is, extract: rust::extract, options: rust::options },
     Language { name: "c", extensions: &["c"], grammar: |_| tree_sitter_c::LANGUAGE.into(), prepare: as_is, extract: cfamily::extract_c, options: cfamily::options },
     Language { name: "cpp", extensions: &["cpp", "cxx", "cc", "hpp", "hh", "hxx", "h"], grammar: |_| tree_sitter_cpp::LANGUAGE.into(), prepare: as_is, extract: cfamily::extract_cpp, options: cfamily::options },
+    Language { name: "swift", extensions: &["swift"], grammar: |_| tree_sitter_swift::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_swift::TAGS_QUERY, out), options: generic::options },
+    Language { name: "dart", extensions: &["dart"], grammar: |_| tree_sitter_dart::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_dart::TAGS_QUERY, out), options: generic::options },
+    Language { name: "scala", extensions: &["scala", "sc"], grammar: |_| tree_sitter_scala::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "lua", extensions: &["lua"], grammar: |_| tree_sitter_lua::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_lua::TAGS_QUERY, out), options: generic::options },
+    Language { name: "bash", extensions: &["sh", "bash"], grammar: |_| tree_sitter_bash::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "powershell", extensions: &["ps1", "psm1"], grammar: |_| tree_sitter_powershell::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "elixir", extensions: &["ex", "exs"], grammar: |_| tree_sitter_elixir::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_elixir::TAGS_QUERY, out), options: generic::options },
+    Language { name: "haskell", extensions: &["hs"], grammar: |_| tree_sitter_haskell::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "zig", extensions: &["zig"], grammar: |_| tree_sitter_zig::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "r", extensions: &["r"], grammar: |_| tree_sitter_r::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_r::TAGS_QUERY, out), options: generic::options },
+    Language { name: "objc", extensions: &["m"], grammar: |_| tree_sitter_objc::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "ocaml", extensions: &["ml", "mli"], grammar: generic::ocaml, prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_ocaml::TAGS_QUERY, out), options: generic::options },
+    Language { name: "fsharp", extensions: &["fs", "fsi", "fsx"], grammar: generic::fsharp, prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_fsharp::TAGS_QUERY, out), options: generic::options },
+    Language { name: "erlang", extensions: &["erl", "hrl"], grammar: |_| tree_sitter_erlang::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "julia", extensions: &["jl"], grammar: |_| tree_sitter_julia::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
+    Language { name: "solidity", extensions: &["sol"], grammar: |_| tree_sitter_solidity::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_solidity::TAGS_QUERY, out), options: generic::options },
+    Language { name: "elm", extensions: &["elm"], grammar: |_| tree_sitter_elm::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_elm::TAGS_QUERY, out), options: generic::options },
+    Language { name: "gleam", extensions: &["gleam"], grammar: |_| tree_sitter_gleam::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, tree_sitter_gleam::TAGS_QUERY, out), options: generic::options },
+    Language { name: "groovy", extensions: &["groovy", "gradle"], grammar: |_| tree_sitter_groovy::LANGUAGE.into(), prepare: as_is, extract: |root, source, _, _, out| generic::extract(root, source, "", out), options: generic::options },
 ];
 
 fn language_of(path: &Path) -> Option<&'static Language> {

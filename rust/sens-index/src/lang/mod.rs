@@ -1,6 +1,7 @@
 pub mod cfamily;
 pub mod component;
 pub mod csharp;
+pub mod generic;
 pub mod go;
 pub mod java;
 pub mod kotlin;
