@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use sens_canon::judge::{judge_change, judge_command, judge_turn};
+use sens_canon::judge::{judge_command, judge_since, judge_turn};
 use sens_canon::orphans;
 use sens_canon::review::Review;
 use sens_canon::verdict::{Change, Finding, Rule, Severity, Verdict};
@@ -300,8 +300,9 @@ impl Circuit {
         let empty = Index::default();
         let project = self.project(Duration::ZERO);
         let index = project.as_ref().map_or(&empty, |project| &project.index);
+        let approved = self.as_approved(State::load(&self.work).approved.as_ref(), &path, before.as_deref());
         let change = Change { path, before, after: Some(after) };
-        let verdict = judge_change(index, &change, &state::rules(&self.work), &state::exceptions(&self.work));
+        let verdict = judge_since(index, &change, approved.as_deref(), &state::rules(&self.work), &state::exceptions(&self.work));
         let judged = self.weigh(voice, "write", verdict, |_| false);
         self.reply(voice, "write", &judged, "PreToolUse")
     }
@@ -349,7 +350,8 @@ impl Circuit {
         let project = self.project(Duration::ZERO);
         let index = project.as_ref().map_or(&empty, |project| &project.index);
         let (rules, exceptions) = (state::rules(&self.work), state::exceptions(&self.work));
-        let verdict = changes.iter().fold(Verdict::default(), |verdict, change| verdict.with(judge_change(index, change, &rules, &exceptions).findings));
+        let approved = |change: &Change| self.as_approved(state.approved.as_ref(), &change.path, change.before.as_deref());
+        let verdict = changes.iter().fold(Verdict::default(), |verdict, change| verdict.with(judge_since(index, change, approved(change).as_deref(), &rules, &exceptions).findings));
         let changed: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
         let judged = self.weigh(voice, "landed", verdict, |finding| self.put_back(&seen, &finding.file, &changed));
         if !judged.restored.is_empty() {
@@ -358,6 +360,13 @@ impl Circuit {
             let _ = state.save(&self.work);
         }
         self.reply(voice, "landed", &judged, "PostToolUse")
+    }
+
+    fn as_approved(&self, approved: Option<&Tree>, path: &str, current: Option<&str>) -> Option<String> {
+        match (&self.checkpoints, approved) {
+            (Some(checkpoints), Some(tree)) => checkpoints.read(tree, path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
+            _ => current.map(str::to_string),
+        }
     }
 
     fn put_back(&self, tree: &Tree, path: &str, changed: &HashSet<&str>) -> bool {
@@ -778,6 +787,38 @@ mod tests {
         let yes = Ear::answering(&[true]);
         assert_eq!(circuit.answer(&yes, WRITE, &write(&root.join("package.json"), manifest)), json!({}));
         assert!(state::exceptions(&root).keys.contains("R3:moment"));
+    }
+
+    #[test]
+    fn a_test_written_in_this_turn_can_be_reshaped_but_one_sens_approved_is_asked_about() {
+        let (root, keeper) = project("own-tests");
+        let approved = "import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+test('plain', () => {
+  assert.equal(plain('É'), 'e');
+});
+";
+        let spec = root.join("test/text.test.ts");
+        std::fs::create_dir_all(spec.parent().unwrap()).unwrap();
+        std::fs::write(&spec, approved).unwrap();
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
+        let grown = format!("{approved}
+test('plain again', () => {{
+  assert.equal(plain('Ñ'), 'n');
+  assert.equal(plain('Ü'), 'u');
+}});
+");
+        assert_eq!(decision(&circuit.answer(&ear, WRITE, &write(&spec, &grown))), "allow");
+        std::fs::write(&spec, &grown).unwrap();
+        let reshaped = grown.replace("  assert.equal(plain('Ü'), 'u');
+", "");
+        assert_eq!(decision(&circuit.answer(&ear, WRITE, &write(&spec, &reshaped))), "allow");
+        assert_eq!(decision(&circuit.answer(&ear, WRITE, &write(&spec, "import { test } from 'node:test';
+"))), "deny");
+        assert_eq!(ear.asked.lock().unwrap().len(), 1);
     }
 
     #[test]

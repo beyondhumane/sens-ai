@@ -8,11 +8,16 @@ use crate::verdict::{Change, Exceptions, Finding, ProjectRules, Rule, TurnStats,
 use crate::{comments, copies, dependencies, integrity, protected};
 
 pub fn judge_change(index: &Index, change: &Change, rules: &ProjectRules, exceptions: &Exceptions) -> Verdict {
+    judge_since(index, change, change.before.as_deref(), rules, exceptions)
+}
+
+pub fn judge_since(index: &Index, change: &Change, approved: Option<&str>, rules: &ProjectRules, exceptions: &Exceptions) -> Verdict {
+    let since_approved = Change { path: change.path.clone(), before: approved.map(str::to_string), after: change.after.clone() };
     let mut verdict = Verdict::default()
         .with(integrity::change(change))
         .with(copies::copies(index, change))
         .with(dependencies::findings(change))
-        .with(protected::findings(change));
+        .with(protected::findings(&since_approved));
     if rules.no_comments {
         verdict = verdict.with(comments::findings(change));
     }
@@ -130,6 +135,32 @@ mod tests {
         assert_eq!(copies[0].severity, Severity::Block);
         assert_eq!((stats.files_added, stats.units_added), (2, 2));
         assert_eq!(stats.lines_added, (first.lines().count() + second.lines().count()) as u64);
+    }
+
+    #[test]
+    fn tests_written_in_this_turn_can_be_reshaped_but_the_approved_ones_stay_protected() {
+        let approved = "import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+test('adds', () => {
+  assert.equal(add(1), 2);
+});
+";
+        let grown = format!("{approved}
+test('adds more', () => {{
+  assert.equal(add(2), 3);
+  assert.equal(add(3), 4);
+}});
+");
+        let protects = |change: &Change| judge_since(&Index::default(), change, Some(approved), &ProjectRules::default(), &Exceptions::default()).findings.iter().any(|finding| finding.rule == Rule::R8);
+        let reshaped = Change { path: "test/add.test.ts".into(), before: Some(grown.clone()), after: Some(grown.replace("  assert.equal(add(2), 3);
+", "")) };
+        let withdrawn = Change { path: "test/add.test.ts".into(), before: Some(grown.clone()), after: Some(approved.into()) };
+        let dropped = Change { path: "test/add.test.ts".into(), before: Some(grown.clone()), after: Some("import { test } from 'node:test';
+".into()) };
+        assert!(!protects(&reshaped) && !protects(&withdrawn));
+        assert!(protects(&dropped));
+        assert!(judge_change(&Index::default(), &reshaped, &ProjectRules::default(), &Exceptions::default()).findings.iter().any(|finding| finding.rule == Rule::R8));
     }
 
     #[test]
