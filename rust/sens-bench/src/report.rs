@@ -45,9 +45,13 @@ pub fn append(dir: &Path, run: &Run) -> Result<(), String> {
     add_line(&dir.join(RUNS), run)
 }
 
+pub fn write_lines<T: serde::Serialize>(path: &Path, values: &[T]) -> Result<(), String> {
+    let lines: Vec<String> = values.iter().map(serde_json::to_string).collect::<Result<_, _>>().map_err(|error| error.to_string())?;
+    std::fs::write(path, lines.join("\n") + "\n").map_err(|error| error.to_string())
+}
+
 pub fn rewrite(dir: &Path, runs: &[Run]) -> Result<(), String> {
-    let lines: Vec<String> = runs.iter().map(serde_json::to_string).collect::<Result<_, _>>().map_err(|error| error.to_string())?;
-    std::fs::write(dir.join(RUNS), lines.join("\n") + "\n").map_err(|error| error.to_string())
+    write_lines(&dir.join(RUNS), runs)
 }
 
 type Arm = (Condition, String);

@@ -6,10 +6,10 @@ source = "src"
 
 [probes]
 dinero = 'Intl\.NumberFormat|€'
-fechas = 'toLocaleDateString|Intl\.DateTimeFormat|\}/\$\{|join\("/"\)'
-meses = "[\"']enero[\"']"
-dias = "[\"']lunes[\"']"
-acentos = 'normalize\('
+fechas = 'reverse\(\)\.join\("/"\)|\}/\$\{|day:\s*"2-digit"'
+meses = "(?i)[\"']enero[\"']|month:\\s*[\"']long[\"']"
+dias = "(?i)[\"']lunes[\"']|weekday:\\s*[\"']long[\"']"
+acentos = '\.normalize\('
 importes = 'Importe no válido'
 fechas_validas = 'Fecha no válida'
 meses_validos = 'Mes no válido'

@@ -207,8 +207,12 @@ pub struct Plan<'a> {
 
 impl Plan<'_> {
     pub fn name(&self) -> String {
-        format!("{}-{:?}-{}", self.sequence.id, self.condition, self.rep)
+        folder(&self.sequence.id, self.condition, self.rep)
     }
+}
+
+fn folder(sequence: &str, condition: Condition, rep: u32) -> String {
+    format!("{sequence}-{condition:?}-{rep}")
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -314,6 +318,24 @@ pub fn read(out: &Path) -> Result<Vec<StepRun>, String> {
 
 pub fn append(out: &Path, run: &StepRun) -> Result<(), String> {
     report::add_line(&out.join(STEPS), run)
+}
+
+pub fn remeasure(sequence: &Sequence, runs: &mut [StepRun], scratch: &Path, jscpd: &Path) -> Result<(), String> {
+    let snapshot = scratch.join("remeasured");
+    for run in runs.iter_mut().filter(|run| !run.commit.is_empty()) {
+        let Some(condition) = run.condition else {
+            continue;
+        };
+        let _ = std::fs::remove_dir_all(&snapshot);
+        git::export(&scratch.join(folder(&run.sequence, condition, run.rep)), &run.commit, &snapshot)?;
+        run.shape = project::shape(&snapshot, &sequence.source, jscpd, &sequence.probes)?;
+    }
+    let _ = std::fs::remove_dir_all(&snapshot);
+    Ok(())
+}
+
+pub fn rewrite(out: &Path, runs: &[StepRun]) -> Result<(), String> {
+    report::write_lines(&out.join(STEPS), runs)
 }
 
 pub fn last_commits(runs: &[StepRun]) -> BTreeMap<(Condition, u32), (u32, String)> {

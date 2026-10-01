@@ -11,7 +11,8 @@ sens-bench report <carpeta>
 sens-bench validate --tasks <carpeta> [--only <tarea>[,<tarea>]]
 sens-bench sequence validate <carpeta de la secuencia>
 sens-bench sequence run <carpeta de la secuencia> --condition C0[,C2] --out <carpeta> [--reps 3] [--steps 30] [--model claude-sonnet-5-5] [--effort medium] [--minutes 30]
-sens-bench sequence report <carpeta>";
+sens-bench sequence report <carpeta>
+sens-bench sequence remeasure <carpeta de la secuencia> <carpeta>";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -31,6 +32,7 @@ fn go(args: &[String]) -> Result<(), String> {
             Some("validate") => validate_sequence(&args[2..]),
             Some("run") => run_sequence(&args[2..]),
             Some("report") => summarize_sequence(Path::new(args.get(2).ok_or(USAGE)?)).map(|text| println!("{text}")),
+            Some("remeasure") => remeasure_sequence(&args[2..]),
             _ => Err(USAGE.into()),
         },
         _ => Err(USAGE.into()),
@@ -142,9 +144,22 @@ fn batch(args: &[String]) -> Result<Batch, String> {
         model: flag(args, "--model").unwrap_or_else(|| "claude-sonnet-5-5".into()),
         effort: flag(args, "--effort").unwrap_or_else(|| "medium".into()),
         jscpd: jscpd()?,
-        scratch: std::env::temp_dir().join("sens-bench").join(out.file_name().unwrap_or_default()),
+        scratch: scratch_of(&out),
         out,
     })
+}
+
+fn scratch_of(out: &Path) -> PathBuf {
+    std::env::temp_dir().join("sens-bench").join(out.file_name().unwrap_or_default())
+}
+
+fn remeasure_sequence(args: &[String]) -> Result<(), String> {
+    let found = sequence::load(Path::new(args.first().ok_or(USAGE)?))?;
+    let out = PathBuf::from(args.get(1).ok_or(USAGE)?);
+    let mut runs = sequence::read(&out)?;
+    sequence::remeasure(&found, &mut runs, &scratch_of(&out), &jscpd()?)?;
+    sequence::rewrite(&out, &runs)?;
+    summarize_sequence(&out).map(|text| println!("{text}"))
 }
 
 fn said_error(error: &str) -> String {
