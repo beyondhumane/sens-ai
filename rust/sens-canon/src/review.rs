@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use sens_index::build;
 use sens_index::index::Index;
@@ -15,6 +18,8 @@ const CANDIDATES: usize = 5;
 const EXCERPT_LINES: usize = 5;
 const DIFF_CAP: usize = 80_000;
 const KEY_CAP: usize = 80;
+static RAISES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bthrow\b|\braise\b|panic!|\bbail!|\bErr\(").expect("a valid pattern"));
+
 const RULES: [(&str, Rule); 7] = [("S1", Rule::S1), ("S2", Rule::S2), ("S3", Rule::S3), ("S4", Rule::S4), ("S5", Rule::S5), ("S6", Rule::S6), ("S7", Rule::S7)];
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -254,7 +259,7 @@ impl Review {
         let side = self.sides.get(file)?;
         let lines = if rule == Rule::S6 { &side.removed } else { &side.added };
         let whole = squeezed(&lines.iter().map(|(_, text)| text.as_str()).collect::<Vec<_>>().join("\n"));
-        if !whole.contains(&quote) {
+        if !whole.contains(&quote) || (rule == Rule::S4 && RAISES.is_match(&quote)) {
             return None;
         }
         let opening = squeezed(item["quote"].as_str()?.lines().find(|line| !line.trim().is_empty())?);
@@ -412,6 +417,26 @@ export const projectOf = (item: Item) => item.project;
         let review = Review::of(&index, &catalog, "Show the size.", &diff);
         let named: Vec<&str> = review.candidates.get("src/shelf.ts").into_iter().flatten().map(|candidate| candidate.name.as_str()).collect();
         assert!(named.contains(&"weigh"), "{named:?}");
+    }
+
+    #[test]
+    fn a_check_that_stops_bad_input_is_never_speculation() {
+        let diff = "diff --git a/src/add.ts b/src/add.ts\n--- a/src/add.ts\n+++ b/src/add.ts\n@@ -1 +1,3 @@\n+export const add = (category: string, limit = 10) => {\n+  if (category.includes(\",\")) throw new Error(`Categoría no válida: ${category}`);\n+};\n";
+        let index = Index::default();
+        let review = Review::of(&index, &Catalog::of(&index), "Add expenses.", diff);
+        let found = review.findings(&json!({ "findings": [
+            { "rule": "S4", "file": "src/add.ts", "quote": "if (category.includes(\",\")) throw new Error(`Categoría no válida: ${category}`);", "why": "x", "fix": "y", "confidence": "high" },
+            { "rule": "S4", "file": "src/add.ts", "quote": "export const add = (category: string, limit = 10) => {", "why": "x", "fix": "y", "confidence": "high" }
+        ] }));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].key.contains("limit = 10"), "{found:?}");
+    }
+
+    #[test]
+    fn the_brief_keeps_named_functions_input_checks_and_unseen_code_out_of_the_findings() {
+        assert!(BRIEF.contains("A plain function that gives a name to a piece of logic is not an abstraction"));
+        assert!(BRIEF.contains("keeps bad input from breaking the data or the file format"));
+        assert!(BRIEF.contains("You see only the diff. The rest of the project exists"));
     }
 
     #[test]
