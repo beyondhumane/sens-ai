@@ -28,7 +28,7 @@ export function useDictation(pane: Pane, text: string, setText: (text: string) =
     if (cause === "model") void prepareVoice();
   }
 
-  async function start() {
+  async function start(handsFree: boolean) {
     const before = text.trim();
     const phrases: string[] = [];
     const early: VoiceHeard[] = [];
@@ -69,7 +69,7 @@ export function useDictation(pane: Pane, text: string, setText: (text: string) =
     };
     unlisten = await events.voice(hear);
     try {
-      id = await commands.voiceStart(languageNow());
+      id = await commands.voiceStart(languageNow(), handsFree);
     } catch (error) {
       return finish(refusalOf(error));
     }
@@ -85,7 +85,12 @@ export function useDictation(pane: Pane, text: string, setText: (text: string) =
       warn(model.fetching ? t.voiceFetching(percentOf(model.done, model.total)) : t.voiceFetchingStarts, pane);
       return;
     }
-    void start();
+    void start(false);
+  }
+
+  function listen() {
+    if (live.current || phase !== "idle" || !model.ready) return;
+    void start(true);
   }
 
   const label =
@@ -97,5 +102,5 @@ export function useDictation(pane: Pane, text: string, setText: (text: string) =
           ? t.voiceFetching(percentOf(model.done, model.total))
           : t.dictate;
 
-  return { phase, level, label, toggle, hush: () => live.current?.stop(false) };
+  return { phase, level, label, toggle, listen, hush: () => live.current?.stop(false) };
 }

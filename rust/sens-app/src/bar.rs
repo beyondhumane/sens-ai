@@ -34,6 +34,7 @@ struct Opened {
     front: Option<front::Front>,
     pinned: bool,
     resume: Option<HandOver>,
+    listen: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -91,11 +92,21 @@ pub fn open(app: &AppHandle) {
     }
 }
 
-fn reveal(app: &AppHandle, bar: &WebviewWindow) {
-    reveal_with(app, bar, None);
+pub fn wake(app: &AppHandle) {
+    let Some(bar) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    if !bar.is_visible().unwrap_or(false) {
+        front::note();
+    }
+    reveal_with(app, &bar, None, true);
 }
 
-fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>) {
+fn reveal(app: &AppHandle, bar: &WebviewWindow) {
+    reveal_with(app, bar, None, false);
+}
+
+fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>, listen: bool) {
     let base = data_dir(app).ok();
     let look = base.as_deref().map(look::load).unwrap_or_default();
     let pin = app.state::<Pin>();
@@ -111,6 +122,7 @@ fn reveal_with(app: &AppHandle, bar: &WebviewWindow, resume: Option<HandOver>) {
         front: front::front(),
         pinned,
         resume,
+        listen,
     };
     let _ = app.emit_to(LABEL, "bar-open", opened);
     let _ = bar.show();
@@ -214,7 +226,7 @@ pub fn bar_focus(app: AppHandle, hand: HandOver) {
             let _ = main.hide();
             front::note();
             if let Some(bar) = shown.get_webview_window(LABEL) {
-                reveal_with(&shown, &bar, Some(hand));
+                reveal_with(&shown, &bar, Some(hand), false);
             }
         });
     });

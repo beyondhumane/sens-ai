@@ -116,6 +116,12 @@ lado.
   trabaja, los avisos vuelven.
 - **Dictado**: el micrófono usa `useDictation` con la voz local. Si la voz no está
   descargada, el aviso es el mismo que en el compositor.
+- **«Hey Sens»** (añadido el 2026-09-29; apagado por defecto, en Ajustes › Focus y
+  voz): con él activo, Sens escucha frases cortas con Whisper en el equipo y, si
+  una empieza por «Hey Sens» u «Oye Sens», abre la barra con `bar-open { listen:
+  true }` y la barra empieza a dictar sola. Ese dictado para tras unos 4 s de
+  silencio y deja el texto sin enviar. Mientras hay otro dictado o una prueba del
+  micrófono, no escucha.
 
 ## Ciclo de vida
 

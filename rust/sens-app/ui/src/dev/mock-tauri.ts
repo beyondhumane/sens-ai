@@ -10,7 +10,7 @@ const HOUR = 3_600_000;
 const ROOT = "C:/Proyectos/demo";
 const asking = new URLSearchParams(location.search);
 const onBar = location.pathname.endsWith("/bar.html");
-const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, keepInTray: true, startWithWindows: true };
+const person = { name: "Demo", checkUpdates: false, welcomed: !asking.has("welcome"), seen: "", notify: true, keepInTray: true, startWithWindows: true, wake: false };
 const SUBSCRIBED = { billing: "subscription", plan: "max", source: "claude.ai", email: "demo@example.com" };
 const SIGNED_OUT = { billing: "signedOut", plan: "", source: "", email: "" };
 let account = asking.get("account") === "signedOut" ? SIGNED_OUT : SUBSCRIBED;
@@ -542,7 +542,7 @@ const CLIP = [
 const copied = () => asking.get("clip") !== "none";
 let pinned = asking.has("pinned");
 
-const opened = (resume: HandOver | null = null): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned, resume });
+const opened = (resume: HandOver | null = null): BarOpened => ({ look: lookOf(kept), language: spoken ? languageOf(spoken) : null, front: front(), pinned, resume, listen: asking.has("wake") });
 
 function shot(): Shot | null {
   const [width, height] = [960, 540];
@@ -654,6 +654,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   voice_microphones: () => MICROPHONES,
   voice_microphone: () => microphone,
   voice_choose: ({ microphone: chosen }) => void (microphone = (chosen as string | null) ?? null),
+  set_wake: ({ on }) => ((person.wake = Boolean(on)), null),
   preview_url: ({ path }) => `http://127.0.0.1:4321/demo/${String(path).split("/").pop()}`,
   artifact_text: ({ path }) => `# ${String(path).split("/").pop()}\n\nTexto de prueba.`,
   capabilities: () => structuredClone(caps),

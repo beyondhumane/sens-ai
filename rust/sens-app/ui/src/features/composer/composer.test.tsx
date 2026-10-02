@@ -527,7 +527,7 @@ describe("dictation", () => {
     render(<Composer />);
     fireEvent.change(field(), { target: { value: "Primero " } });
     await act(async () => fireEvent.click(button("Dictar")));
-    expect(ipc.commands.voiceStart).toHaveBeenCalledWith("es");
+    expect(ipc.commands.voiceStart).toHaveBeenCalledWith("es", false);
     const microphone = button("Parar el dictado");
     expect(microphone.getAttribute("aria-pressed")).toBe("true");
 

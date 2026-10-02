@@ -30,6 +30,7 @@ const ipc = vi.hoisted(() => ({
     voiceTest: vi.fn(),
     voiceStop: vi.fn(),
     voicePrepare: vi.fn(),
+    setWake: vi.fn(),
     updateCheck: vi.fn(),
     providersState: vi.fn(),
     setProviderMethod: vi.fn(),
@@ -345,6 +346,34 @@ describe("focus and voice settings", () => {
 
     act(() => voice.setState({ ready: true, fetching: false, total: 190_085_487 }));
     expect(screen.getByText("Modelo de voz en este equipo · 181 MB")).toBeTruthy();
+  });
+
+  it("listens for “Hey Sens” only once it is switched on, and says what keeps it from hearing", async () => {
+    await open("focus");
+    const wake = screen.getByRole("switch", { name: "Dictar en modo focus cuando diga «Hey Sens» u «Oye Sens»" });
+    expect(wake.getAttribute("aria-checked")).toBe("false");
+
+    ipc.commands.setWake.mockRejectedValueOnce("no pude guardar el perfil");
+    await act(async () => fireEvent.click(wake));
+    expect(wake.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("alert").textContent).toBe("no pude guardar el perfil");
+
+    ipc.commands.setWake.mockResolvedValue(null);
+    await act(async () => fireEvent.click(wake));
+    expect(ipc.commands.setWake).toHaveBeenLastCalledWith(true);
+    expect(wake.getAttribute("aria-checked")).toBe("true");
+    expect(profile.getState().person.wake).toBe(true);
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await act(async () => fireEvent.click(wake));
+    expect(ipc.commands.setWake).toHaveBeenLastCalledWith(false);
+    expect(wake.getAttribute("aria-checked")).toBe("false");
+
+    const muted = "Tu micrófono está silenciado en Windows · actívalo con la tecla del micrófono o en Configuración › Sistema › Sonido › Entrada";
+    ipc.commands.setWake.mockResolvedValue(muted);
+    await act(async () => fireEvent.click(wake));
+    expect(wake.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toBe(muted);
   });
 
   it("offers to download the voice model again when it could not come", async () => {
