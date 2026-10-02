@@ -1,0 +1,84 @@
+diff --git a/README.md b/README.md
+index b91a929..c705dd6 100644
+--- a/README.md
++++ b/README.md
+@@ -22,6 +22,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
++| `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index a6a7667..3f3ca2f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { escapeField, parseExpenses } from "./csv";
++import { escapeField, HEADER, parseExpenses } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -37,12 +37,12 @@ function isRealDate(iso: string): boolean {
+ 
+ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+ 
+-function monthArgs(args: string[]): { path: string | undefined; month: string | undefined } {
++function monthArgs(args: string[]): { path: string | undefined; rest: string[]; month: string | undefined } {
+   const flag = args.indexOf("--mes");
+   const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
+   if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
+-  const path = args.find((_, i) => flag === -1 || (i !== flag && i !== flag + 1));
+-  return { path, month };
++  const rest = args.filter((_, i) => flag === -1 || (i !== flag && i !== flag + 1));
++  return { path: rest[0], rest, month };
+ }
+ 
+ function rangeArgs(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined } {
+@@ -112,6 +112,20 @@ const commands:Record<string, Command> = {
+     const expenses = load(path, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
++  exportar: (args, io) => {
++    const { path, rest, month } = monthArgs(args);
++    const out = rest[1];
++    if (!path) throw new Error("Falta el fichero de gastos");
++    if (!out) throw new Error("Falta el fichero de salida");
++    const text = io.read(path);
++    const expenses = parseExpenses(text).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    const eol = text.includes("\r\n") ? "\r\n" : "\n";
++    const rows = expenses.map(
++      (e) => `${e.date},${(e.cents / 100).toFixed(2)},${escapeField(e.category)},${escapeField(e.description)}`,
++    );
++    io.write(out, [HEADER, ...rows].join(eol) + eol);
++    return `Exportados ${expenses.length} gastos a ${out}`;
++  },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   informe: (args, io) => {
+     const { path, month } = monthArgs(args);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index bc3ba32..96d7367 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -137,4 +137,20 @@ describe("cuentas", () => {
+ `);
+     expect(shown(run(["lista", "gastos.csv"], io).output)).toContain("Cena, con amigos");
+   });
++
++  it("exports one month or everything with the same format", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-05,18.00,Ocio,"Cena, con amigos"
++2026-04-06,2.00,Ocio,Cine
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(run(["exportar", "gastos.csv", "marzo.csv", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Exportados 1 gastos a marzo.csv" });
++    expect(io.files["marzo.csv"]).toBe(`fecha,importe,categoria,descripcion
++2026-03-05,18.00,Ocio,"Cena, con amigos"
++`);
++    expect(run(["exportar", "gastos.csv", "todo.csv"], io).output).toBe("Exportados 2 gastos a todo.csv");
++    expect(io.files["todo.csv"]).toBe(gastos);
++    expect(run(["exportar", "gastos.csv", "x.csv", "--mes", "2026-13"], io).output).toBe("Mes no válido: 2026-13");
++    expect(run(["exportar", "gastos.csv"], io).code).toBe(1);
++  });
+ });

@@ -1,0 +1,57 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 75e812b..744761f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -222,6 +222,17 @@ const commands: Record<string, Command> = {
+     io.write(output, `${[header, ...kept].join("\n")}\n`);
+     return `Exportados ${kept.length} gastos a ${output}`;
+   },
++  duplicados: ([path], io) => {
++    const groups = new Map<string, Expense[]>();
++    for (const expense of load(path, io)) {
++      const key = [expense.date, expense.cents, fold(expense.description).trim().replace(/\s+/g, " ")].join("|");
++      groups.set(key, [...(groups.get(key) ?? []), expense]);
++    }
++    const lines = [...groups.values()]
++      .filter((group) => group.length > 1)
++      .map(([first, ...rest]) => `${rest.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`);
++    return lines.length === 0 ? "Sin duplicados" : lines.join("\n");
++  },
+   categorias: (args, io) => {
+     return [...sumByCategory(load(args[0], io))].map(([category, cents]) => `${category}: ${formatMoney(cents)}`).join("\n");
+   },
+diff --git a/tests/duplicados.test.ts b/tests/duplicados.test.ts
+new file mode 100644
+index 0000000..c1de918
+--- /dev/null
++++ b/tests/duplicados.test.ts
+@@ -0,0 +1,29 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const duplicados = (rows: string[]) => run(["duplicados", "g.csv"], memoryIo({ "g.csv": [HEADER, ...rows].join("\n") }));
++const clean = (text: string) => text.replace(/[^\S\n]/g, " ");
++
++it("groups expenses with same date, amount and description ignoring case, accents and extra spaces", () => {
++  const { code, output } = duplicados([
++    "2026-03-09,8.75,Ocio,Café con Ana",
++    "2026-03-09,8.75,Comida,  CAFE  con   ana ",
++    "2026-03-09,8.75,Ocio,cafe con ana",
++    "2026-03-10,8.75,Ocio,Café con Ana",
++    "2026-03-09,9.00,Ocio,Café con Ana",
++    "2026-03-11,5,Ocio,Cine",
++    "2026-03-11,5,Ocio,Cine",
++  ]);
++  expect(code).toBe(0);
++  expect(clean(output)).toBe("3 veces: 09/03/2026  8,75 €  Café con Ana\n2 veces: 11/03/2026  5,00 €  Cine");
++});
++
++it("says so when nothing repeats", () => {
++  expect(duplicados(["2026-03-09,8.75,Ocio,Café"])).toEqual({ code: 0, output: "Sin duplicados" });
++});
++
++it("requires the file", () => {
++  expect(run(["duplicados"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++});

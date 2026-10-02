@@ -1,0 +1,13 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index f1b28fe..0bbc480 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -75,7 +75,7 @@ const commands: Record<string, Command> = {
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n"),
+   buscar: (args, io) => {
+-    const { expenses, positional } = selected(args, io, []);
++    const { expenses, positional } = selected(args, io, ["desde", "hasta"]);
+     if (positional[1] === undefined) throw new Error("Falta el texto a buscar");
+     const wanted = plain(positional[1]);
+     const found = expenses.filter((expense) => plain(expense.description).includes(wanted) || plain(expense.category).includes(wanted));

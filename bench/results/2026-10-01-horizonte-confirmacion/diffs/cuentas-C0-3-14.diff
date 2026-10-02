@@ -1,0 +1,62 @@
+diff --git a/README.md b/README.md
+index b111cee..51f0a77 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ fecha,importe,categoria,descripcion
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+-| `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
++| `total <fichero> [--mes AAAA-MM] [--categoria <nombre>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos (`Falta la categoría` si no se da el nombre). Se pueden combinar |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto dicen cuánto queda o cuánto te pasas (`  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`); se emparejan sin distinguir mayúsculas ni acentos y las demás quedan igual |
+ | `semana <fichero> <fecha>` | Los gastos de la semana, de lunes a domingo, en la que cae la fecha (`2026-03-04`): una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y al final `Total: 48,30 €`. Si la fecha no existe, `Fecha no válida: 2026-02-30` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato que el original, y responde `Exportados 5 gastos a marzo.csv`. La salida debe ser otro fichero distinto del original |
+diff --git a/src/cli.ts b/src/cli.ts
+index 6df2c3a..44f142f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -138,8 +138,16 @@ const commands: Record<string, Command> = {
+       .map(([name, cents]) => `${name}: ${formatMoney(cents)}`)
+       .join("\n"),
+   total: (args, io) => {
+-    const { month, rest } = takeMonth(args);
+-    return `Total: ${formatMoney(sumCents(inMonth(load(rest[0], io), month)))}`;
++    const { value: category, rest: afterCategory } = takeOption(args, "--categoria");
++    if (args.includes("--categoria") && (category === undefined || category.trim() === "")) {
++      throw new Error("Falta la categoría");
++    }
++    const { month, rest } = takeMonth(afterCategory);
++    const key = category === undefined ? undefined : fold(category);
++    const expenses = inMonth(load(rest[0], io), month).filter(
++      (expense) => key === undefined || fold(expense.category) === key,
++    );
++    return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   exportar: (args, io) => {
+     const { month, rest } = takeMonth(args);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 310cac1..9bd2783 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -75,6 +75,21 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes"], io())).toEqual({ code: 1, output: "Mes no válido: " });
+   });
+ 
++  it("adds up only the category given with --categoria, ignoring case and accents, combinable with --mes", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,10.00,Comida,Pan
++2026-03-02,5.50,Comida,Fruta
++2026-04-01,1.00,Comida,Chicle
++2026-03-03,45.20,Transporte,Gasolina
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["total", "gastos.csv", "--categoria", "comida"], io()).output)).toBe("Total: 16,50 €");
++    expect(shown(run(["total", "gastos.csv", "--categoria", "COMIDA", "--mes", "2026-03"], io()).output)).toBe("Total: 15,50 €");
++    expect(shown(run(["total", "--mes", "2026-03", "--categoria", "Comída", "gastos.csv"], io()).output)).toBe("Total: 15,50 €");
++    expect(shown(run(["total", "gastos.csv", "--categoria", "Ocio"], io()).output)).toBe("Total: 0,00 €");
++    expect(run(["total", "gastos.csv", "--categoria"], io())).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("adds up each category, biggest first, ties alphabetical", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

@@ -1,0 +1,29 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index d7feb8b..3426369 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -71,7 +71,7 @@ const commands: Record<string, Command> = {
+   buscar: (args, io) => {
+     if (args[1] === undefined) throw new Error("Falta el texto a buscar");
+     const needle = fold(args[1]);
+-    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle));
++    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (args, io) => {
+diff --git a/tests/buscar.test.ts b/tests/buscar.test.ts
+index 2b93972..44d3b2b 100644
+--- a/tests/buscar.test.ts
++++ b/tests/buscar.test.ts
+@@ -12,6 +12,11 @@ it("finds expenses ignoring case and accents, same lines as lista", () => {
+   expect(run(["buscar", "g.csv", "menu"], io).output).toContain("Menú");
+ });
+ 
++it("also finds by category even if the description does not mention it", () => {
++  const io = memoryIo({ "g.csv": `${csv}\n2026-03-03,2,Transporte,Bus` });
++  expect(run(["buscar", "g.csv", "transporte"], io).output).toBe(run(["lista", "g.csv"], io).output.split("\n")[2]);
++});
++
+ it("says when nothing matches", () => {
+   expect(run(["buscar", "g.csv", "zzz"], memoryIo({ "g.csv": csv })).output).toBe("Sin resultados");
+ });

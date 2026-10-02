@@ -1,0 +1,59 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 911fa13..3046954 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,7 +1,7 @@
+ import { bankExpenses } from "./bank";
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+-import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth, weekdayName, weekOf } from "./dates";
++import { capitalized, daysInMonth, formatDate, monthAndYear, monthOf, parseDay, parseMonth, weekdayName, weekOf } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney, parseAmount } from "./money";
+@@ -101,13 +101,19 @@ const commands: Record<string, Command> = {
+     const rows = days.map(([day, cents]) => `${capitalized(weekdayName(day))} ${formatDate(day)}: ${formatMoney(cents)}`);
+     return [...rows, `Total: ${formatMoney(sum(week))}`].join("\n");
+   },
++  media: (args, io) => {
++    const { expenses, flags } = selected(args, io, ["mes"]);
++    if (!flags.has("mes")) throw new Error("Falta --mes");
++    const month = flags.get("mes")!;
++    return `Media diaria en ${monthAndYear(month)}: ${formatMoney(Math.round(sum(expenses) / daysInMonth(month)))}`;
++  },
+   informe: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes", "presupuestos"]);
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+     const month = flags.get("mes")!;
+     const budgets = flags.has("presupuestos") ? parseBudgets(io.read(flags.get("presupuestos")!)) : [];
+     const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${spent(cents, budgetFor(budgets, category))}`);
+-    return [`${capitalized(monthName(month))} de ${month.slice(0, 4)}`, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
++    return [capitalized(monthAndYear(month)), ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
+   },
+ };
+ 
+diff --git a/src/dates.ts b/src/dates.ts
+index 6bbb656..e16f9d4 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -24,12 +24,20 @@ export function monthOf(iso: string): string {
+   return iso.slice(0, 7);
+ }
+ 
++export function daysInMonth(month: string): number {
++  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
++}
++
+ const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+ 
+ export function monthName(month: string): string {
+   return MONTHS[Number(month.slice(5, 7)) - 1];
+ }
+ 
++export function monthAndYear(month: string): string {
++  return `${monthName(month)} de ${month.slice(0, 4)}`;
++}
++
+ const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+ 
+ function utc(iso: string): Date {

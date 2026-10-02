@@ -1,0 +1,151 @@
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.test.tsx b/rust/sens-app/ui/src/features/changes/Changes.test.tsx
+index 3cad9a2..9bee8cd 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.test.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.test.tsx
+@@ -65,6 +65,8 @@ describe("changes panel", () => {
+     expect(row("app.js").querySelector(".state")?.textContent).toBe("M");
+     expect(row("notes.md").querySelector(".state")?.textContent).toBe("A");
+     expect(row("app.js").querySelector(".dirname")?.textContent).toBe("src");
++    expect(row("app.js").querySelector(".language")?.textContent).toBe("JavaScript");
++    expect(row("notes.md").querySelector(".language")?.textContent).toBe("Markdown");
+     expect(row("notes.md").querySelector(".marks")?.textContent).toBe("nuevo");
+   });
+ 
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.tsx b/rust/sens-app/ui/src/features/changes/Changes.tsx
+index 330f0ed..5de4ced 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.tsx
+@@ -6,7 +6,7 @@ import { FileIcon } from "../../shared/FileIcon";
+ import { Icon } from "../../shared/Icon";
+ import { LinesCard } from "../../shared/LinesCard";
+ import { addedRows, patchRows } from "../../shared/rows";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitle } from "../../shared/syntax/languages";
+ import { ICONS } from "../../shared/icons.js";
+ import { project } from "../project/store";
+ import { t } from "./copy";
+@@ -74,6 +74,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+   const touched = useStore(project, (s) => s.touched.has(file.path));
+   const [counted, setCounted] = useState<number | null>(null);
+   const plus = file.fresh ? (counted ?? file.plus) : file.plus;
++  const language = languageTitle(file.path);
+ 
+   return (
+     <details
+@@ -91,6 +92,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+         </span>
+         <FileIcon path={file.path} />
+         <span className="name">{stem(file.path)}</span>
++        {language && <span className="language">{language}</span>}
+         <span className="dirname">{parentOf(file.path)}</span>
+         <Counts file={file} plus={plus} />
+         {file.state !== "D" && (
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.test.tsx b/rust/sens-app/ui/src/features/files/Viewer.test.tsx
+index 0d48821..ae65427 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.test.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.test.tsx
+@@ -61,6 +61,7 @@ describe("file viewer", () => {
+   it("says nothing is open yet", () => {
+     show();
+     expect(head.querySelector(".where")?.textContent).toBe("Ningún fichero abierto");
++    expect(head.querySelector(".language")).toBeNull();
+     expect(screen.getByText("Elige un fichero.")).toBeTruthy();
+     expect(modes.childElementCount).toBe(0);
+   });
+@@ -69,6 +70,7 @@ describe("file viewer", () => {
+     show();
+     await act(async () => openFile("src/app.ts"));
+     expect(head.querySelector(".where")?.textContent).toBe("src/app.ts");
++    expect(head.querySelector(".language")?.textContent).toBe("TypeScript");
+     expect(lines()).toEqual(["import { a } from './a';", "export const app = a + 1;", ""]);
+     expect(document.querySelector(".source .line .num")?.textContent).toBe("1");
+ 
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.tsx b/rust/sens-app/ui/src/features/files/Viewer.tsx
+index ef5756f..b2de4c5 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.tsx
+@@ -6,7 +6,7 @@ import { FRONT_MATTER, stem, weigh } from "../../shared/format.js";
+ import { ICONS } from "../../shared/icons.js";
+ import { Markdown } from "../../shared/markdown/Markdown";
+ import { useCode } from "../../shared/syntax/code";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitle } from "../../shared/syntax/languages";
+ import type { Look, Painted, Runs } from "../../shared/syntax/paint";
+ import { useSeen } from "../../shared/useSeen";
+ import { project, type Edits } from "../project/store";
+@@ -38,13 +38,17 @@ const useEdits = () => {
+ };
+ 
+ export function ViewerHead() {
+-  const title = useStore(viewer, (s) => s.title) || t.noneOpen;
++  const name = useStore(viewer, (s) => s.title);
++  const title = name || t.noneOpen;
+   const edits = useEdits();
++  const start = useStore(viewer, (s) => textOf(s.body).slice(0, 200));
++  const language = name ? languageTitle(name, start) : "";
+   return (
+     <>
+       <span className="where" title={title}>
+         {title}
+       </span>
++      {language && <span className="language">{language}</span>}
+       <span className="marks">
+         {edits && (
+           <>
+diff --git a/rust/sens-app/ui/src/shared/syntax/languages.ts b/rust/sens-app/ui/src/shared/syntax/languages.ts
+index a736a08..317c8d0 100644
+--- a/rust/sens-app/ui/src/shared/syntax/languages.ts
++++ b/rust/sens-app/ui/src/shared/syntax/languages.ts
+@@ -28,6 +28,12 @@ export function languageNamed(tag: string) {
+   return (Object.hasOwn(aliases, name) ? aliases[name] : undefined) ?? byName(`.${name}`, {}, extensions) ?? null;
+ }
+ 
++// The name of a file's language ("TypeScript"), or "" when it is not known.
++export function languageTitle(path: string, text = "") {
++  const grammar = languageOf(path, text);
++  return grammar && Object.hasOwn(titles, grammar) ? titles[grammar] : "";
++}
++
+ export function titleOf(tag: string) {
+   const name = tag.trim().toLowerCase();
+   if (Object.hasOwn(SHELL_TITLES, name)) return SHELL_TITLES[name];
+diff --git a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+index 4e34892..baf94f8 100644
+--- a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
++++ b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ import { describe, expect, it } from "vitest";
+ import { codeNow, paintCode } from "./code";
+-import { languageNamed, languageOf, titleOf } from "./languages";
++import { languageNamed, languageOf, languageTitle, titleOf } from "./languages";
+ import { paint, paintedNow, paintRows } from "./paint";
+ 
+ const KEYWORD = "light-dark(#0000ff, #569cd6)";
+@@ -63,6 +63,14 @@ describe("languages", () => {
+     ]);
+   });
+ 
++  it("names the language of a file, by name or shebang, or nothing", () => {
++    expect(languageTitle("src/app.ts")).toBe("TypeScript");
++    expect(languageTitle("README.md")).toBe("Markdown");
++    expect(languageTitle("bin/deploy", "#!/usr/bin/env python3\nprint(1)")).toBe("Python");
++    expect(languageTitle("bin/deploy")).toBe("");
++    expect(languageTitle("notes.unknownext", "hola")).toBe("");
++  });
++
+   it("are called by their proper names", () => {
+     expect(["ts", "ps1", "bash", "zsh", "sh", "cmd", "bat", "json", "c#", "nu", "text", "whatever"].map(titleOf)).toEqual([
+       "TypeScript",
+diff --git a/rust/sens-app/ui/src/styles.css b/rust/sens-app/ui/src/styles.css
+index a70d69b..59f0d56 100644
+--- a/rust/sens-app/ui/src/styles.css
++++ b/rust/sens-app/ui/src/styles.css
+@@ -1335,6 +1335,7 @@
+     font-family: var(--mono); font-size: 12px; color: var(--text);
+     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+   }
++  .code-head .language, .change .language { flex: none; font-size: 11px; color: var(--ghost); }
+   .marks { font-family: var(--mono); font-size: 12px; display: flex; gap: 10px; flex: none; }
+   .marks .plus { color: var(--green); }
+   .marks .minus { color: var(--red); }

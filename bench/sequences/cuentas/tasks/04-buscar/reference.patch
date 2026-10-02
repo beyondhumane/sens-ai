@@ -1,0 +1,35 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index b80fc7c..806e8e0 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -4,6 +4,7 @@ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+ import { parseOptions } from "./options";
++import { plain } from "./text";
+ import { biggestFirst, sum, totalsBy } from "./totals";
+ 
+ export interface Ran {
+@@ -39,6 +40,13 @@ const commands: Record<string, Command> = {
+     biggestFirst(totalsBy(selected(args, io, []).expenses, (expense) => expense.category))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n"),
++  buscar: (args, io) => {
++    const { expenses, positional } = selected(args, io, []);
++    if (positional[1] === undefined) throw new Error("Falta el texto a buscar");
++    const wanted = plain(positional[1]);
++    const found = expenses.filter((expense) => plain(expense.description).includes(wanted));
++    return found.length ? found.map(line).join("\n") : "Sin resultados";
++  },
+ };
+ 
+ export function run(argv: string[], io: Io): Ran {
+diff --git a/src/text.ts b/src/text.ts
+new file mode 100644
+index 0000000..7d2349c
+--- /dev/null
++++ b/src/text.ts
+@@ -0,0 +1,3 @@
++export function plain(text: string): string {
++  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
++}

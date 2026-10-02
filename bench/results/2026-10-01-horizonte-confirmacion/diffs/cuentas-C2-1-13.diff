@@ -1,0 +1,91 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 59578db..a231f55 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { BUDGET_HEADER, parseExpenses, quoteIfNeeded, readBudgetRows } from "./csv";
+-import { formatDate, formatMonth, isValidDate } from "./date";
++import { formatDate, formatMonth, isValidDate, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -88,6 +88,18 @@ const commands: Record<string, Command> = {
+     const { path, month } = withMonth(args);
+     return `Total: ${formatMoney(inMonth(load(path, io), month).reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
++  semana: ([path, date = ""], io) => {
++    const expenses = load(path, io);
++    if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    const week = weekOf(date);
++    const inWeek = expenses.filter((expense) => expense.date >= week[0].date && expense.date <= week[6].date);
++    const lines = week.flatMap(({ date: day, name }) => {
++      const cents = inWeek.filter((expense) => expense.date === day).reduce((sum, expense) => sum + expense.cents, 0);
++      return cents === 0 ? [] : [`${name} ${formatDate(day)}: ${formatMoney(cents)}`];
++    });
++    const total = inWeek.reduce((sum, expense) => sum + expense.cents, 0);
++    return [...lines, `Total: ${formatMoney(total)}`].join("\n");
++  },
+   informe: (rawArgs, io) => {
+     const flag = rawArgs.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : rawArgs[flag + 1];
+diff --git a/src/date.ts b/src/date.ts
+index f3020d7..d91bcc7 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -13,6 +13,14 @@ const MONTHS = [
+   "Diciembre",
+ ];
+ 
++const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
++
++export function weekOf(iso: string): { date: string; name: string }[] {
++  const day = new Date(`${iso}T00:00:00Z`);
++  const monday = day.getTime() - ((day.getUTCDay() + 6) % 7) * 86_400_000;
++  return WEEKDAYS.map((name, i) => ({ date: new Date(monday + i * 86_400_000).toISOString().slice(0, 10), name }));
++}
++
+ export function isValidDate(date: string): boolean {
+   const parsed = new Date(`${date}T00:00:00Z`);
+   return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+diff --git a/tests/semana.test.ts b/tests/semana.test.ts
+new file mode 100644
+index 0000000..761fbe0
+--- /dev/null
++++ b/tests/semana.test.ts
+@@ -0,0 +1,36 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [
++  HEADER,
++  "2026-02-27,9,comida,antes",
++  "2026-03-02,40,comida,a",
++  "2026-03-02,5.20,ocio,b",
++  "2026-03-04,3.10,ocio,c",
++  "2026-03-08,1,ocio,domingo",
++  "2026-03-09,7,comida,despues",
++].join("\n");
++const semana = (...args: string[]) => run(["semana", ...args], memoryIo({ "g.csv": csv }));
++const clean = (text: string) => text.replace(/[^\S\n]/g, " ");
++
++it("lists each day with expenses from Monday to Sunday, then the total", () => {
++  const { code, output } = semana("g.csv", "2026-03-05");
++  expect(code).toBe(0);
++  expect(clean(output)).toBe(
++    ["Lunes 02/03/2026: 45,20 €", "Miércoles 04/03/2026: 3,10 €", "Domingo 08/03/2026: 1,00 €", "Total: 49,30 €"].join("\n"),
++  );
++});
++
++it("works when the date is a Sunday", () => {
++  expect(clean(semana("g.csv", "2026-03-08").output)).toContain("Lunes 02/03/2026");
++});
++
++it("shows only the total for a week without expenses", () => {
++  expect(clean(semana("g.csv", "2026-06-01").output)).toBe("Total: 0,00 €");
++});
++
++it("rejects a date that does not exist", () => {
++  expect(semana("g.csv", "2026-02-30")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++});

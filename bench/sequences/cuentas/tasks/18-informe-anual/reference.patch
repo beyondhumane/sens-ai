@@ -1,0 +1,89 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 3046954..c7d7f39 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,13 +1,13 @@
+ import { bankExpenses } from "./bank";
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+-import { capitalized, daysInMonth, formatDate, monthAndYear, monthOf, parseDay, parseMonth, weekdayName, weekOf } from "./dates";
++import { capitalized, daysInMonth, formatDate, monthAndYear, monthName, monthOf, parseDay, parseMonth, parseYear, weekdayName, weekOf } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney, parseAmount } from "./money";
+ import { parseOptions } from "./options";
+ import { plain } from "./text";
+-import { biggestFirst, sum, totalsBy } from "./totals";
++import { biggestFirst, byKey, sum, totalsBy } from "./totals";
+ 
+ export interface Ran {
+   code: number;
+@@ -23,12 +23,14 @@ function load(path: string | undefined, io: Io): Expense[] {
+ 
+ function chosen(expenses: Expense[], flags: Map<string, string>): Expense[] {
+   const month = flags.has("mes") ? parseMonth(flags.get("mes")!) : undefined;
++  const year = flags.has("anio") ? parseYear(flags.get("anio")!) : undefined;
+   const from = flags.has("desde") ? parseDay(flags.get("desde")!) : undefined;
+   const to = flags.has("hasta") ? parseDay(flags.get("hasta")!) : undefined;
+   const category = flags.has("categoria") ? plain(flags.get("categoria")!) : undefined;
+   return expenses.filter(
+     (expense) =>
+       (month === undefined || monthOf(expense.date) === month) &&
++      (year === undefined || expense.date.startsWith(`${year}-`)) &&
+       (from === undefined || expense.date >= from) &&
+       (to === undefined || expense.date <= to) &&
+       (category === undefined || plain(expense.category) === category),
+@@ -97,8 +99,7 @@ const commands: Record<string, Command> = {
+     if (positional[1] === undefined) throw new Error("Falta la fecha");
+     const { monday, sunday } = weekOf(parseDay(positional[1]));
+     const week = expenses.filter((expense) => expense.date >= monday && expense.date <= sunday);
+-    const days = [...totalsBy(week, (expense) => expense.date)].sort(([one], [other]) => one.localeCompare(other));
+-    const rows = days.map(([day, cents]) => `${capitalized(weekdayName(day))} ${formatDate(day)}: ${formatMoney(cents)}`);
++    const rows = byKey(totalsBy(week, (expense) => expense.date)).map(([day, cents]) => `${capitalized(weekdayName(day))} ${formatDate(day)}: ${formatMoney(cents)}`);
+     return [...rows, `Total: ${formatMoney(sum(week))}`].join("\n");
+   },
+   media: (args, io) => {
+@@ -108,7 +109,11 @@ const commands: Record<string, Command> = {
+     return `Media diaria en ${monthAndYear(month)}: ${formatMoney(Math.round(sum(expenses) / daysInMonth(month)))}`;
+   },
+   informe: (args, io) => {
+-    const { expenses, flags } = selected(args, io, ["mes", "presupuestos"]);
++    const { expenses, flags } = selected(args, io, ["mes", "presupuestos", "anio"]);
++    if (flags.has("anio")) {
++      const rows = byKey(totalsBy(expenses, (expense) => monthOf(expense.date))).map(([month, cents]) => `  ${capitalized(monthName(month))}: ${formatMoney(cents)}`);
++      return [flags.get("anio")!, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
++    }
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+     const month = flags.get("mes")!;
+     const budgets = flags.has("presupuestos") ? parseBudgets(io.read(flags.get("presupuestos")!)) : [];
+diff --git a/src/dates.ts b/src/dates.ts
+index e16f9d4..4bf8185 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -20,6 +20,11 @@ export function parseMonth(text: string): string {
+   return text;
+ }
+ 
++export function parseYear(text: string): string {
++  if (!/^\d{4}$/.test(text)) throw new Error(`Año no válido: ${text}`);
++  return text;
++}
++
+ export function monthOf(iso: string): string {
+   return iso.slice(0, 7);
+ }
+diff --git a/src/totals.ts b/src/totals.ts
+index 98f8b19..11fdbdd 100644
+--- a/src/totals.ts
++++ b/src/totals.ts
+@@ -13,6 +13,10 @@ export function totalsBy(expenses: Expense[], key: (expense: Expense) => string)
+   return totals;
+ }
+ 
++export function byKey(totals: Map<string, number>): [string, number][] {
++  return [...totals].sort(([one], [other]) => one.localeCompare(other));
++}
++
+ export function biggestFirst(totals: Map<string, number>): [string, number][] {
+   return [...totals].sort(([one, a], [other, b]) => b - a || one.localeCompare(other));
+ }

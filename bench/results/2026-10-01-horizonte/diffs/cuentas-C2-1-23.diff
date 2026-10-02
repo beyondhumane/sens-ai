@@ -1,0 +1,57 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 3501785..4ed4faa 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -52,6 +52,17 @@ function parseBankLine(line: string): Expense | null | undefined {
+   }
+ }
+ 
++const formatBankRow = ({ date, cents, description }: Expense) =>
++  [formatDate(date), description, `-${(cents / 100).toFixed(2).replace(".", ",")}`].join(";");
++
++function formatFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--formato");
++  if (flag === -1) return undefined;
++  const format = args[flag + 1] ?? "";
++  if (format !== "banco") throw new Error(`Formato no válido: ${format}`);
++  return format;
++}
++
+ function monthFlag(args: string[]): string | undefined {
+   const flag = args.indexOf("--mes");
+   if (flag === -1) return undefined;
+@@ -238,10 +249,12 @@ const commands: Record<string, Command> = {
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   exportar: (args, io) => {
+     const month = monthFlag(args);
++    const bank = formatFlag(args) === "banco";
+     const output = args[1];
+-    if (!output || output.startsWith("--")) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM]");
++    if (!output || output.startsWith("--")) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]");
+     const expenses = inMonth(load(args[0], io), month);
+-    io.write(output, `${[HEADER, ...expenses.map(formatRow)].join("\n")}\n`);
++    const lines = bank ? [BANK_HEADER, ...expenses.map(formatBankRow)] : [HEADER, ...expenses.map(formatRow)];
++    io.write(output, `${lines.join("\n")}\n`);
+     return `Exportados ${expenses.length} gastos a ${output}`;
+   },
+   semana: ([path, date = ""], io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 5038cfa..c98b952 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -63,6 +63,15 @@ describe("cuentas", () => {
+     expect(run(["exportar", "gastos.csv"], io).code).toBe(1);
+   });
+ 
++  it("exports in the bank format, rejecting other formats", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,8.75,Ocio,"Cine, con ""amigos"""\n` });
++    expect(run(["exportar", "gastos.csv", "banco.csv", "--formato", "banco"], io).code).toBe(0);
++    expect(io.files["banco.csv"]).toBe(
++      'Fecha;Concepto;Importe\n01/03/2026;Pan y fruta;-12,50\n02/03/2026;Gasolina;-45,20\n01/04/2026;Cine, con "amigos";-8,75\n',
++    );
++    expect(run(["exportar", "gastos.csv", "x.csv", "--formato", "pdf"], io)).toEqual({ code: 1, output: "Formato no válido: pdf" });
++  });
++
+   it("sums by category, biggest first, ties alphabetical", () => {
+     const csv = `${GASTOS}2026-03-03,32.50,Comida,Cena
+ 2026-03-04,45.20,Ocio,Cine

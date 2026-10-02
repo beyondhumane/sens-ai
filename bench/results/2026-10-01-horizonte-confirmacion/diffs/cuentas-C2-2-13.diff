@@ -1,0 +1,80 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 11bdf53..a0b3fa3 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { BUDGET_HEADER, HEADER, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
+-import { formatDate, formatMonth, isRealDate } from "./date";
++import { formatDate, formatMonth, formatWeekday, isRealDate, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -101,6 +101,18 @@ const commands: Record<string, Command> = {
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
++  semana: (args, io) => {
++    const date = args[1] ?? "";
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    const expenses = load(args[0], io);
++    const days = weekOf(date).flatMap((day) => {
++      const cents = sumCents(expenses.filter((expense) => expense.date === day));
++      return cents === 0 ? [] : [`${formatWeekday(day)} ${formatDate(day)}: ${formatMoney(cents)}`];
++    });
++    const inWeek = new Set(weekOf(date));
++    const total = sumCents(expenses.filter((expense) => inWeek.has(expense.date)));
++    return [...days, `Total: ${formatMoney(total)}`].join("\n");
++  },
+   añadir: (args, io) => {
+     const [path, date, amount, category, ...words] = args;
+     const description = words.join(" ");
+diff --git a/src/date.ts b/src/date.ts
+index 545fa02..4fe80d6 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -16,3 +16,20 @@ export function isRealDate(iso: string): boolean {
+ export function formatDate(iso: string): string {
+   return dates.format(new Date(iso));
+ }
++
++const weekdays = new Intl.DateTimeFormat("es-ES", { weekday: "long", timeZone: "UTC" });
++
++export function formatWeekday(iso: string): string {
++  const text = weekdays.format(new Date(iso));
++  return text.charAt(0).toUpperCase() + text.slice(1);
++}
++
++export function weekOf(iso: string): string[] {
++  const day = new Date(iso);
++  const sinceMonday = (day.getUTCDay() + 6) % 7;
++  return Array.from({ length: 7 }, (_, index) => {
++    const date = new Date(day);
++    date.setUTCDate(day.getUTCDate() - sinceMonday + index);
++    return date.toISOString().slice(0, 10);
++  });
++}
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6ff12b3..e3d5b46 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -128,6 +128,20 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos"], io).code).toBe(1);
+   });
+ 
++  it("shows the week of a date, Monday to Sunday", () => {
++    const gastos = `${GASTOS}2026-03-04,3.10,Comida,Café
++2026-03-04,1.00,Comida,Pan
++2026-03-08,2.00,Ocio,Prensa
++2026-03-09,9.00,Ocio,Otra semana
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["semana", "gastos.csv", "2026-03-05"], io).output)).toBe(
++      "Lunes 02/03/2026: 45,20 €\nMiércoles 04/03/2026: 4,10 €\nDomingo 08/03/2026: 2,00 €\nTotal: 51,30 €",
++    );
++    expect(shown(run(["semana", "gastos.csv", "2026-04-01"], io).output)).toBe("Total: 0,00 €");
++    expect(run(["semana", "gastos.csv", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  });
++
+   it("searches descriptions ignoring case and accents", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
+ `;

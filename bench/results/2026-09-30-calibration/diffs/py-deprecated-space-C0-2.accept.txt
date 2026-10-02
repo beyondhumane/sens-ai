@@ -1,0 +1,41 @@
+FF......                                                                 [100%]
+================================== FAILURES ===================================
+____ test_an_option_without_help_shows_only_the_label[-True-(DEPRECATED)] _____
+
+help_text = '', deprecated = True, expected = '(DEPRECATED)'
+
+    @pytest.mark.parametrize(("deprecated", "expected"), [(True, "(DEPRECATED)"), ("USE B INSTEAD", "(DEPRECATED: USE B INSTEAD)")])
+    @pytest.mark.parametrize("help_text", ["", None])
+    def test_an_option_without_help_shows_only_the_label(help_text, deprecated, expected):
+        option = click.Option(["--foo"], help=help_text, deprecated=deprecated)
+        context = click.Context(click.Command("cli"))
+>       assert option.get_help_record(context)[1] == expected
+E       AssertionError: assert ' (DEPRECATED)' == '(DEPRECATED)'
+E         
+E         - (DEPRECATED)
+E         +  (DEPRECATED)
+E         ? +
+
+tests\_accept\test_py_deprecated_space.py:11: AssertionError
+_ test_an_option_without_help_shows_only_the_label[-USE B INSTEAD-(DEPRECATED: USE B INSTEAD)] _
+
+help_text = '', deprecated = 'USE B INSTEAD'
+expected = '(DEPRECATED: USE B INSTEAD)'
+
+    @pytest.mark.parametrize(("deprecated", "expected"), [(True, "(DEPRECATED)"), ("USE B INSTEAD", "(DEPRECATED: USE B INSTEAD)")])
+    @pytest.mark.parametrize("help_text", ["", None])
+    def test_an_option_without_help_shows_only_the_label(help_text, deprecated, expected):
+        option = click.Option(["--foo"], help=help_text, deprecated=deprecated)
+        context = click.Context(click.Command("cli"))
+>       assert option.get_help_record(context)[1] == expected
+E       AssertionError: assert ' (DEPRECATED: USE B INSTEAD)' == '(DEPRECATED: USE B INSTEAD)'
+E         
+E         - (DEPRECATED: USE B INSTEAD)
+E         +  (DEPRECATED: USE B INSTEAD)
+E         ? +
+
+tests\_accept\test_py_deprecated_space.py:11: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/_accept/test_py_deprecated_space.py::test_an_option_without_help_shows_only_the_label[-True-(DEPRECATED)]
+FAILED tests/_accept/test_py_deprecated_space.py::test_an_option_without_help_shows_only_the_label[-USE B INSTEAD-(DEPRECATED: USE B INSTEAD)]
+2 failed, 6 passed in 0.21s

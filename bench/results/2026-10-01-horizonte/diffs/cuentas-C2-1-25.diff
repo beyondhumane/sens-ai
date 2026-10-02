@@ -1,0 +1,62 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 88964d7..240cbfc 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -208,6 +208,18 @@ const commands: Record<string, Command> = {
+       .filter(({ description, category }) => normalize(description).includes(needle) || normalize(category).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
++  resumen: (args, io) => {
++    const expenses = load(args[0], io);
++    if (expenses.length === 0) return "Sin gastos";
++    const dates = expenses.map(({ date }) => date).sort();
++    const biggest = expenses.reduce((best, expense) => (expense.cents > best.cents ? expense : best));
++    return [
++      `Gastos: ${expenses.length}`,
++      `Desde ${formatDate(dates[0])} hasta ${formatDate(dates[dates.length - 1])}`,
++      `Total: ${formatMoney(sumCents(expenses))}`,
++      `Mayor: ${formatMoney(biggest.cents)} en ${biggest.description} (${formatDate(biggest.date)})`,
++    ].join("\n");
++  },
+   duplicados: (args, io) => {
+     const groups = new Map<string, Expense[]>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/resumen.test.ts b/tests/resumen.test.ts
+new file mode 100644
+index 0000000..1e73583
+--- /dev/null
++++ b/tests/resumen.test.ts
+@@ -0,0 +1,33 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const header = "fecha,importe,categoria,descripcion";
++
++it("summarizes count, date range, total and the biggest expense (first one on ties)", () => {
++  const csv = [
++    header,
++    "2026-01-15,120,coche,Seguro del coche",
++    "2026-02-28,292.30,casa,Alquiler",
++    "2026-01-03,120,ocio,Otro igual",
++  ].join("\n");
++  const result = run(["resumen", "g.csv"], memoryIo({ "g.csv": csv }));
++  expect(result.code).toBe(0);
++  expect(result.output).toBe(
++    [
++      "Gastos: 3",
++      "Desde 03/01/2026 hasta 28/02/2026",
++      "Total: 532,30 €",
++      "Mayor: 292,30 € en Alquiler (28/02/2026)",
++    ].join("\n"),
++  );
++});
++
++it("picks the first of several equal biggest expenses", () => {
++  const csv = [header, "2026-01-15,120,coche,Seguro del coche", "2026-01-03,120,ocio,Otro igual"].join("\n");
++  expect(run(["resumen", "g.csv"], memoryIo({ "g.csv": csv })).output).toContain("Mayor: 120,00 € en Seguro del coche (15/01/2026)");
++});
++
++it("says so when there are no expenses", () => {
++  expect(run(["resumen", "g.csv"], memoryIo({ "g.csv": header })).output).toBe("Sin gastos");
++});

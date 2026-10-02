@@ -1,0 +1,56 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 43fef82..11bdf53 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -84,9 +84,20 @@ const commands: Record<string, Command> = {
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Falta --mes");
+     const expenses = inMonth(load(args[0], io), month);
++    const budgetsFlag = args.indexOf("--presupuestos");
++    const budgetsPath = budgetsFlag === -1 ? undefined : args[budgetsFlag + 1];
++    if (budgetsFlag !== -1 && !budgetsPath) throw new Error("Falta el fichero de presupuestos");
++    const budgets = budgetsPath ? parseBudgets(io.read(budgetsPath)) : [];
++    const categoryLine = (category: string, cents: number) => {
++      const budget = budgets.find((candidate) => plain(candidate.category) === plain(category));
++      if (!budget) return `  ${category}: ${formatMoney(cents)}`;
++      const left = budget.cents - cents;
++      const verdict = left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`;
++      return `  ${category}: ${formatMoney(cents)} de ${formatMoney(budget.cents)} (${verdict})`;
++    };
+     return [
+       formatMonth(month),
+-      ...categoryTotals(expenses).map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`),
++      ...categoryTotals(expenses).map(([category, cents]) => categoryLine(category, cents)),
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 715d3e4..6ff12b3 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -109,6 +109,25 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("shows remaining or exceeded budget in the report", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,60.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++2026-03-04,5.00,Varios,Cosas
++`;
++    const io = memoryIo({
++      "gastos.csv": gastos,
++      "presupuestos.csv": "categoria,importe\ncómida,100.00\nOCIO,55.00\n",
++    });
++    const report = (...flags: string[]) =>
++      shown(run(["informe", "gastos.csv", "--mes", "2026-03", ...flags], io).output);
++    expect(report("--presupuestos", "presupuestos.csv")).toBe(
++      "Marzo de 2026\n  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)\n  Comida: 44,65 € de 100,00 € (quedan 55,35 €)\n  Varios: 5,00 €\nTotal: 109,65 €",
++    );
++    expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos"], io).code).toBe(1);
++  });
++
+   it("searches descriptions ignoring case and accents", () => {
+     const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
+ `;

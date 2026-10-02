@@ -1,0 +1,108 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 7146a89..e33f40a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ import { parseExpenses } from "./csv";
+-import { formatDate, formatMonth } from "./date";
++import { formatDate, formatMonth, isValidDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -32,6 +32,21 @@ function withMonth(args: string[]): { path: string | undefined; month: string |
+   return { path: args.find((_, i) => i !== flag && i !== flag + 1), month };
+ }
+ 
++function dateFlag(args: string[], flag: string): string | undefined {
++  const index = args.indexOf(flag);
++  if (index === -1) return undefined;
++  const date = args[index + 1] ?? "";
++  if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
++  return date;
++}
++
++function withRange(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined } {
++  const from = dateFlag(args, "--desde");
++  const to = dateFlag(args, "--hasta");
++  const flags = ["--desde", "--hasta"].map((flag) => args.indexOf(flag)).filter((i) => i !== -1);
++  return { path: args.find((_, i) => !flags.includes(i) && !flags.includes(i - 1)), from, to };
++}
++
+ function inMonth(expenses: Expense[], month: string | undefined): Expense[] {
+   return month === undefined ? expenses : expenses.filter((expense) => expense.date.startsWith(`${month}-`));
+ }
+@@ -45,7 +60,13 @@ function sumByCategory(expenses: Expense[]): [string, number][] {
+ }
+ 
+ const commands: Record<string, Command> = {
+-  lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
++  lista: (args, io) => {
++    const { path, from, to } = withRange(args);
++    return load(path, io)
++      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .map(formatLine)
++      .join("\n");
++  },
+   buscar: (args, io) => {
+     if (args[1] === undefined) throw new Error("Falta el texto a buscar");
+     const needle = fold(args[1]);
+@@ -67,10 +88,7 @@ const commands: Record<string, Command> = {
+   añadir: (args, io) => {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+     const description = words.join(" ");
+-    const parsed = new Date(`${date}T00:00:00Z`);
+-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+-      throw new Error(`Fecha no válida: ${date}`);
+-    }
++    if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
+     const cents = Math.round(Number(amount) * 100);
+     if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
+     if (category === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
+diff --git a/src/date.ts b/src/date.ts
+index 80b1363..f3020d7 100644
+--- a/src/date.ts
++++ b/src/date.ts
+@@ -13,6 +13,11 @@ const MONTHS = [
+   "Diciembre",
+ ];
+ 
++export function isValidDate(date: string): boolean {
++  const parsed = new Date(`${date}T00:00:00Z`);
++  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
++}
++
+ export function formatDate(iso: string): string {
+   const [year, month, day] = iso.split("-");
+   return `${day}/${month}/${year}`;
+diff --git a/tests/lista.test.ts b/tests/lista.test.ts
+new file mode 100644
+index 0000000..4ade882
+--- /dev/null
++++ b/tests/lista.test.ts
+@@ -0,0 +1,26 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [HEADER, "2026-02-28,10,comida,a", "2026-03-01,20,comida,b", "2026-03-15,5.5,ocio,c", "2026-03-16,1,ocio,d"].join("\n");
++const lista = (...args: string[]) => run(["lista", ...args], memoryIo({ "g.csv": csv }));
++const descriptions = (output: string) => output.split("\n").map((line) => line.split("  ").pop());
++
++it("lists everything without flags", () => {
++  expect(descriptions(lista("g.csv").output)).toEqual(["a", "b", "c", "d"]);
++});
++
++it("includes both ends of the range", () => {
++  expect(descriptions(lista("g.csv", "--desde", "2026-03-01", "--hasta", "2026-03-15").output)).toEqual(["b", "c"]);
++});
++
++it("accepts --desde or --hasta alone, in any position", () => {
++  expect(descriptions(lista("--desde", "2026-03-15", "g.csv").output)).toEqual(["c", "d"]);
++  expect(descriptions(lista("g.csv", "--hasta", "2026-03-01").output)).toEqual(["a", "b"]);
++});
++
++it("rejects a date that does not exist", () => {
++  expect(lista("g.csv", "--hasta", "2026-03-32")).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
++  expect(lista("g.csv", "--desde", "2026-02-30")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++});

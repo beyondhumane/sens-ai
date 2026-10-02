@@ -1,0 +1,1 @@
+`click.Path(exists=True, resolve_path=True)` says a path like `~/notes.txt` does not exist even when the file is in the home folder: `~` is never expanded. Expand `~` to the home folder when `resolve_path` is set.

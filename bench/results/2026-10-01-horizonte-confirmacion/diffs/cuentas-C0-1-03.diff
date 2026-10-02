@@ -1,0 +1,52 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2e72724..a8880f2 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -20,7 +20,20 @@ const commands: Record<string, Command> = {
+     load(args[0], io)
+       .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  total: (args, io) => {
++    const flag = args.indexOf("--mes");
++    let month: string | undefined;
++    let positional = args;
++    if (flag !== -1) {
++      month = args[flag + 1];
++      if (month === undefined || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
++        throw new Error(`Mes no válido: ${month ?? ""}`.trim());
++      }
++      positional = [...args.slice(0, flag), ...args.slice(flag + 2)];
++    }
++    const expenses = load(positional[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/total.test.ts b/tests/total.test.ts
+new file mode 100644
+index 0000000..3dd23e0
+--- /dev/null
++++ b/tests/total.test.ts
+@@ -0,0 +1,20 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [HEADER, "2026-02-28,10.00,ocio,cine", "2026-03-01,12.50,comida,menu", "2026-03-15,7.50,ocio,libro"].join("\n");
++const norm = (text: string) => text.replace(/ /g, " ");
++
++it("sums everything without --mes", () => {
++  expect(norm(run(["total", "g.csv"], memoryIo({ "g.csv": csv })).output)).toBe("Total: 30,00 €");
++});
++
++it("sums only the given month", () => {
++  expect(norm(run(["total", "g.csv", "--mes", "2026-03"], memoryIo({ "g.csv": csv })).output)).toBe("Total: 20,00 €");
++  expect(norm(run(["total", "--mes", "2026-03", "g.csv"], memoryIo({ "g.csv": csv })).output)).toBe("Total: 20,00 €");
++});
++
++it("rejects a month that does not exist", () => {
++  expect(run(["total", "g.csv", "--mes", "2026-13"], memoryIo({ "g.csv": csv }))).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});

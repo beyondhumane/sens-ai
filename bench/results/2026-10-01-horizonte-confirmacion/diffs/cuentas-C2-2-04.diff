@@ -1,0 +1,51 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index df8ef9f..db1f606 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -16,11 +16,22 @@ function load(path: string | undefined, io: Io): Expense[] {
+   return parseExpenses(io.read(path));
+ }
+ 
++const line = (expense: Expense) =>
++  [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
++
++const plain = (text: string) =>
++  text
++    .normalize("NFD")
++    .replace(/\p{M}/gu, "")
++    .toLowerCase();
++
+ const commands: Record<string, Command> = {
+-  lista: (args, io) =>
+-    load(args[0], io)
+-      .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+-      .join("\n"),
++  lista: (args, io) => load(args[0], io).map(line).join("\n"),
++  buscar: (args, io) => {
++    const needle = plain(args.slice(1).join(" "));
++    const found = load(args[0], io).filter((expense) => plain(expense.description).includes(needle));
++    return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--mes");
+     const month = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c8b27f2..298d352 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -43,6 +43,15 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nAgua: 10,00 €\nZapatos: 10,00 €");
+   });
+ 
++  it("searches descriptions ignoring case and accents", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["buscar", "gastos.csv", "cafe"], io).output)).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
++    expect(shown(run(["buscar", "gastos.csv", "GASOLINA"], io).output)).toBe("02/03/2026  Transporte  45,20 €  Gasolina");
++    expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

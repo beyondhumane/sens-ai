@@ -1,0 +1,87 @@
+diff --git a/README.md b/README.md
+index 3002a7e..aed60f3 100644
+--- a/README.md
++++ b/README.md
+@@ -19,6 +19,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
++| `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index e6beaf2..5c3ddec 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -28,7 +28,34 @@ function fold(text: string): string {
+   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+ }
+ 
++function isRealDate(iso: string): boolean {
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
++  const [year, month, day] = iso.split("-").map(Number);
++  const date = new Date(Date.UTC(year, month - 1, day));
++  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
++}
++
+ const commands:Record<string, Command> = {
++  añadir: (args, io) => {
++    const [path, date, amount, category, ...words] = args;
++    if (!path) throw new Error("Falta el fichero de gastos");
++    if (date === undefined || amount === undefined || category === undefined || words.length === 0) {
++      throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
++    }
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    if (category.trim() === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
++    const description = words.join(" ").replace(/\s+/g, " ").trim();
++    if (description === "") throw new Error("Falta la descripción");
++    if (!io.exists(path)) throw new Error(`No existe ${path}`);
++    const text = io.read(path);
++    parseExpenses(text);
++    const cents = Math.round(Number(amount) * 100);
++    const eol = text.includes("\r\n") ? "\r\n" : "\n";
++    const row = `${date},${(cents / 100).toFixed(2)},${category},${description}`;
++    io.write(path, `${text}${text === "" || /\n$/.test(text) ? "" : eol}${row}${eol}`);
++    return `Añadido: ${formatLine({ date, cents, category, description })}`;
++  },
+   lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
+   buscar: (args, io) => {
+     const expenses = load(args[0], io);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 4c583de..430316b 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -55,6 +55,31 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("appends an expense at the end of the file", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS, "sin-salto.csv": GASTOS.trimEnd() });
++    const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.20", "Comida", "Churros", "con", "chocolate"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Añadido: 19/03/2026  Comida  4,20 €  Churros con chocolate");
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros con chocolate\n`);
++    run(["añadir", "sin-salto.csv", "2024-02-29", "3", "Ocio", "Cine"], io);
++    expect(io.files["sin-salto.csv"]).toBe(`${GASTOS}2024-02-29,3.00,Ocio,Cine\n`);
++  });
++
++  it("rejects bad expenses without touching the file", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const add = (...rest: string[]) => run(["añadir", "gastos.csv", ...rest], io);
++    expect(add("2026-02-30", "4.20", "Comida", "x")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++    expect(add("19/03/2026", "4.20", "Comida", "x").output).toBe("Fecha no válida: 19/03/2026");
++    expect(add("2026-03-19", "-3", "Comida", "x")).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(add("2026-03-19", "0", "Comida", "x").output).toBe("Importe no válido: 0");
++    expect(add("2026-03-19", "1.005", "Comida", "x").output).toBe("Importe no válido: 1.005");
++    expect(add("2026-03-19", "4,20", "Comida", "x").output).toBe("Importe no válido: 4,20");
++    expect(add("2026-03-19", "4.20", "Co,mida", "x").code).toBe(1);
++    expect(add("2026-03-19", "4.20", "Comida").code).toBe(1);
++    expect(run(["añadir", "otro.csv", "2026-03-19", "4.20", "Comida", "x"], io).output).toBe("No existe otro.csv");
++    expect(io.files["gastos.csv"]).toBe(GASTOS);
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

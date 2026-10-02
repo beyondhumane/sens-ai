@@ -1,0 +1,66 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a109b1e..49fccb9 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -58,6 +58,14 @@ function inRange(expenses: Expense[], args: string[]): Expense[] {
+   return expenses.filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to));
+ }
+ 
++function inCategory(expenses: Expense[], args: string[]): Expense[] {
++  const flag = args.indexOf("--categoria");
++  if (flag === -1) return expenses;
++  const category = args[flag + 1];
++  if (!category) throw new Error("Falta la categoría");
++  return expenses.filter((expense) => plain(expense.category) === plain(category));
++}
++
+ const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
+@@ -76,7 +84,7 @@ const commands: Record<string, Command> = {
+     const orderFlag = args.indexOf("--orden");
+     const order = orderFlag === -1 ? "fecha" : (args[orderFlag + 1] ?? "");
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+-    return inRange(load(args[0], io), args)
++    return inCategory(inRange(load(args[0], io), args), args)
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(line)
+       .join("\n");
+@@ -91,12 +99,7 @@ const commands: Record<string, Command> = {
+   },
+   total: (args, io) => {
+     const month = monthFlag(args);
+-    const flag = args.indexOf("--categoria");
+-    const category = flag === -1 ? undefined : args[flag + 1];
+-    if (flag !== -1 && !category) throw new Error("Falta la categoría");
+-    const expenses = inMonth(load(args[0], io), month).filter(
+-      (expense) => category === undefined || plain(expense.category) === plain(category),
+-    );
++    const expenses = inCategory(inMonth(load(args[0], io), month), args);
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   informe: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c69effa..9767767 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -51,6 +51,19 @@ describe("cuentas", () => {
+     });
+   });
+ 
++  it("filters the list by category, combined with dates and order", () => {
++    const io = memoryIo({
++      "gastos.csv":
++        "fecha,importe,categoria,descripcion\n2026-03-01,5.00,Comida,uno\n2026-03-02,9.00,Transporte,dos\n2026-03-03,7.00,Comida,tres\n2026-03-04,8.00,Comida,cuatro\n",
++    });
++    const names = (...flags: string[]) =>
++      run(["lista", "gastos.csv", ...flags], io).output.split("\n").map((l) => l.split("  ")[3]);
++    expect(names("--categoria", "comida")).toEqual(["uno", "tres", "cuatro"]);
++    expect(names("--categoria", "Comida", "--desde", "2026-03-02", "--hasta", "2026-03-03", "--orden", "importe")).toEqual(["tres"]);
++    expect(names("--orden", "importe", "--categoria", "Comida")).toEqual(["cuatro", "tres", "uno"]);
++    expect(run(["lista", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("appends a valid expense to the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

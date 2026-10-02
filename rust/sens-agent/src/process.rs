@@ -229,7 +229,7 @@ pub fn claude() -> Command {
     command
 }
 
-pub fn run(mut command: Command, input: &str) -> Result<String, String> {
+fn started(mut command: Command, input: &str) -> Result<(String, std::process::Child), String> {
     let program = command.get_program().to_string_lossy().into_owned();
     let mut child = command
         .stdin(Stdio::piped())
@@ -253,12 +253,15 @@ pub fn run(mut command: Command, input: &str) -> Result<String, String> {
         })?
         .write_all(input.as_bytes())
         .map_err(|error| unheard(&program, error))?;
+    Ok((program, child))
+}
 
-    let finished = child.wait_with_output().map_err(|error| {
+fn output(program: &str, finished: std::io::Result<std::process::Output>) -> Result<String, String> {
+    let finished = finished.map_err(|error| {
         said!(
             en: "{program} crashed: {error}",
             es: "{program} se cayó: {error}",
-            fr: "{program} s’est arrêté brutalement : {error}",
+            fr: "{program} s’est arrêté brutalement : {error}",
             de: "{program} ist abgestürzt: {error}",
             ja: "{program} が異常終了しました: {error}",
             zh: "{program} 崩溃了：{error}",
@@ -271,7 +274,7 @@ pub fn run(mut command: Command, input: &str) -> Result<String, String> {
         return Err(said!(
             en: "{program} failed: {complaint}",
             es: "{program} falló: {complaint}",
-            fr: "{program} a échoué : {complaint}",
+            fr: "{program} a échoué : {complaint}",
             de: "{program} ist fehlgeschlagen: {complaint}",
             ja: "{program} が失敗しました: {complaint}",
             zh: "{program} 运行失败：{complaint}",
@@ -279,6 +282,39 @@ pub fn run(mut command: Command, input: &str) -> Result<String, String> {
     }
 
     Ok(String::from_utf8_lossy(&finished.stdout).into_owned())
+}
+
+pub fn run(command: Command, input: &str) -> Result<String, String> {
+    let (program, child) = started(command, input)?;
+    output(&program, child.wait_with_output())
+}
+
+pub fn run_within(command: Command, input: &str, limit: std::time::Duration) -> Result<String, String> {
+    let (program, child) = started(command, input)?;
+    let family = Family::around(&child);
+    let id = child.id();
+    let (tell, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tell.send(child.wait_with_output());
+    });
+    match heard.recv_timeout(limit) {
+        Ok(finished) => output(&program, finished),
+        Err(_) => {
+            family.end();
+            if cfg!(not(windows)) {
+                let _ = Command::new("kill").arg("-9").arg(id.to_string()).status();
+            }
+            let seconds = limit.as_secs();
+            Err(said!(
+                en: "{program} did not answer within {seconds} s",
+                es: "{program} no respondió en {seconds} s",
+                fr: "{program} n’a pas répondu en {seconds} s",
+                de: "{program} hat nicht innerhalb von {seconds} s geantwortet",
+                ja: "{program} は {seconds} 秒以内に応答しませんでした",
+                zh: "{program} 未在 {seconds} 秒内响应",
+            ))
+        }
+    }
 }
 
 #[cfg(test)]

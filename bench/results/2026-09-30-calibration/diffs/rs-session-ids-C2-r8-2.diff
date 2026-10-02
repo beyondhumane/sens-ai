@@ -1,0 +1,78 @@
+diff --git a/rust/sens-agent/src/session.rs b/rust/sens-agent/src/session.rs
+index b5633d8..d3d2cd5 100644
+--- a/rust/sens-agent/src/session.rs
++++ b/rust/sens-agent/src/session.rs
+@@ -112,6 +112,10 @@ pub fn is_uuid(text: &str) -> bool {
+         })
+ }
+ 
++pub fn is_session_id(text: &str) -> bool {
++    is_uuid(text) || (text.len() == 8 && text.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
++}
++
+ pub fn dir(root: &Path) -> PathBuf {
+     root.join(".sens").join("sessions")
+ }
+@@ -195,7 +199,7 @@ fn uncreated(folder: &Path, error: std::io::Error) -> String {
+ }
+ 
+ fn named(id: &str) -> Result<(), String> {
+-    if is_uuid(id) {
++    if is_session_id(id) {
+         return Ok(());
+     }
+     Err(invalid(id))
+@@ -843,6 +847,22 @@ mod tests {
+         assert!(!is_uuid("s1758620000000"));
+         assert!(!is_uuid("819e8d71-4433-4aff-ac86-07939fe6241"));
+         assert!(!is_uuid("819e8d71x4433-4aff-ac86-07939fe6241c"));
++        assert!(!is_uuid("ab12cd34"));
++    }
++
++    #[test]
++    fn old_eight_character_ids_are_session_ids_but_not_uuids() {
++        assert!(is_session_id("ab12cd34"));
++        assert!(is_session_id("819e8d71-4433-4aff-ac86-07939fe6241c"));
++        assert!(!is_session_id("AB12CD34"));
++        assert!(!is_session_id("ab12cd3"));
++        assert!(!is_session_id("ab12cd345"));
++        assert!(!is_session_id("ab12cdg4"));
++        assert!(!is_session_id("s1758620000000"));
++        let root = std::env::temp_dir().join(format!("sens-legacy-id-{}", fresh_id()));
++        assert_eq!(open_as(&root, "ab12cd34").as_deref(), Ok("ab12cd34"));
++        assert!(open_as(&root, "ab12cd3x").is_err());
++        let _ = std::fs::remove_dir_all(&root);
+     }
+ 
+     #[test]
+diff --git a/rust/sens-app/src/worktree.rs b/rust/sens-app/src/worktree.rs
+index 7cdecf3..60c5a7b 100644
+--- a/rust/sens-app/src/worktree.rs
++++ b/rust/sens-app/src/worktree.rs
+@@ -9,7 +9,7 @@ const FOLDER: &str = "worktrees";
+ const SHORT: usize = 8;
+ 
+ pub fn isolate(root: &Path, id: &str) -> Result<Isolation, String> {
+-    if !session::is_uuid(id) {
++    if !session::is_session_id(id) {
+         return Err(session::invalid(id));
+     }
+     if let Some(known) = session::isolation(root, id) {
+@@ -37,7 +37,7 @@ pub fn isolate(root: &Path, id: &str) -> Result<Isolation, String> {
+ }
+ 
+ pub fn work_dir(root: &Path, id: &str) -> Result<Option<PathBuf>, String> {
+-    let Some(isolation) = session::is_uuid(id).then(|| session::isolation(root, id)).flatten() else {
++    let Some(isolation) = session::is_session_id(id).then(|| session::isolation(root, id)).flatten() else {
+         return Ok(None);
+     };
+     let path = PathBuf::from(&isolation.path);
+@@ -56,7 +56,7 @@ pub fn work_dir(root: &Path, id: &str) -> Result<Option<PathBuf>, String> {
+ }
+ 
+ pub fn release(root: &Path, id: &str, clear: impl FnOnce(&Path)) -> Result<(), String> {
+-    let Some(isolation) = session::is_uuid(id).then(|| session::isolation(root, id)).flatten() else {
++    let Some(isolation) = session::is_session_id(id).then(|| session::isolation(root, id)).flatten() else {
+         return Ok(());
+     };
+     let path = Path::new(&isolation.path);

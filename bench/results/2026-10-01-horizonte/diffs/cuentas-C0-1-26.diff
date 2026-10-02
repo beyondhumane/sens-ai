@@ -1,0 +1,46 @@
+diff --git a/README.md b/README.md
+index b85c949..95d66d7 100644
+--- a/README.md
++++ b/README.md
+@@ -22,7 +22,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes`. Con `--anio 2026` en su lugar: `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y al final el `Total: 179,85 €` (`Año no válido: 26` si no son cuatro cifras; no usa presupuestos). Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto, emparejadas sin distinguir mayúsculas ni acentos, añaden cuánto queda o cuánto te pasas: `  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)` |
+ | `avisos <fichero> <presupuestos> --mes AAAA-MM` | Las categorías que ese mes se pasan de su presupuesto, una por línea, de la que más se pasa a la que menos, con el nombre como está en los gastos (`Ocio: te pasas 5,00 €`); `Todo en orden` si ninguna. `Falta el mes` sin `--mes` |
+-| `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y debe existir; el importe mayor que cero y con dos decimales como mucho, con punto decimal (`4.20`) o con coma (`4,20`; entonces los puntos son de miles: `1.234,56`). Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
++| `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19`, debe existir y no puede ser posterior a hoy (`La fecha 2026-03-25 es futura`); el importe mayor que cero y con dos decimales como mucho, con punto decimal (`4.20`) o con coma (`4,20`; entonces los puntos son de miles: `1.234,56`). Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato (con `--formato banco`: `Fecha;Concepto;Importe`, fechas `09/03/2026` e importes en negativo con coma; otro formato da `Formato no válido: pdf`), y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ | `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+ | `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría (sin distinguir mayúsculas ni acentos) por `<nueva>` en todos los gastos y guarda el fichero: `Renombrados 3 gastos`. Si no hay ninguno no toca el fichero (`Renombrados 0 gastos`). La categoría se valida como en `añadir` |
+diff --git a/src/cli.ts b/src/cli.ts
+index d078d8e..f78342f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -181,6 +181,7 @@ const commands: Record<string, Command> = {
+     const description = words.join(" ");
+     load(path, io);
+     if (date === undefined || !isRealDate(date)) throw new Error(`Fecha no válida: ${date ?? ""}`.trim());
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseAmount(amount);
+     checkCategory(category);
+     if (description.trim() === "" || /[\r\n]/.test(description)) throw new Error("Descripción no válida");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 5486a2f..acd2e24 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -217,6 +217,16 @@ describe("añadir", () => {
+     expect(bad("2026-03-19", "4.20", "Comida").code).toBe(1);
+     expect(io.files["gastos.csv"]).toBe(GASTOS);
+   });
++
++  it("rejects future dates but accepts today", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS }, "2026-03-20");
++    expect(run(["añadir", "gastos.csv", "2026-03-25", "4.20", "Comida", "x"], io)).toEqual({
++      code: 1,
++      output: "La fecha 2026-03-25 es futura",
++    });
++    expect(io.files["gastos.csv"]).toBe(GASTOS);
++    expect(run(["añadir", "gastos.csv", "2026-03-20", "4.20", "Comida", "x"], io).code).toBe(0);
++  });
+ });
+ 
+ describe("exportar", () => {

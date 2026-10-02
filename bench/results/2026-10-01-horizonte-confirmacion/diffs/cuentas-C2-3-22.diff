@@ -1,0 +1,52 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index b602288..154a278 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -160,6 +160,21 @@ const commands: Record<string, Command> = {
+     io.write(path, `${BUDGET_HEADER}\n${rows.map((row) => `${row.category},${(row.cents / 100).toFixed(2)}\n`).join("")}`);
+     return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
+   },
++  renombrar: ([path, category, renamed], io) => {
++    const expenses = load(path, io);
++    if (!category) throw new Error("Falta la categoría");
++    if (!renamed) throw new Error("Falta la nueva categoría");
++    if (renamed.includes(",")) throw new Error(`Categoría no válida: ${renamed}`);
++    const key = plain(category);
++    let count = 0;
++    for (const expense of expenses) {
++      if (plain(expense.category) !== key) continue;
++      expense.category = renamed;
++      count++;
++    }
++    io.write(path!, `${HEADER}\n${expenses.map(formatExpense).join("")}`);
++    return `Renombrados ${count} gastos`;
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--categoria");
+     const category = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c64a970..a2933ef 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -239,6 +239,21 @@ describe("cuentas", () => {
+     expect(run(["duplicados"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+   });
+ 
++  it("renames a category ignoring case and accents, and saves the file", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,transporte,Bus
++2026-03-04,2.00,Ocio,"Cine, con Ana"
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(run(["renombrar", "gastos.csv", "TRANSPORTÉ", "Viajes"], io)).toEqual({ code: 0, output: "Renombrados 2 gastos" });
++    expect(io.files["gastos.csv"]).toBe(
++      "fecha,importe,categoria,descripcion\n2026-03-01,12.50,Comida,Pan y fruta\n2026-03-02,45.20,Viajes,Gasolina\n2026-03-03,3.00,Viajes,Bus\n2026-03-04,2.00,Ocio,\"Cine, con Ana\"\n",
++    );
++    expect(run(["renombrar", "gastos.csv", "Nada", "X"], io)).toEqual({ code: 0, output: "Renombrados 0 gastos" });
++    expect(run(["renombrar", "gastos.csv", "Ocio"], io)).toEqual({ code: 1, output: "Falta la nueva categoría" });
++    expect(run(["renombrar", "gastos.csv", "Ocio", "A,B"], io)).toEqual({ code: 1, output: "Categoría no válida: A,B" });
++    expect(run(["renombrar"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

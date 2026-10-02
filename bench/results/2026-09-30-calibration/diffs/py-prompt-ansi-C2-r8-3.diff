@@ -1,0 +1,46 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..24559db 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
+ from gettext import gettext as _
+ 
+ from ._compat import isatty
++from ._compat import should_strip_ansi
+ from ._compat import strip_ansi
+ from .exceptions import Abort
+ from .exceptions import UsageError
+@@ -84,6 +85,9 @@ def _readline_prompt(func: t.Callable[[str], str], text: str, err: bool) -> str:
+     """Call a prompt function, passing the full prompt on non-Windows so
+     readline can handle line editing and cursor positioning correctly.
+     """
++    if should_strip_ansi(sys.stderr if err else sys.stdout, resolve_color_default()):
++        text = strip_ansi(text)
++
+     if err:
+         with redirect_stdout(sys.stderr):
+             return func(text)
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index ce974f0..1c13ee0 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -1022,6 +1022,19 @@ def test_confirmation_prompt(runner, prompt, input, default, expect):
+         assert "Confirm Password: " in result.output
+ 
+ 
++@pytest.mark.parametrize("color", [None, False, True])
++@pytest.mark.parametrize("func", [click.prompt, click.confirm])
++def test_prompt_strips_ansi_like_echo(runner, func, color):
++    @click.command()
++    @click.pass_context
++    def cmd(ctx):
++        ctx.color = color
++        func(click.style("Question", fg="red"))
++
++    result = runner.invoke(cmd, input="y\n")
++    assert ("\x1b[" in result.output) is bool(color)
++
++
+ def test_false_show_default_cause_no_default_display_in_prompt(runner):
+     @click.command()
+     @click.option("--arg1", show_default=False, prompt=True, default="my-default-value")

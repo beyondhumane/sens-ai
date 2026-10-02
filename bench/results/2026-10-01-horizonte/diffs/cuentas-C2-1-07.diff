@@ -1,0 +1,80 @@
+diff --git a/README.md b/README.md
+index 1df9abd..4bd1e01 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios. Los dos días indicados se incluyen |
+ | `total <fichero>` | `Total: 57,70 €` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index 60b7847..ef3dce8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -23,7 +23,7 @@ const formatLine = (expense: Expense) =>
+ const normalize = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+ 
+ const isRealDate = (text: string) =>
+-  /^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
++  /^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toJSON()?.slice(0, 10) === text;
+ 
+ function monthFlag(args: string[]): string | undefined {
+   const flag = args.indexOf("--mes");
+@@ -33,7 +33,15 @@ function monthFlag(args: string[]): string | undefined {
+   return month;
+ }
+ 
+-const inMonth = (expenses: Expense[], month: string | undefined) =>
++function dateFlag(args: string[], name: string): string | undefined {
++  const flag = args.indexOf(name);
++  if (flag === -1) return undefined;
++  const date = args[flag + 1] ?? "";
++  if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++  return date;
++}
++
++const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
+ const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+@@ -59,7 +67,14 @@ const commands: Record<string, Command> = {
+     io.write(path, `${text.endsWith("\n") ? text : `${text}\n`}${[date, (cents / 100).toFixed(2), category, description].join(",")}\n`);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
+-  lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
++  lista: (args, io) => {
++    const from = dateFlag(args, "--desde");
++    const to = dateFlag(args, "--hasta");
++    return load(args[0], io)
++      .filter(({ date }) => (from === undefined || date >= from) && (to === undefined || date <= to))
++      .map(formatLine)
++      .join("\n");
++  },
+   buscar: (args, io) => {
+     const needle = normalize(args.slice(1).join(" "));
+     const found = load(args[0], io).filter((expense) => normalize(expense.description).includes(needle));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 1ad965c..3b38b1d 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,16 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("lists only the requested date range, both days included", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-03-15,10.00,Ocio,Cine\n2026-03-16,1.00,Ocio,Chicle\n` });
++    const days = (args: string[]) => shown(run(["lista", "gastos.csv", ...args], io).output).split("\n").map((l) => l.slice(0, 5));
++    expect(days(["--desde", "2026-03-02"])).toEqual(["02/03", "15/03", "16/03"]);
++    expect(days(["--hasta", "2026-03-02"])).toEqual(["01/03", "02/03"]);
++    expect(days(["--desde", "2026-03-02", "--hasta", "2026-03-15"])).toEqual(["02/03", "15/03"]);
++    expect(run(["lista", "gastos.csv", "--hasta", "2026-03-32"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-03-32" });
++    expect(run(["lista", "gastos.csv", "--desde"], io)).toEqual({ code: 1, output: "Fecha no válida: " });
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

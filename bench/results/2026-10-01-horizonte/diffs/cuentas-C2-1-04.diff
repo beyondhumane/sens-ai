@@ -1,0 +1,49 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 0603858..b139e15 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -17,11 +17,18 @@ function load(path: string | undefined, io: Io): Expense[] {
+ 
+ const formatDate = (iso: string) => iso.split("-").reverse().join("/");
+ 
++const formatLine = (expense: Expense) =>
++  [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
++
++const normalize = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
++
+ const commands: Record<string, Command> = {
+-  lista: (args, io) =>
+-    load(args[0], io)
+-      .map((expense) => [formatDate(expense.date),expense.category, formatMoney(expense.cents), expense.description].join("  "))
+-      .join("\n"),
++  lista: (args, io) => load(args[0], io).map(formatLine).join("\n"),
++  buscar: (args, io) => {
++    const needle = normalize(args.slice(1).join(" "));
++    const found = load(args[0], io).filter((expense) => normalize(expense.description).includes(needle));
++    return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
++  },
+   total: (args, io) => {
+     const flag = args.indexOf("--mes");
+     const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
+diff --git a/tests/buscar.test.ts b/tests/buscar.test.ts
+new file mode 100644
+index 0000000..9ac0d08
+--- /dev/null
++++ b/tests/buscar.test.ts
+@@ -0,0 +1,16 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const csv = ["fecha,importe,categoria,descripcion", "2026-03-01,3.5,ocio,Café con Ana", "2026-03-02,10,casa,Luz"].join("\n");
++
++it("finds expenses ignoring case and accents, with the lista lines", () => {
++  const io = memoryIo({ "g.csv": csv });
++  const found = run(["buscar", "g.csv", "CAFE"], io);
++  expect(found.code).toBe(0);
++  expect(found.output).toBe(run(["lista", "g.csv"], memoryIo({ "g.csv": csv.split("\n").slice(0, 2).join("\n") })).output);
++});
++
++it("says so when nothing matches", () => {
++  expect(run(["buscar", "g.csv", "zzz"], memoryIo({ "g.csv": csv })).output).toBe("Sin resultados");
++});

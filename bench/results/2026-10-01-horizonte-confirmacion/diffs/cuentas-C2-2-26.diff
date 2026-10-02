@@ -1,0 +1,31 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index f0bfe19..9357e65 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -161,6 +161,7 @@ const commands: Record<string, Command> = {
+       throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+     }
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseCents(amount);
+     if (/[,\r\n]/.test(category) || /[\r\n]/.test(description)) throw new Error("Categoría o descripción no válidas");
+     const text = io.read(path);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index fd4cd82..0640f38 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -75,6 +75,14 @@ describe("cuentas", () => {
+     expect(shown(run(["lista", "gastos.csv"], io).output)).toContain('Dijo "hola"');
+   });
+ 
++  it("rejects future dates but accepts today", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS }, "2026-03-20");
++    const add = (date: string) => run(["añadir", "gastos.csv", date, "4.20", "Comida", "X"], io);
++    expect(add("2026-03-25")).toEqual({ code: 1, output: "La fecha 2026-03-25 es futura" });
++    expect(io.files["gastos.csv"]).toBe(GASTOS);
++    expect(add("2026-03-20").code).toBe(0);
++  });
++
+   it("rejects bad dates and amounts without touching the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const add = (date: string, amount: string) => run(["añadir", "gastos.csv", date, amount, "Comida", "X"], io);

@@ -1,0 +1,63 @@
+diff --git a/README.md b/README.md
+index cada579..fcca5d3 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ fecha,importe,categoria,descripcion
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ | `presupuesto <fichero> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio y queda el nombre recién escrito. Importe y categoría se validan como en `añadir` |
+ | `semana <fichero> <fecha>` | Gastos de la semana (lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y al final `Total: 48,30 €`. `Fecha no válida: 2026-02-30` si no existe |
++| `media <fichero> --mes AAAA-MM` | Lo que gastas de media al día en ese mes, contando todos sus días aunque no hayas gastado, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `Falta el mes` sin `--mes` |
+ | `importar <banco> <fichero>` | Añade al final de `<fichero>` los gastos de un CSV del banco (`Fecha;Concepto;Importe`, fechas `09/03/2026`, importes con coma y puntos de miles; los negativos son gastos, los positivos se ignoran), en positivo, con el concepto como descripción y la categoría `Sin categoría`, y responde `Importados 1 gastos`. Si una línea no se entiende no importa nada: `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index f519878..d17d9cd 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -252,6 +252,15 @@ const commands: Record<string, Command> = {
+     }
+     return [...lines, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  media: (args, io) => {
++    const { month, rest } = parseMonth(args);
++    const expenses = load(rest[0], io);
++    if (month === undefined) throw new Error("Falta el mes");
++    const [year, number] = month.split("-").map(Number);
++    const days = new Date(Date.UTC(year, number, 0)).getUTCDate();
++    const total = sumCents(expenses.filter((expense) => expense.date.startsWith(`${month}-`)));
++    return `Media diaria en ${MONTHS[number - 1].toLowerCase()} de ${year}: ${formatMoney(Math.round(total / days))}`;
++  },
+   informe: (args, io) => {
+     const { month, rest: afterMonth } = parseMonth(args);
+     const { path: budgetsPath, rest } = takeBudgetsPath(afterMonth);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index aec5ec5..99df4db 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -301,6 +301,26 @@ describe("importes con coma", () => {
+   });
+ });
+ 
++describe("media", () => {
++  it("averages over every day of the month, rounded to the cent", () => {
++    const io = memoryIo({ "g.csv": `${GASTOS}2026-04-01,100.00,A,Otro mes\n` });
++    expect(shown(run(["media", "g.csv", "--mes", "2026-03"], io).output)).toBe("Media diaria en marzo de 2026: 1,86 €");
++    expect(shown(run(["media", "g.csv", "--mes", "2026-02"], io).output)).toBe("Media diaria en febrero de 2026: 0,00 €");
++    expect(shown(run(["media", "g.csv", "--mes", "2026-04"], io).output)).toBe("Media diaria en abril de 2026: 3,33 €");
++  });
++
++  it("uses the real length of February in leap years", () => {
++    const io = memoryIo({ "g.csv": "fecha,importe,categoria,descripcion\n2028-02-10,29.00,A,x\n" });
++    expect(shown(run(["media", "g.csv", "--mes", "2028-02"], io).output)).toBe("Media diaria en febrero de 2028: 1,00 €");
++  });
++
++  it("requires a valid month", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    expect(run(["media", "g.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++    expect(run(["media", "g.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++});
++
+ describe("importar", () => {
+   const BANCO = `Fecha;Concepto;Importe
+ 09/03/2026;Bar Paco;-8,75

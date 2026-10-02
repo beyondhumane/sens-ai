@@ -1,0 +1,1 @@
+Algunos de mis ficheros vienen de otra app que pone la descripción entre comillas cuando lleva comas, como `2026-03-05,18.00,Ocio,"Cena, con amigos"`, y que dobla las comillas de dentro (`"Dijo ""hola"""`). Quiero que se lean bien en todas las órdenes, y que `añadir` escriba así las descripciones que lleven comas o comillas.

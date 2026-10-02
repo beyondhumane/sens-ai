@@ -1,0 +1,64 @@
+diff --git a/README.md b/README.md
+index 83deba2..dcf67b9 100644
+--- a/README.md
++++ b/README.md
+@@ -17,7 +17,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+-| `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
++| `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo, por orden de aparición, con las veces que sale y el primero del grupo (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <nombre>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos (`Falta la categoría` si no se da el nombre). Se pueden combinar |
+diff --git a/src/cli.ts b/src/cli.ts
+index e855797..5a42927 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -176,10 +176,15 @@ const commands: Record<string, Command> = {
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    const needle = fold(args.slice(1).join(" "));
++    const { date: since, rest: afterSince } = takeDate(args, "--desde");
++    const { date: until, rest } = takeDate(afterSince, "--hasta");
++    const needle = fold(rest.slice(1).join(" "));
+     if (needle === "") throw new Error("Falta el texto a buscar");
+-    const found = load(args[0], io).filter(
+-      (expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle),
++    const found = load(rest[0], io).filter(
++      (expense) =>
++        (since === undefined || expense.date >= since) &&
++        (until === undefined || expense.date <= until) &&
++        (fold(expense.description).includes(needle) || fold(expense.category).includes(needle)),
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index a181793..2f996b3 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -50,6 +50,23 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("restricts buscar to --desde and --hasta, both days included", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,3.00,Ocio,Café con Ana
++2026-03-05,2.50,Ocio,CAFE solo
++2026-03-09,1.00,Ocio,Café largo
++2026-03-06,9.00,Comida,Pan
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos });
++    const out = (...args: string[]) => shown(run(["buscar", ...args], io()).output);
++    expect(out("gastos.csv", "cafe", "--desde", "2026-03-05", "--hasta", "2026-03-09")).toBe(
++      "05/03/2026  Ocio  2,50 €  CAFE solo\n09/03/2026  Ocio  1,00 €  Café largo",
++    );
++    expect(out("--hasta", "2026-03-01", "gastos.csv", "cafe")).toBe("01/03/2026  Ocio  3,00 €  Café con Ana");
++    expect(out("gastos.csv", "cafe", "--desde", "2026-04-01")).toBe("Sin resultados");
++    expect(run(["buscar", "gastos.csv", "cafe", "--desde", "2026-02-30"], io())).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  });
++
+   it("reports repeated expenses", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-09,8.75,Ocio,Café con Ana

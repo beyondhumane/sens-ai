@@ -1,0 +1,29 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c7d7f39..adbfb14 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -46,6 +46,12 @@ function line(expense: Expense): string {
+   return [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
+ }
+ 
++function sorted(expenses: Expense[], order = "fecha"): Expense[] {
++  if (order === "fecha") return [...expenses].sort((one, other) => one.date.localeCompare(other.date));
++  if (order === "importe") return [...expenses].sort((one, other) => other.cents - one.cents);
++  throw new Error(`Orden no válido: ${order}`);
++}
++
+ function spent(cents: number, budget: Budget | undefined): string {
+   if (!budget) return formatMoney(cents);
+   const left = budget.cents - cents;
+@@ -53,7 +59,10 @@ function spent(cents: number, budget: Budget | undefined): string {
+ }
+ 
+ const commands: Record<string, Command> = {
+-  lista: (args, io) => selected(args, io, ["desde", "hasta"]).expenses.map(line).join("\n"),
++  lista: (args, io) => {
++    const { expenses, flags } = selected(args, io, ["desde", "hasta", "orden"]);
++    return sorted(expenses, flags.get("orden")).map(line).join("\n");
++  },
+   total: (args, io) => `Total: ${formatMoney(sum(selected(args, io, ["mes", "categoria"]).expenses))}`,
+   categorias: (args, io) =>
+     biggestFirst(totalsBy(selected(args, io, []).expenses, (expense) => expense.category))

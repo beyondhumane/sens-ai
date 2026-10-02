@@ -1,0 +1,80 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index eda2585..8513149 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -137,9 +137,11 @@ function categoryTotals(expenses: Expense[]): [string, number][] {
+   return [...totals];
+ }
+ 
++const sortedCategoryTotals = (expenses: Expense[]) =>
++  categoryTotals(expenses).sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b));
++
+ function categoryLines(expenses: Expense[], budgets: Budget[] = []): string[] {
+-  return categoryTotals(expenses)
+-    .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b))
++  return sortedCategoryTotals(expenses)
+     .map(([category, cents]) => {
+       const budget = findBudget(budgets, category);
+       if (!budget) return `${category}: ${formatMoney(cents)}`;
+@@ -157,6 +159,14 @@ function budgetsFlag(args: string[], io: Io) {
+   return parseBudgets(io.read(path));
+ }
+ 
++function csvFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--csv");
++  if (flag === -1) return undefined;
++  const path = args[flag + 1];
++  if (!path || path.startsWith("--")) throw new Error("Falta el fichero CSV de salida");
++  return path;
++}
++
+ const commands: Record<string, Command> = {
+   añadir: ([path, date = "", amount = "", category = "", ...words], io) => {
+     const description = words.join(" ");
+@@ -334,6 +344,11 @@ const commands: Record<string, Command> = {
+     const expenses = inMonth(load(args[0], io), month);
+     const budgets = budgetsFlag(args, io);
+     const title = monthTitle(month);
++    const csv = csvFlag(args);
++    if (csv !== undefined) {
++      const rows = sortedCategoryTotals(expenses).map(([category, cents]) => `${category},${(cents / 100).toFixed(2)}`);
++      io.write(csv, `${["categoria,total", ...rows].join("\n")}\n`);
++    }
+     return [
+       title.charAt(0).toUpperCase() + title.slice(1),
+       ...categoryLines(expenses, budgets).map((line) => `  ${line}`),
+diff --git a/tests/informe-csv.test.ts b/tests/informe-csv.test.ts
+new file mode 100644
+index 0000000..d17f6cf
+--- /dev/null
++++ b/tests/informe-csv.test.ts
+@@ -0,0 +1,29 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const files = () => ({
++  "g.csv": [
++    "fecha,importe,categoria,descripcion",
++    "2026-03-01,44.65,Comida,Cena",
++    "2026-03-02,60.00,Ocio,Teatro",
++    "2026-03-03,5.00,Casa,Luz",
++    "2026-03-04,15.35,Comida,Pan",
++    "2026-04-01,99.00,Viajes,Tren",
++  ].join("\n"),
++});
++
++it("saves the monthly report to a CSV in the same order as the report", () => {
++  const io = memoryIo(files());
++  const ran = run(["informe", "g.csv", "--mes", "2026-03", "--csv", "out.csv"], io);
++  expect(ran.code).toBe(0);
++  expect(ran.output).toContain("Comida");
++  expect(io.files["out.csv"]).toBe("categoria,total\nComida,60.00\nOcio,60.00\nCasa,5.00\n");
++});
++
++it("does not write a CSV without the flag and rejects a missing path", () => {
++  const io = memoryIo(files());
++  expect(run(["informe", "g.csv", "--mes", "2026-03"], io).code).toBe(0);
++  expect(Object.keys(io.files)).toEqual(["g.csv"]);
++  expect(run(["informe", "g.csv", "--mes", "2026-03", "--csv"], io).code).toBe(1);
++});

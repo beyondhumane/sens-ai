@@ -1,0 +1,59 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index ef3dce8..6343be5 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseExpenses } from "./csv";
++import { parseExpenses, quote } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -64,7 +64,7 @@ const commands: Record<string, Command> = {
+     if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
+     const text = io.read(path);
+     parseExpenses(text);
+-    io.write(path, `${text.endsWith("\n") ? text : `${text}\n`}${[date, (cents / 100).toFixed(2), category, description].join(",")}\n`);
++    io.write(path, `${text.endsWith("\n") ? text : `${text}\n`}${[date, (cents / 100).toFixed(2), category, quote(description)].join(",")}\n`);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
+   lista: (args, io) => {
+diff --git a/src/csv.ts b/src/csv.ts
+index f21bd0a..aaf9f5b 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -9,6 +9,11 @@ export function parseExpenses(text: string): Expense[] {
+     .filter((row) => row.trim() !== "")
+     .map((row) => {
+       const [date, amount, category, ...rest] = row.split(",");
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
++      return { date, cents: Math.round(Number(amount) * 100), category, description: unquote(rest.join(",")) };
+     });
+ }
++
++const unquote = (field: string) =>
++  field.length >= 2 && field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replaceAll('""', '"') : field;
++
++export const quote = (field: string) => (/[",]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 3b38b1d..ecbb412 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -71,6 +71,18 @@ describe("cuentas", () => {
+     expect(bare.files["g.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros\n`);
+   });
+ 
++  it("reads quoted descriptions and writes them quoted when needed", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-03-05,18.00,Ocio,"Cena, con amigos"\n2026-03-06,3.00,Ocio,"Dijo ""hola"""\n` });
++    expect(shown(run(["lista", "gastos.csv"], io).output).split("\n").slice(2)).toEqual([
++      "05/03/2026  Ocio  18,00 €  Cena, con amigos",
++      '06/03/2026  Ocio  3,00 €  Dijo "hola"',
++    ]);
++    expect(run(["buscar", "gastos.csv", "con amigos"], io).output).toContain("Cena, con amigos");
++    run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Ocio", 'Dijo "hola", y se fue'], io);
++    expect(io.files["gastos.csv"].endsWith('2026-03-19,4.20,Ocio,"Dijo ""hola"", y se fue"\n')).toBe(true);
++    expect(run(["total", "gastos.csv"], io).code).toBe(0);
++  });
++
+   it("rejects invalid expenses without touching the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const add = (date: string, amount: string) => run(["añadir", "gastos.csv", date, amount, "Comida", "Churros"], io);

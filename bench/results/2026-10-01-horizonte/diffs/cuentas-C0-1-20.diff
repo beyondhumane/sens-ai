@@ -1,0 +1,61 @@
+diff --git a/README.md b/README.md
+index 1213404..5ff12d5 100644
+--- a/README.md
++++ b/README.md
+@@ -18,6 +18,7 @@ fecha,importe,categoria,descripcion
+ | `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. `--desde` y `--hasta`, juntas o por separado, limitan por fecha con ambos días incluidos (`Fecha no válida: 2026-03-32` si no existe) |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM] [--categoria <categoría>]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe); con `--categoria Comida` solo los de esa categoría, sin distinguir mayúsculas ni acentos. Ambas opciones se pueden combinar |
++| `duplicados <fichero>` | Avisa de los gastos que parecen repetidos (misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más): una línea por grupo con cuántas veces sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+ | `categorias <fichero>` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes`. Con `--anio 2026` en su lugar: `2026`, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y al final el `Total: 179,85 €` (`Año no válido: 26` si no son cuatro cifras; no usa presupuestos). Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto, emparejadas sin distinguir mayúsculas ni acentos, añaden cuánto queda o cuánto te pasas: `  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y debe existir; el importe mayor que cero y con dos decimales como mucho, con punto decimal (`4.20`) o con coma (`4,20`; entonces los puntos son de miles: `1.234,56`). Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 08359c5..5544050 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -152,6 +152,21 @@ const commands: Record<string, Command> = {
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, { first: Expense; count: number }>();
++    for (const expense of load(args[0], io)) {
++      const key = `${expense.date}|${expense.cents}|${fold(expense.description).trim().replace(/\s+/g, " ")}`;
++      const group = groups.get(key);
++      if (group) group.count++;
++      else groups.set(key, { first: expense, count: 1 });
++    }
++    const repeated = [...groups.values()].filter((group) => group.count > 1);
++    return repeated.length === 0
++      ? "Sin duplicados"
++      : repeated
++          .map(({ first, count }) => `${count} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`)
++          .join("\n");
++  },
+   categorias: (args, io) =>
+     categoryTotals(load(args[0], io))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 165ded7..4f6d415 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -384,3 +384,18 @@ describe("importar", () => {
+     expect(io.files["g.csv"]).toBe(GASTOS);
+   });
+ });
++
++describe("duplicados", () => {
++  it("reports groups with same date, amount and description ignoring case, accents and extra spaces", () => {
++    const csv = `fecha,importe,categoria,descripcion
++2026-03-09,8.75,Ocio,Café con Ana
++2026-03-09,8.75,Comida,  cafe   CON ana
++2026-03-09,8.75,Ocio,Café con Ana
++2026-03-10,8.75,Ocio,Café con Ana
++2026-03-09,9.00,Ocio,Café con Ana
++`;
++    const io = memoryIo({ "gastos.csv": csv });
++    expect(shown(run(["duplicados", "gastos.csv"], io).output)).toBe("3 veces: 09/03/2026  8,75 €  Café con Ana");
++    expect(run(["duplicados", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output).toBe("Sin duplicados");
++  });
++});

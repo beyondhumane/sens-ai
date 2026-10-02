@@ -1,0 +1,65 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 6343be5..1b118c4 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseExpenses, quote } from "./csv";
++import { formatRow, HEADER, parseExpenses } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -64,7 +64,7 @@ const commands: Record<string, Command> = {
+     if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
+     const text = io.read(path);
+     parseExpenses(text);
+-    io.write(path, `${text.endsWith("\n") ? text : `${text}\n`}${[date, (cents / 100).toFixed(2), category, quote(description)].join(",")}\n`);
++    io.write(path, `${text.endsWith("\n") ? text : `${text}\n`}${formatRow({ date, cents, category, description })}\n`);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
+   lista: (args, io) => {
+@@ -85,6 +85,14 @@ const commands: Record<string, Command> = {
+     return `Total: ${formatMoney(sumCents(inMonth(load(args[0], io), month)))}`;
+   },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
++  exportar: (args, io) => {
++    const month = monthFlag(args);
++    const output = args[1];
++    if (!output || output.startsWith("--")) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM]");
++    const expenses = inMonth(load(args[0], io), month);
++    io.write(output, `${[HEADER, ...expenses.map(formatRow)].join("\n")}\n`);
++    return `Exportados ${expenses.length} gastos a ${output}`;
++  },
+   informe: (args, io) => {
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
+diff --git a/src/csv.ts b/src/csv.ts
+index aaf9f5b..2c09ef6 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -17,3 +17,6 @@ const unquote = (field: string) =>
+   field.length >= 2 && field.startsWith('"') && field.endsWith('"') ? field.slice(1, -1).replaceAll('""', '"') : field;
+ 
+ export const quote = (field: string) => (/[",]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field);
++
++export const formatRow = ({ date, cents, category, description }: Expense) =>
++  [date, (cents / 100).toFixed(2), category, quote(description)].join(",");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index ecbb412..23fd9c5 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -38,6 +38,15 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("exports one month, or everything, in the original format", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,10.00,Ocio,"Cine, con ""amigos"""\n` });
++    expect(run(["exportar", "gastos.csv", "marzo.csv", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Exportados 2 gastos a marzo.csv" });
++    expect(io.files["marzo.csv"]).toBe(GASTOS);
++    expect(run(["exportar", "gastos.csv", "todo.csv"], io)).toEqual({ code: 0, output: "Exportados 3 gastos a todo.csv" });
++    expect(io.files["todo.csv"]).toBe(`${GASTOS}2026-04-01,10.00,Ocio,"Cine, con ""amigos"""\n`);
++    expect(run(["exportar", "gastos.csv"], io).code).toBe(1);
++  });
++
+   it("sums by category, biggest first, ties alphabetical", () => {
+     const csv = `${GASTOS}2026-03-03,32.50,Comida,Cena
+ 2026-03-04,45.20,Ocio,Cine

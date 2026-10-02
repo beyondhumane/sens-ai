@@ -1,0 +1,87 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 806e8e0..6acf022 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,8 +1,8 @@
+-import { parseExpenses } from "./csv";
+-import { formatDate, monthOf, parseMonth } from "./dates";
++import { appended, parseExpenses } from "./csv";
++import { formatDate, monthOf, parseDay, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+-import { formatMoney } from "./money";
++import { formatMoney, parseAmount } from "./money";
+ import { parseOptions } from "./options";
+ import { plain } from "./text";
+ import { biggestFirst, sum, totalsBy } from "./totals";
+@@ -47,6 +47,13 @@ const commands: Record<string, Command> = {
+     const found = expenses.filter((expense) => plain(expense.description).includes(wanted));
+     return found.length ? found.map(line).join("\n") : "Sin resultados";
+   },
++  añadir: (args, io) => {
++    const [path, date, amount, category, description] = parseOptions(args, []).positional;
++    if (description === undefined) throw new Error("Faltan datos: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
++    const expense = { date: parseDay(date), cents: parseAmount(amount), category, description };
++    io.write(path, appended(io.read(path), expense));
++    return `Añadido: ${line(expense)}`;
++  },
+ };
+ 
+ export function run(argv: string[], io: Io): Ran {
+diff --git a/src/csv.ts b/src/csv.ts
+index f21bd0a..04996a3 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -1,4 +1,5 @@
+ import type { Expense } from "./expense";
++import { amountInFile } from "./money";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
+ 
+@@ -12,3 +13,11 @@ export function parseExpenses(text: string): Expense[] {
+       return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
+     });
+ }
++
++export function formatRow(expense: Expense): string {
++  return [expense.date, amountInFile(expense.cents), expense.category, expense.description].join(",");
++}
++
++export function appended(text: string, expense: Expense): string {
++  return `${text}${text.endsWith("\n") ? "" : "\n"}${formatRow(expense)}\n`;
++}
+diff --git a/src/dates.ts b/src/dates.ts
+index 7585015..317cc00 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -3,6 +3,12 @@ export function formatDate(iso: string): string {
+   return `${day}/${month}/${year}`;
+ }
+ 
++export function parseDay(text: string): string {
++  const day = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : undefined;
++  if (!day || Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== text) throw new Error(`Fecha no válida: ${text}`);
++  return text;
++}
++
+ export function parseMonth(text: string): string {
+   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw new Error(`Mes no válido: ${text}`);
+   return text;
+diff --git a/src/money.ts b/src/money.ts
+index 6a62781..be1e3cd 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -3,3 +3,13 @@ const euros = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR
+ export function formatMoney(cents: number): string {
+   return euros.format(cents / 100);
+ }
++
++export function parseAmount(text: string): number {
++  const cents = /^\d+(\.\d{1,2})?$/.test(text) ? Math.round(Number(text) * 100) : 0;
++  if (cents <= 0) throw new Error(`Importe no válido: ${text}`);
++  return cents;
++}
++
++export function amountInFile(cents: number): string {
++  return (cents / 100).toFixed(2);
++}

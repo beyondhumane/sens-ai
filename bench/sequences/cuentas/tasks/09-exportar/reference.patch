@@ -1,0 +1,38 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2c34cbd..0dbed67 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { appended, parseExpenses } from "./csv";
++import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -61,6 +61,12 @@ const commands: Record<string, Command> = {
+     io.write(path, appended(io.read(path), expense));
+     return `Añadido: ${line(expense)}`;
+   },
++  exportar: (args, io) => {
++    const { expenses, positional } = selected(args, io, ["mes"]);
++    if (positional[1] === undefined) throw new Error("Falta el fichero de salida");
++    io.write(positional[1], formatExpenses(expenses));
++    return `Exportados ${expenses.length} gastos a ${positional[1]}`;
++  },
+   informe: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes"]);
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+diff --git a/src/csv.ts b/src/csv.ts
+index f54cdb9..f0d6566 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -46,6 +46,10 @@ export function formatRow(expense: Expense): string {
+   return [expense.date, amountInFile(expense.cents), expense.category, expense.description].map((field) => quoted(field)).join(",");
+ }
+ 
++export function formatExpenses(expenses: Expense[]): string {
++  return [HEADER, ...expenses.map(formatRow)].join("\n") + "\n";
++}
++
+ export function appended(text: string, expense: Expense): string {
+   return `${text}${text.endsWith("\n") ? "" : "\n"}${formatRow(expense)}\n`;
+ }

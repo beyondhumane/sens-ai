@@ -1,0 +1,1 @@
+Los títulos de sesión largos se cortan a 56 caracteres en mitad de una palabra (`session::shorten`). Haz que el corte caiga al final de la última palabra completa que quepa, con el `…` final de siempre. Si ni la primera palabra cabe, se sigue cortando como ahora.

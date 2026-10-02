@@ -1,0 +1,48 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index dda98f9..234d0f3 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -230,10 +230,21 @@ const commands: Record<string, Command> = {
+     return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
+   },
+   exportar: (args, io) => {
+-    const { path, month, positional } = withMonth(args);
++    const formatFlag = args.indexOf("--formato");
++    const format = formatFlag === -1 ? undefined : (args[formatFlag + 1] ?? "");
++    if (format !== undefined && format !== "banco") throw new Error(`Formato no válido: ${format}`);
++    const { path, month, positional } = withMonth(args.filter((_, i) => i !== formatFlag && i !== formatFlag + 1 || formatFlag === -1));
+     const output = positional[1];
+     if (output === undefined) throw new Error("Falta el fichero de salida");
+-    load(path, io);
++    const expenses = load(path, io);
++    if (format === "banco") {
++      const lines = inMonth(expenses, month).map((expense) => {
++        const concept = /[;"]/.test(expense.description) ? `"${expense.description.replaceAll('"', '""')}"` : expense.description;
++        return `${formatDate(expense.date)};${concept};-${(expense.cents / 100).toFixed(2).replace(".", ",")}`;
++      });
++      io.write(output, `${["Fecha;Concepto;Importe", ...lines].join("\n")}\n`);
++      return `Exportados ${lines.length} gastos a ${output}`;
++    }
+     const [header, ...rows] = io.read(path as string).trim().split(/\r?\n/);
+     const kept = rows.filter((row) => row.trim() !== "" && (month === undefined || row.startsWith(`${month}-`)));
+     io.write(output, `${[header, ...kept].join("\n")}\n`);
+diff --git a/tests/exportar.test.ts b/tests/exportar.test.ts
+index 8bdaa0c..a5d8adc 100644
+--- a/tests/exportar.test.ts
++++ b/tests/exportar.test.ts
+@@ -20,7 +20,15 @@ it("exports everything without --mes, and accepts the flag first", () => {
+   expect(run(["exportar", "--mes", "2026-04", "g.csv", "abril.csv"], io).output).toBe("Exportados 1 gastos a abril.csv");
+ });
+ 
++it("exports in bank format with semicolons, comma decimals and negative amounts", () => {
++  const io = memoryIo({ "g.csv": source });
++  const ran = run(["exportar", "g.csv", "banco.csv", "--formato", "banco", "--mes", "2026-03"], io);
++  expect(ran).toEqual({ code: 0, output: "Exportados 2 gastos a banco.csv" });
++  expect(io.files["banco.csv"]).toBe("Fecha;Concepto;Importe\n05/03/2026;Cena, con amigos;-18,00\n06/03/2026;Pan;-2,50\n");
++});
++
+ it.each([
++  [["exportar", "g.csv", "o.csv", "--formato", "pdf"], "Formato no válido: pdf"],
+   [["exportar", "g.csv"], "Falta el fichero de salida"],
+   [["exportar", "g.csv", "o.csv", "--mes", "2026-13"], "Mes no válido: 2026-13"],
+ ])("rejects %j", (argv, message) => {

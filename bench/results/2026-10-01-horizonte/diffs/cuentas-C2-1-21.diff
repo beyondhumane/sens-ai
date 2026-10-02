@@ -1,0 +1,83 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 7c3fb66..19d7d55 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -104,13 +104,22 @@ const monthTitle = (month: string) =>
+ 
+ const sumCents =(expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+ 
+-function categoryLines(expenses: Expense[], budgets: { category: string; cents: number }[] = []): string[] {
++type Budget = { category: string; cents: number };
++
++const findBudget = (budgets: Budget[], category: string) =>
++  budgets.find((item) => normalize(item.category) === normalize(category));
++
++function categoryTotals(expenses: Expense[]): [string, number][] {
+   const totals = new Map<string, number>();
+   for (const { category, cents } of expenses) totals.set(category, (totals.get(category) ?? 0) + cents);
+-  return [...totals]
++  return [...totals];
++}
++
++function categoryLines(expenses: Expense[], budgets: Budget[] = []): string[] {
++  return categoryTotals(expenses)
+     .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b))
+     .map(([category, cents]) => {
+-      const budget = budgets.find((item) => normalize(item.category) === normalize(category));
++      const budget = findBudget(budgets, category);
+       if (!budget) return `${category}: ${formatMoney(cents)}`;
+       const left = budget.cents - cents;
+       const status = left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`;
+@@ -194,6 +203,17 @@ const commands: Record<string, Command> = {
+       .map(([first, ...rest]) => `${rest.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`);
+     return lines.length === 0 ? "Sin duplicados" : lines.join("\n");
+   },
++  avisos: ([path, budgetsPath, ...rest], io) => {
++    const month = monthFlag(rest);
++    if (!path || !budgetsPath || month === undefined) throw new Error("Uso: avisos <fichero> <presupuestos> --mes AAAA-MM");
++    const budgets = parseBudgets(io.read(budgetsPath));
++    const lines = categoryTotals(inMonth(load(path, io), month))
++      .map(([category, cents]) => ({ category, over: cents - (findBudget(budgets, category)?.cents ?? Infinity) }))
++      .filter(({ over }) => over > 0)
++      .sort((a, b) => b.over - a.over || a.category.localeCompare(b.category))
++      .map(({ category, over }) => `${category}: te pasas ${formatMoney(over)}`);
++    return lines.length === 0 ? "Todo en orden" : lines.join("\n");
++  },
+   total: (args, io) => {
+     const month = monthFlag(args);
+     const category = categoryFlag(args);
+diff --git a/tests/avisos.test.ts b/tests/avisos.test.ts
+new file mode 100644
+index 0000000..01c5aa2
+--- /dev/null
++++ b/tests/avisos.test.ts
+@@ -0,0 +1,29 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const files = {
++  "g.csv": [
++    "fecha,importe,categoria,descripcion",
++    "2026-03-01,44.65,Comida,Pan",
++    "2026-03-02,60.00,Ocio,Cine",
++    "2026-03-03,5.00,Casa,Luz",
++    "2026-03-04,70.00,Comida,Cena",
++    "2026-04-04,500.00,Casa,Alquiler",
++  ].join("\n"),
++  "p.csv": "categoria,importe\ncomida,100.00\nOCIO,55.00\nCasa,50.00\n",
++};
++
++it("lists over-budget categories of the month, biggest excess first, with the expenses' name", () => {
++  const ran = run(["avisos", "g.csv", "p.csv", "--mes", "2026-03"], memoryIo(files));
++  expect(ran.code).toBe(0);
++  expect(ran.output.replace(/ /g, " ")).toBe("Comida: te pasas 14,65 €\nOcio: te pasas 5,00 €");
++});
++
++it("says all is fine when nothing is exceeded", () => {
++  expect(run(["avisos", "g.csv", "p.csv", "--mes", "2026-02"], memoryIo(files)).output).toBe("Todo en orden");
++});
++
++it("requires the month", () => {
++  expect(run(["avisos", "g.csv", "p.csv"], memoryIo(files)).code).toBe(1);
++});

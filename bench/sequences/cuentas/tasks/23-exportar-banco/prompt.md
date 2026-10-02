@@ -1,0 +1,1 @@
+`exportar` tiene que aceptar `--formato banco` para escribir el fichero como lo pide mi banco y poder subirlo a su web: cabecera `Fecha;Concepto;Importe`, fechas como 09/03/2026, el concepto es la descripción y los importes van con coma y en negativo (`-8,75`). Sin `--formato`, como hasta ahora. Cualquier otro formato: `Formato no válido: pdf`.

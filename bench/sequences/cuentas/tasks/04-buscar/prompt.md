@@ -1,0 +1,1 @@
+Orden nueva: `buscar <fichero> <texto>`. Saca los gastos cuya descripción contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`. Si no hay ninguno: `Sin resultados`.

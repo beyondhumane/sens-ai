@@ -1,0 +1,76 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 5d72265..b152d5b 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { BUDGET_HEADER, HEADER, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
++import { BANK_HEADER, BUDGET_HEADER, HEADER, bankRow, budgetRow, csvRow, parseBudgets, parseExpenses } from "./csv";
+ import { daysInMonth, formatDate,formatMonth, formatMonthName, formatWeekday, isRealDate, weekOf } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -217,9 +217,13 @@ const commands: Record<string, Command> = {
+   },
+   exportar: (args, io) => {
+     const [path, out] = args;
+-    if (!out) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM]");
++    if (!out) throw new Error("Uso: exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]");
++    const formatIndex = args.indexOf("--formato");
++    const format = formatIndex === -1 ? undefined : (args[formatIndex + 1] ?? "");
++    if (format !== undefined && format !== "banco") throw new Error(`Formato no válido: ${format}`);
+     const expenses = inMonth(load(path, io), monthFlag(args));
+-    io.write(out, `${[HEADER, ...expenses.map(csvRow)].join("\n")}\n`);
++    const [header, toRow] = format === "banco" ? [BANK_HEADER, bankRow] : [HEADER, csvRow];
++    io.write(out, `${[header, ...expenses.map(toRow)].join("\n")}\n`);
+     return `Exportados ${expenses.length} gastos a ${out}`;
+   },
+   duplicados: (args, io) => {
+diff --git a/src/csv.ts b/src/csv.ts
+index e09bb54..5dacd97 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -1,3 +1,4 @@
++import { formatDate } from "./date";
+ import type { Expense } from "./expense";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
+@@ -44,6 +45,13 @@ export function parseExpenses(text: string): Expense[] {
+ export const csvRow = (expense: Expense) =>
+   `${expense.date},${(expense.cents / 100).toFixed(2)},${csvField(expense.category)},${csvField(expense.description)}`;
+ 
++export const BANK_HEADER = "Fecha;Concepto;Importe";
++
++export const bankRow = (expense: Expense) => {
++  const concept = /[";]/.test(expense.description) ? `"${expense.description.replace(/"/g, '""')}"` : expense.description;
++  return `${formatDate(expense.date)};${concept};-${(expense.cents / 100).toFixed(2).replace(".", ",")}`;
++};
++
+ export const BUDGET_HEADER = "categoria,importe";
+ 
+ export interface Budget {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 1541f12..a609390 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -252,6 +252,22 @@ describe("cuentas", () => {
+     expect(shown(run(["buscar", "gastos.csv", "TRANSPORTE"], io).output)).toContain("03/03/2026  Transporte  3,00 €  Billete");
+   });
+ 
++  it("exports in the bank format and rejects other formats", () => {
++    const io = memoryIo({
++      "gastos.csv": `${GASTOS}2026-03-09,8.75,Ocio,"Cine; con ""amigos"""\n`,
++    });
++    expect(run(["exportar", "gastos.csv", "banco.csv", "--formato", "banco"], io).output).toBe(
++      "Exportados 3 gastos a banco.csv",
++    );
++    expect(io.files["banco.csv"]).toBe(
++      'Fecha;Concepto;Importe\n01/03/2026;Pan y fruta;-12,50\n02/03/2026;Gasolina;-45,20\n09/03/2026;"Cine; con ""amigos""";-8,75\n',
++    );
++    expect(run(["exportar", "gastos.csv", "x.csv", "--formato", "pdf"], io)).toEqual({
++      code: 1,
++      output: "Formato no válido: pdf",
++    });
++  });
++
+   it("exports only the requested month with the same format", () => {
+     const gastos = `${GASTOS}2026-04-01,3.00,Ocio,"Cine, con amigos"\n`;
+     const io = memoryIo({ "gastos.csv": gastos });

@@ -45,12 +45,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
+            rust/sens-index
+            rust/sens-canon
             rust/sens-agent
             rust/sens-app
             rust/sens-setup
+            rust/sens-bench
+      - run: cargo clippy --manifest-path rust/sens-index/Cargo.toml --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path rust/sens-canon/Cargo.toml --all-targets -- -D warnings
       - run: cargo clippy --manifest-path rust/sens-agent/Cargo.toml --all-targets -- -D warnings
       - run: cargo clippy --manifest-path rust/sens-app/Cargo.toml --all-targets -- -D warnings
       - run: cargo clippy --manifest-path rust/sens-setup/Cargo.toml --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path rust/sens-bench/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path rust/sens-index/Cargo.toml
+      - run: cargo test --manifest-path rust/sens-canon/Cargo.toml
       - run: cargo test --manifest-path rust/sens-agent/Cargo.toml
       - run: cargo test --manifest-path rust/sens-app/Cargo.toml
       - run: cargo test --manifest-path rust/sens-setup/Cargo.toml
+      - run: cargo test --manifest-path rust/sens-bench/Cargo.toml

@@ -1,0 +1,74 @@
+diff --git a/README.md b/README.md
+index 0f04c20..dea22f2 100644
+--- a/README.md
++++ b/README.md
+@@ -26,7 +26,7 @@ fecha,importe,categoria,descripcion
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin contar mayúsculas, acentos ni espacios de más. Una línea por grupo, con cuántas veces sale y el primero del grupo (`2 veces: 09/03/2026  8,75 €  Café con Ana`); `Sin duplicados` si no hay ninguno |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+-| `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
++| `exportar <fichero> <salida> [--mes AAAA-MM] [--formato banco]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos. Con `--formato banco` escribe `Fecha;Concepto;Importe` con fechas `09/03/2026` e importes en negativo con coma (`-8,75`); otro formato da `Formato no válido: pdf` |
+ | `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría (sin distinguir mayúsculas ni acentos) por la nueva en todos los gastos y guarda el fichero; responde `Renombrados 3 gastos`. Si ninguno coincide no toca el fichero y responde `Renombrados 0 gastos` |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (sumando sus gastos), `Lunes 02/03/2026: 45,20 €`, y `Total: 48,30 €` al final; sin gastos solo sale el total. `Fecha no válida: 2026-02-30` si no existe |
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, separado por `;`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`; la primera línea es la cabecera) y añade al final de `<fichero>` solo los gastos (importes negativos, en positivo) con el concepto como descripción y la categoría `Sin categoría`. Responde `Importados 1 gastos`. Los ingresos se ignoran. Si alguna línea no se entiende no importa nada: `Línea 3 del banco no válida` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 3d40fc9..3dd9c72 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -235,17 +235,24 @@ const commands:Record<string, Command> = {
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   exportar: (args, io) => {
+-    const { path, rest, month } = monthArgs(args);
++    const formatFlag = args.indexOf("--formato");
++    const format = formatFlag === -1 ? undefined : (args[formatFlag + 1] ?? "");
++    if (format !== undefined && format !== "banco") throw new Error(`Formato no válido: ${format}`);
++    const { path, rest, month } = monthArgs(args.filter((_, i) => formatFlag === -1 || (i !== formatFlag && i !== formatFlag + 1)));
+     const out = rest[1];
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!out) throw new Error("Falta el fichero de salida");
+     const text = io.read(path);
+     const expenses = parseExpenses(text).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+     const eol = text.includes("\r\n") ? "\r\n" : "\n";
+-    const rows = expenses.map(
+-      (e) => `${e.date},${(e.cents / 100).toFixed(2)},${escapeField(e.category)},${escapeField(e.description)}`,
+-    );
+-    io.write(out, [HEADER, ...rows].join(eol) + eol);
++    const rows =
++      format === "banco"
++        ? expenses.map((e) => {
++            const concept = /[;"\r\n]/.test(e.description) ? `"${e.description.replace(/"/g, '""')}"` : e.description;
++            return `${formatDate(e.date)};${concept};${(-e.cents / 100).toFixed(2).replace(".", ",")}`;
++          })
++        : expenses.map((e) => `${e.date},${(e.cents / 100).toFixed(2)},${escapeField(e.category)},${escapeField(e.description)}`);
++    io.write(out, [format === "banco" ? "Fecha;Concepto;Importe" : HEADER, ...rows].join(eol) + eol);
+     return `Exportados ${expenses.length} gastos a ${out}`;
+   },
+   renombrar: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6d9806c..132a9a6 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -280,6 +280,22 @@ describe("cuentas", () => {
+     expect(run(["exportar", "gastos.csv", "x.csv", "--mes", "2026-13"], io).output).toBe("Mes no válido: 2026-13");
+     expect(run(["exportar", "gastos.csv"], io).code).toBe(1);
+   });
++
++  it("exports in the bank format", () => {
++    const io = memoryIo({
++      "gastos.csv": `fecha,importe,categoria,descripcion
++2026-03-09,8.75,Comida,Menú
++2026-03-10,1200.00,Casa,"Alquiler; marzo"
++2026-04-06,2.00,Ocio,Cine
++`,
++    });
++    expect(run(["exportar", "gastos.csv", "b.csv", "--formato", "banco", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Exportados 2 gastos a b.csv" });
++    expect(io.files["b.csv"]).toBe(`Fecha;Concepto;Importe
++09/03/2026;Menú;-8,75
++10/03/2026;"Alquiler; marzo";-1200,00
++`);
++    expect(run(["exportar", "gastos.csv", "x.csv", "--formato", "pdf"], io)).toEqual({ code: 1, output: "Formato no válido: pdf" });
++  });
+ });
+ 
+ describe("renombrar", () => {

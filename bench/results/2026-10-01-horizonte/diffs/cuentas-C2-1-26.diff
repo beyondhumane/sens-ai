@@ -1,0 +1,26 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 240cbfc..e11b987 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -159,6 +159,7 @@ const commands: Record<string, Command> = {
+     const description = words.join(" ");
+     if (!path || !category || !description) throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseCents(amount);
+     if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
+     const text = io.read(path);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index c98b952..f8517f1 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -138,7 +138,9 @@ describe("cuentas", () => {
+     expect(add("2026-03-19", "1.234")).toEqual({ code: 1, output: "Importe no válido: 1.234" });
+     expect(add("2026-03-19", "abc")).toEqual({ code: 1, output: "Importe no válido: abc" });
+     expect(run(["añadir", "gastos.csv", "2026-03-19", "4.20"], io).code).toBe(1);
++    expect(add("2026-03-21", "4.20")).toEqual({ code: 1, output: "La fecha 2026-03-21 es futura" });
+     expect(io.files["gastos.csv"]).toBe(GASTOS);
++    expect(add("2026-03-20", "4.20").code).toBe(0);
+   });
+ 
+   it("says what is missing or unknown", () => {

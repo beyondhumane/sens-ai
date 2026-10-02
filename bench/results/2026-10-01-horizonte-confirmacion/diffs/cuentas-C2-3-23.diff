@@ -1,0 +1,47 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 154a278..da62ae5 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -192,11 +192,21 @@ const commands: Record<string, Command> = {
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n"),
+   exportar: (args, io) => {
+-    const { month, file, positional } = parseMonthFlag(args);
++    const formatFlag = args.indexOf("--formato");
++    const format = formatFlag === -1 ? undefined : args[formatFlag + 1] ?? "";
++    if (format !== undefined && format !== "banco") throw new Error(`Formato no válido: ${format}`);
++    const { month, file, positional } = parseMonthFlag(
++      formatFlag === -1 ? args : args.filter((_, index) => index !== formatFlag && index !== formatFlag + 1),
++    );
+     const output = positional[1];
+     const expenses = load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+     if (!output) throw new Error("Falta el fichero de salida");
+-    io.write(output, `${HEADER}\n${expenses.map(formatExpense).join("")}`);
++    io.write(
++      output,
++      format === "banco"
++        ? `Fecha;Concepto;Importe\n${expenses.map((e) => `${formatDate(e.date)};${e.description};-${(e.cents / 100).toFixed(2).replace(".", ",")}\n`).join("")}`
++        : `${HEADER}\n${expenses.map(formatExpense).join("")}`,
++    );
+     return `Exportados ${expenses.length} gastos a ${output}`;
+   },
+   media: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index a2933ef..35a5f12 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -271,6 +271,14 @@ describe("cuentas", () => {
+     expect(run(["exportar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el fichero de salida" });
+   });
+ 
++  it("exports in the bank format with --formato banco", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    expect(run(["exportar", "gastos.csv", "banco.csv", "--formato", "banco"], io)).toEqual({ code: 0, output: "Exportados 2 gastos a banco.csv" });
++    expect(io.files["banco.csv"]).toBe("Fecha;Concepto;Importe\n01/03/2026;Pan y fruta;-12,50\n02/03/2026;Gasolina;-45,20\n");
++    expect(run(["exportar", "gastos.csv", "x.csv", "--formato", "pdf"], io)).toEqual({ code: 1, output: "Formato no válido: pdf" });
++    expect(io.files["x.csv"]).toBeUndefined();
++  });
++
+   it("imports only the expenses of a bank file, all or nothing", () => {
+     const banco = `Fecha;Concepto;Importe
+ 09/03/2026;Bar Paco;-8,75

@@ -1,0 +1,120 @@
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.tsx b/rust/sens-app/ui/src/features/changes/Changes.tsx
+index 330f0ed..66413e0 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.tsx
+@@ -6,7 +6,7 @@ import { FileIcon } from "../../shared/FileIcon";
+ import { Icon } from "../../shared/Icon";
+ import { LinesCard } from "../../shared/LinesCard";
+ import { addedRows, patchRows } from "../../shared/rows";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf } from "../../shared/syntax/languages";
+ import { ICONS } from "../../shared/icons.js";
+ import { project } from "../project/store";
+ import { t } from "./copy";
+@@ -74,6 +74,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+   const touched = useStore(project, (s) => s.touched.has(file.path));
+   const [counted, setCounted] = useState<number | null>(null);
+   const plus = file.fresh ? (counted ?? file.plus) : file.plus;
++  const kind = languageTitleOf(file.path);
+ 
+   return (
+     <details
+@@ -91,6 +92,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+         </span>
+         <FileIcon path={file.path} />
+         <span className="name">{stem(file.path)}</span>
++        {kind && <span className="kind">{kind}</span>}
+         <span className="dirname">{parentOf(file.path)}</span>
+         <Counts file={file} plus={plus} />
+         {file.state !== "D" && (
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.tsx b/rust/sens-app/ui/src/features/files/Viewer.tsx
+index ef5756f..aeaa730 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.tsx
+@@ -6,7 +6,7 @@ import { FRONT_MATTER, stem, weigh } from "../../shared/format.js";
+ import { ICONS } from "../../shared/icons.js";
+ import { Markdown } from "../../shared/markdown/Markdown";
+ import { useCode } from "../../shared/syntax/code";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf } from "../../shared/syntax/languages";
+ import type { Look, Painted, Runs } from "../../shared/syntax/paint";
+ import { useSeen } from "../../shared/useSeen";
+ import { project, type Edits } from "../project/store";
+@@ -40,11 +40,13 @@ const useEdits = () => {
+ export function ViewerHead() {
+   const title = useStore(viewer, (s) => s.title) || t.noneOpen;
+   const edits = useEdits();
++  const kind = useStore(viewer, (s) => languageTitleOf(s.title, textOf(s.body).slice(0, 200)));
+   return (
+     <>
+       <span className="where" title={title}>
+         {title}
+       </span>
++      {kind && <span className="kind">{kind}</span>}
+       <span className="marks">
+         {edits && (
+           <>
+diff --git a/rust/sens-app/ui/src/shared/syntax/languages.ts b/rust/sens-app/ui/src/shared/syntax/languages.ts
+index a736a08..ff19ad1 100644
+--- a/rust/sens-app/ui/src/shared/syntax/languages.ts
++++ b/rust/sens-app/ui/src/shared/syntax/languages.ts
+@@ -21,6 +21,12 @@ export function languageOf(path: string, text = "") {
+   return interpreters[program] ?? interpreters[program.replace(/[\d.]+$/, "")] ?? null;
+ }
+ 
++// The language's name for a file, as `TypeScript`; null when it is not known.
++export function languageTitleOf(path: string, text = "") {
++  const grammar = languageOf(path, text);
++  return grammar && Object.hasOwn(titles, grammar) ? titles[grammar] : null;
++}
++
+ // The grammar a code fence names: ```ts, ```python, ```console, ```ps1.
+ export function languageNamed(tag: string) {
+   const name = tag.trim().toLowerCase();
+diff --git a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+index 4e34892..fee610d 100644
+--- a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
++++ b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ import { describe, expect, it } from "vitest";
+ import { codeNow, paintCode } from "./code";
+-import { languageNamed, languageOf, titleOf } from "./languages";
++import { languageNamed, languageOf, languageTitleOf, titleOf } from "./languages";
+ import { paint, paintedNow, paintRows } from "./paint";
+ 
+ const KEYWORD = "light-dark(#0000ff, #569cd6)";
+@@ -31,6 +31,13 @@ describe("languages", () => {
+     expect(languageOf("constructor")).toBeNull();
+   });
+ 
++  it("are titled by their name, and by nothing when unknown", () => {
++    expect(languageTitleOf("src/app.ts")).toBe("TypeScript");
++    expect(languageTitleOf("README.md")).toBe("Markdown");
++    expect(languageTitleOf("bin/deploy", "#!/usr/bin/env python3\nprint(1)")).toBe("Python");
++    expect(languageTitleOf("notes.txt")).toBeNull();
++  });
++
+   it("are known by a code fence's tag", () => {
+     expect(languageNamed("ts")).toBe("typescript");
+     expect(languageNamed("Python")).toBe("python");
+diff --git a/rust/sens-app/ui/src/styles.css b/rust/sens-app/ui/src/styles.css
+index a70d69b..ddeab1d 100644
+--- a/rust/sens-app/ui/src/styles.css
++++ b/rust/sens-app/ui/src/styles.css
+@@ -1335,6 +1335,7 @@
+     font-family: var(--mono); font-size: 12px; color: var(--text);
+     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+   }
++  .code-head .kind { flex: none; font-size: 12px; color: var(--ghost); }
+   .marks { font-family: var(--mono); font-size: 12px; display: flex; gap: 10px; flex: none; }
+   .marks .plus { color: var(--green); }
+   .marks .minus { color: var(--red); }
+@@ -1382,6 +1383,7 @@
+   .change .state[data-state="R"] { color: var(--blue); }
+   .change .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+   .change[data-touched="true"] .name { color: var(--green); }
++  .change .kind { flex: none; font-size: 11px; color: var(--ghost); }
+   .change .dirname {
+     flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+     direction: rtl; text-align: left; font-size: 12px; color: var(--ghost);

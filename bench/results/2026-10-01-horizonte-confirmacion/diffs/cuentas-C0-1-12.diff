@@ -1,0 +1,82 @@
+diff --git a/README.md b/README.md
+index e36c963..3e05653 100644
+--- a/README.md
++++ b/README.md
+@@ -21,7 +21,7 @@ fecha,importe,categoria,descripcion
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+-| `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio |
++| `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero, con punto y dos decimales como mucho. Si algo no vale, no toca el fichero |
+ | `exportar <fichero> <salida> --mes 2026-03` | Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 5827f37..1b90c78 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -107,8 +107,18 @@ const commands: Record<string, Command> = {
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   informe: (args, io) => {
+-    const { month, positional } = splitMonth(args);
++    const flag = args.indexOf("--presupuestos");
++    const budgetPath = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !budgetPath) throw new Error("Falta el fichero de presupuestos");
++    const { month, positional } = splitMonth(flag === -1 ? args : [...args.slice(0, flag), ...args.slice(flag + 2)]);
+     if (month === undefined) throw new Error("Falta el mes");
++    const budgets = new Map<string, number>();
++    if (budgetPath) {
++      for (const budget of parseBudgets(io.read(budgetPath))) {
++        checkAmount(budget.amount);
++        budgets.set(fold(budget.category), Math.round(Number(budget.amount) * 100));
++      }
++    }
+     const expenses = load(positional[0], io).filter((expense) => expense.date.startsWith(`${month}-`));
+     const [year, number] = month.split("-");
+     const totals = new Map<string, number>();
+@@ -117,7 +127,13 @@ const commands: Record<string, Command> = {
+     }
+     const rows = [...totals]
+       .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"))
+-      .map(([category, cents]) => `  ${category}: ${formatMoney(cents)}`);
++      .map(([category, cents]) => {
++        const budget = budgets.get(fold(category));
++        if (budget === undefined) return `  ${category}: ${formatMoney(cents)}`;
++        const left = budget - cents;
++        const status = left >= 0 ? `quedan ${formatMoney(left)}` : `te pasas ${formatMoney(-left)}`;
++        return `  ${category}: ${formatMoney(cents)} de ${formatMoney(budget)} (${status})`;
++      });
+     const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
+     return [`${MONTHS[Number(number) - 1]} de ${year}`, ...rows, `Total: ${formatMoney(total)}`].join("\n");
+   },
+diff --git a/tests/informe.test.ts b/tests/informe.test.ts
+index e1a1e56..829fd36 100644
+--- a/tests/informe.test.ts
++++ b/tests/informe.test.ts
+@@ -32,3 +32,25 @@ it("requires a valid month", () => {
+   expect(run(["informe", "g.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
+   expect(run(["informe", "g.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+ });
++
++it("shows what is left or exceeded for budgeted categories, matching ignoring case and accents", () => {
++  const io = memoryIo({ "g.csv": csv, "p.csv": "categoria,importe\nCÓMIDA,100.00\nocio,55.00\nViajes,10.00\n" });
++  const ran = run(["informe", "g.csv", "--presupuestos", "p.csv", "--mes", "2026-03"], io);
++  expect(ran.code).toBe(0);
++  expect(norm(ran.output)).toBe(
++    "Marzo de 2026\n  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)\n  Comida: 44,65 € de 100,00 € (quedan 55,35 €)\nTotal: 104,65 €",
++  );
++});
++
++it("leaves categories without budget as they are", () => {
++  const io = memoryIo({ "g.csv": csv, "p.csv": "categoria,importe\nComida,100.00\n" });
++  expect(norm(run(["informe", "g.csv", "--mes", "2026-03", "--presupuestos", "p.csv"], io).output)).toBe(
++    "Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 € de 100,00 € (quedan 55,35 €)\nTotal: 104,65 €",
++  );
++});
++
++it("fails when the budget file is missing or the flag has no value", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["informe", "g.csv", "--mes", "2026-03", "--presupuestos", "p.csv"], io)).toEqual({ code: 1, output: "No existe p.csv" });
++  expect(run(["informe", "g.csv", "--mes", "2026-03", "--presupuestos"], io)).toEqual({ code: 1, output: "Falta el fichero de presupuestos" });
++});

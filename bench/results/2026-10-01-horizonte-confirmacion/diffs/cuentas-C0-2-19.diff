@@ -1,0 +1,85 @@
+diff --git a/README.md b/README.md
+index 0d15d00..1d934d9 100644
+--- a/README.md
++++ b/README.md
+@@ -16,7 +16,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--orden fecha\|importe]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. Sale por fecha, de la más antigua a la más reciente (los del mismo día, en el orden del fichero); con `--orden importe`, de mayor a menor importe; `Orden no válido: color` si es otro. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe |
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+diff --git a/src/cli.ts b/src/cli.ts
+index c87db28..262ebd8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -47,12 +47,16 @@ function monthArgs(args: string[]): { path: string | undefined; rest: string[];
+   return { path: rest[0], rest, month };
+ }
+ 
+-function rangeArgs(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined } {
++function rangeArgs(args: string[]): { path: string | undefined; from: string | undefined; to: string | undefined; order: string } {
+   const dates: Record<string, string | undefined> = {};
+   const rest: string[] = [];
++  let order = "fecha";
+   for (let i = 0; i < args.length; i++) {
+     const arg = args[i];
+-    if (arg === "--desde" || arg === "--hasta") {
++    if (arg === "--orden") {
++      order = args[++i] ?? "";
++      if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
++    } else if (arg === "--desde" || arg === "--hasta") {
+       const value = args[++i] ?? "";
+       if (!isRealDate(value)) throw new Error(`Fecha no válida: ${value}`);
+       dates[arg] = value;
+@@ -60,7 +64,7 @@ function rangeArgs(args: string[]): { path: string | undefined; from: string | u
+       rest.push(arg);
+     }
+   }
+-  return { path: rest[0], from: dates["--desde"], to: dates["--hasta"] };
++  return { path: rest[0], from: dates["--desde"], to: dates["--hasta"], order };
+ }
+ 
+ function budgetArgs(args: string[]): { rest: string[]; budgetPath: string | undefined } {
+@@ -192,9 +196,10 @@ const commands:Record<string, Command> = {
+     return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
+   },
+   lista: (args, io) => {
+-    const { path, from, to } = rangeArgs(args);
++    const { path, from, to, order } = rangeArgs(args);
+     return load(path, io)
+       .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+       .map(formatLine)
+       .join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 1f2469d..92415f3 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -27,6 +27,23 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--hasta", "2026-02-30"], io).output).toBe("Fecha no válida: 2026-02-30");
+   });
+ 
++  it("sorts the list by date (stable) or by amount", () => {
++    const io = memoryIo({
++      "gastos.csv": `fecha,importe,categoria,descripcion
++2026-03-05,10.00,Ocio,B
++2026-03-01,20.00,Ocio,A
++2026-03-05,10.00,Ocio,C
++2026-03-03,5.00,Ocio,D
++`,
++    });
++    const names = (...extra: string[]) =>
++      run(["lista", "gastos.csv", ...extra], io).output.split("\n").map((l) => l.slice(-1)).join("");
++    expect(names()).toBe("ADBC");
++    expect(names("--orden", "fecha")).toBe("ADBC");
++    expect(names("--orden", "importe")).toBe("ABCD");
++    expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
++  });
++
+   it("shows the Monday-to-Sunday week of a date", () => {
+     const gastos = `${GASTOS}2026-03-04,3.10,Ocio,Café
+ 2026-03-04,1.00,Ocio,Prensa

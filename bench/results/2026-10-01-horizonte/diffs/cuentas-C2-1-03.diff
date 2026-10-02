@@ -1,0 +1,38 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 12256ef..0603858 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -22,7 +22,13 @@ const commands: Record<string, Command> = {
+     load(args[0], io)
+       .map((expense) => [formatDate(expense.date),expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  total: (args, io) => {
++    const flag = args.indexOf("--mes");
++    const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
++    if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++    const expenses = load(args[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const { category, cents } of load(args[0], io)) totals.set(category, (totals.get(category) ?? 0) + cents);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index ea28689..29dc373 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -20,6 +20,14 @@ describe("cuentas", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });
+ 
++  it("adds up only the requested month", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,10.00,Ocio,Cine\n` });
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Total: 57,70 €");
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-04"], io).output)).toBe("Total: 10,00 €");
++    expect(shown(run(["total", "gastos.csv", "--mes", "2026-05"], io).output)).toBe("Total: 0,00 €");
++    expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("sums by category, biggest first, ties alphabetical", () => {
+     const csv = `${GASTOS}2026-03-03,32.50,Comida,Cena
+ 2026-03-04,45.20,Ocio,Cine

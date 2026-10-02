@@ -1,0 +1,58 @@
+diff --git a/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx b/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
+index 46f4edd..6fd0eab 100644
+--- a/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
++++ b/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
+@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import type { Artifact } from "../../ipc/types";
+ import { dialog } from "../../app/modal";
++import { weigh } from "../../shared/format.js";
+ import { resume } from "../../app/session";
+ import { shell } from "../../app/shell";
+ import { viewer } from "../files/view";
+@@ -53,8 +54,8 @@ beforeEach(() => {
+   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
+   ipc.commands.artifacts.mockResolvedValue([
+     artifact("foto.png", { kind: "image" }),
+-    artifact("plan.md"),
+-    artifact("informe.html", { session: null }),
++    artifact("plan.md", { bytes: 1.2 * 1024 * 1024 }),
++    artifact("informe.html", { session: null, bytes: null }),
+     artifact("docs", { kind: "link", target: "https://example.com/docs", root: "C:/otro", project: "otro" }),
+   ]);
+   ipc.commands.artifactData.mockResolvedValue("data:image/png;base64,AAAA");
+@@ -76,6 +77,12 @@ async function open() {
+ const card = (name: string) => screen.getByText(name, { selector: ".card .name" }).closest(".card") as HTMLElement;
+ 
+ describe("the shelf", () => {
++  it("writes the size after the project when it is known", async () => {
++    await open();
++    expect(card("plan.md").querySelector(".sub")?.textContent).toBe(`demo · ${weigh(1.2 * 1024 * 1024)}`);
++    expect(card("informe.html").querySelector(".sub")?.textContent).toBe("demo");
++  });
++
+   it("counts this project's artifacts and every kind across projects", async () => {
+     await open();
+     expect(screen.getByText("3 artefactos de este proyecto")).toBeTruthy();
+diff --git a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+index e71efb0..ed00a35 100644
+--- a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
++++ b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+@@ -3,7 +3,7 @@ import { useStore } from "zustand";
+ import type { Artifact } from "../../ipc/types";
+ import { resume } from "../../app/session";
+ import { EmptyView } from "../../shared/EmptyView";
+-import { ago, when } from "../../shared/format.js";
++import { ago, weigh, when } from "../../shared/format.js";
+ import { Icon } from "../../shared/Icon";
+ import { ICONS } from "../../shared/icons.js";
+ import { useSeen } from "../../shared/useSeen";
+@@ -119,7 +119,7 @@ function ArtifactCard({ item }: { item: Artifact }) {
+       </div>
+       <button className="card-main" title={item.target} onClick={(event) => openArtifact(item, event.currentTarget)}>
+         <span className={item.kind === "link" ? "name url" : "name"}>{item.name}</span>
+-        <span className="sub">{item.project}</span>
++        <span className="sub">{[item.project, item.bytes != null && weigh(item.bytes)].filter(Boolean).join(" · ")}</span>
+       </button>
+       <div className="card-controls">
+         <Origin item={item} />

@@ -1,0 +1,62 @@
+diff --git a/README.md b/README.md
+index 0a0d4a1..0c52fb5 100644
+--- a/README.md
++++ b/README.md
+@@ -19,7 +19,7 @@ fecha,importe,categoria,descripcion
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
+ | `lista <fichero> --desde 2026-03-01 --hasta 2026-03-15` | Solo los gastos del rango, ambos días incluidos; `--desde` y `--hasta` valen juntos o por separado. Una fecha que no existe da `Fecha no válida: 2026-03-32` |
+ | `total <fichero>` | `Total: 57,70 €` |
+-| `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; si no hay ninguno, `Sin resultados` |
++| `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; `--desde` y `--hasta` limitan el rango como en `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian. En lugar de `--mes`, `--anio 2026` da el año, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y el total, sin presupuestos; un año que no son cuatro cifras da `Año no válido: 26` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero y con dos decimales como mucho: con coma decimal (`4,20`, y entonces los puntos son de miles: `1.234,56`) o, sin coma, con punto decimal (`4.20`). Si algo no vale, no toca el fichero |
+diff --git a/src/cli.ts b/src/cli.ts
+index c068022..4538d12 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -117,9 +117,16 @@ const commands: Record<string, Command> = {
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    const needle = fold(args.slice(1).join(" "));
++    const since = takeDate(args, "--desde");
++    const until = takeDate(since.rest, "--hasta");
++    const needle = fold(until.rest.slice(1).join(" "));
+     if (!needle) throw new Error("Falta el texto a buscar");
+-    const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle));
++    const found = load(until.rest[0], io).filter(
++      (expense) =>
++        (since.date === undefined || expense.date >= since.date) &&
++        (until.date === undefined || expense.date <= until.date) &&
++        (fold(expense.description).includes(needle) || fold(expense.category).includes(needle)),
++    );
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+   },
+   total: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 46e4cff..6e0b491 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -76,6 +76,21 @@ describe("cuentas", () => {
+     expect(run(["buscar", "g.csv"], memoryIo(files))).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("limits search to a date range", () => {
++    const files = {
++      "g.csv": `fecha,importe,categoria,descripcion
++2026-03-01,3.00,Ocio,Café con Ana
++2026-03-10,2.50,Ocio,Café solo
++2026-03-20,4.00,Ocio,Café doble
++`,
++    };
++    const found = (extra: string[]) => shown(run(["buscar", "g.csv", "cafe", ...extra], memoryIo(files)).output);
++    expect(found(["--desde", "2026-03-10"])).toBe("10/03/2026  Ocio  2,50 €  Café solo\n20/03/2026  Ocio  4,00 €  Café doble");
++    expect(found(["--hasta", "2026-03-10", "--desde", "2026-03-02"])).toBe("10/03/2026  Ocio  2,50 €  Café solo");
++    expect(found(["--desde", "2026-04-01"])).toBe("Sin resultados");
++    expect(run(["buscar", "g.csv", "cafe", "--hasta", "2026-02-30"], memoryIo(files))).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

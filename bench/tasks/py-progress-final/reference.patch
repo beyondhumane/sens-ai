@@ -1,0 +1,16 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index d4912ee..6298496 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -154,6 +154,11 @@ class ProgressBar(t.Generic[V]):
+         return next(iter(self))
+ 
+     def render_finish(self) -> None:
++        if self._completed_intervals:
++            self.make_step(self._completed_intervals)
++            self._completed_intervals = 0
++            self.render_progress()
++
+         if self.hidden or not self._is_atty:
+             return
+         self.file.write(AFTER_BAR)

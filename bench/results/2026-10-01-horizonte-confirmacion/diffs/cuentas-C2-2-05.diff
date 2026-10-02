@@ -1,0 +1,61 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index db1f606..ce32ba3 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -39,6 +39,25 @@ const commands: Record<string, Command> = {
+     const expenses = load(args[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
++  añadir: (args, io) => {
++    const [path, date, amount, category, ...words] = args;
++    const description = words.join(" ");
++    if (!path || date === undefined || amount === undefined || !category || !description) {
++      throw new Error("Uso: añadir <fichero> <fecha> <importe> <categoría> <descripción>");
++    }
++    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date) : undefined;
++    if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
++      throw new Error(`Fecha no válida: ${date}`);
++    }
++    const cents = Math.round(Number(amount) * 100);
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++    if (/[,\r\n]/.test(category) || /[\r\n]/.test(description)) throw new Error("Categoría o descripción no válidas");
++    const text = io.read(path);
++    parseExpenses(text);
++    const row = `${date},${(cents / 100).toFixed(2)},${category},${description}\n`;
++    io.write(path, text.endsWith("\n") ? text + row : `${text}\n${row}`);
++    return `Añadido: ${line({ date, cents, category, description })}`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 298d352..8498864 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -16,6 +16,26 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("01/03/2026  Comida  12,50 €  Pan y fruta\n02/03/2026  Transporte  45,20 €  Gasolina");
+   });
+ 
++  it("appends a valid expense to the file", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Añadido: 19/03/2026  Comida  4,20 €  Churros con chocolate");
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros con chocolate\n`);
++  });
++
++  it("rejects bad dates and amounts without touching the file", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const add = (date: string, amount: string) => run(["añadir", "gastos.csv", date, amount, "Comida", "X"], io);
++    expect(add("2026-02-30", "4.20")).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++    expect(add("19/03/2026", "4.20")).toEqual({ code: 1, output: "Fecha no válida: 19/03/2026" });
++    expect(add("2026-03-19", "-3")).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(add("2026-03-19", "0")).toEqual({ code: 1, output: "Importe no válido: 0" });
++    expect(add("2026-03-19", "1.234")).toEqual({ code: 1, output: "Importe no válido: 1.234" });
++    expect(add("2026-03-19", "abc")).toEqual({ code: 1, output: "Importe no válido: abc" });
++    expect(io.files["gastos.csv"]).toBe(GASTOS);
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

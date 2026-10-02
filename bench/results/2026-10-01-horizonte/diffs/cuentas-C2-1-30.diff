@@ -1,0 +1,54 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 208730e..ccee5ec 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -121,6 +121,9 @@ function orderFlag(args: string[]) {
+ const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
++const inCategory = (expenses: Expense[], category: string | undefined) =>
++  expenses.filter((expense) => category === undefined || normalize(expense.category) === normalize(category));
++
+ const monthTitle = (month: string) =>
+   new Date(`${month}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+ 
+@@ -211,7 +214,8 @@ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const inRange = rangeFilter(args);
+     const byOrder = orderFlag(args);
+-    return load(args[0], io).filter(inRange).sort(byOrder).map(formatLine).join("\n");
++    const category = categoryFlag(args);
++    return inCategory(load(args[0], io), category).filter(inRange).sort(byOrder).map(formatLine).join("\n");
+   },
+   buscar: (args, io) => {
+     const inRange = rangeFilter(args);
+@@ -272,9 +276,7 @@ const commands: Record<string, Command> = {
+   total: (args, io) => {
+     const month = monthFlag(args);
+     const category = categoryFlag(args);
+-    const expenses = inMonth(load(args[0], io), month).filter(
+-      (expense) => category === undefined || normalize(expense.category) === normalize(category),
+-    );
++    const expenses = inCategory(inMonth(load(args[0], io), month), category);
+     return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   comparar: ([path, first = "", second = ""], io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 24ef52b..727c896 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -35,6 +35,14 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
+   });
+ 
++  it("lists only one category with --categoria, combinable with range and order", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-03-10,30.00,Comida,Cena\n2026-02-10,5.00,comida,Café\n` });
++    const lines = (args: string[]) => shown(run(["lista", "gastos.csv", ...args], io).output).split("\n").map((l) => l.split("  ")[3]);
++    expect(lines(["--categoria", "COMIDA"])).toEqual(["Café", "Pan y fruta", "Cena"]);
++    expect(lines(["--categoria", "comida", "--desde", "2026-03-01", "--orden", "importe"])).toEqual(["Cena", "Pan y fruta"]);
++    expect(run(["lista", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

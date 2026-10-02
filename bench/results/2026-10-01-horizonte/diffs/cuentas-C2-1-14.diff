@@ -1,0 +1,50 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index fb8969e..d823217 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -39,6 +39,14 @@ function monthFlag(args: string[]): string | undefined {
+   return month;
+ }
+ 
++function categoryFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--categoria");
++  if (flag === -1) return undefined;
++  const category = args[flag + 1];
++  if (!category || category.startsWith("--")) throw new Error("Falta la categoría");
++  return category;
++}
++
+ function dateFlag(args: string[], name: string): string | undefined {
+   const flag = args.indexOf(name);
+   if (flag === -1) return undefined;
+@@ -115,7 +123,11 @@ const commands: Record<string, Command> = {
+   },
+   total: (args, io) => {
+     const month = monthFlag(args);
+-    return `Total: ${formatMoney(sumCents(inMonth(load(args[0], io), month)))}`;
++    const category = categoryFlag(args);
++    const expenses = inMonth(load(args[0], io), month).filter(
++      (expense) => category === undefined || normalize(expense.category) === normalize(category),
++    );
++    return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
+   exportar: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 23fd9c5..f7a5969 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -38,6 +38,13 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("adds up only a category, ignoring case and accents, combinable with the month", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,10.00,Comída,Cena\n2026-04-02,5.00,Ocio,Cine\n` });
++    expect(shown(run(["total", "gastos.csv", "--categoria", "comida", "--mes", "2026-04"], io).output)).toBe("Total: 10,00 €");
++    expect(shown(run(["total", "gastos.csv", "--categoria", "COMIDA"], io).output)).toContain("€");
++    expect(run(["total", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("exports one month, or everything, in the original format", () => {
+     const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,10.00,Ocio,"Cine, con ""amigos"""\n` });
+     expect(run(["exportar", "gastos.csv", "marzo.csv", "--mes", "2026-03"], io)).toEqual({ code: 0, output: "Exportados 2 gastos a marzo.csv" });

@@ -1,0 +1,93 @@
+diff --git a/README.md b/README.md
+index 5baa387..8e72138 100644
+--- a/README.md
++++ b/README.md
+@@ -22,6 +22,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM` | Informe del mes: `Marzo de 2026`, una línea por categoría con lo gastado ese mes (dos espacios delante, de más a menos, empates por orden alfabético) y `Total: 104,65 €`. `--mes` es obligatorio; `Mes no válido: 2026-13` si no existe |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y tiene que existir; el importe, con punto decimal, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
++| `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV (`categoria,importe`; se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía, se cambia en su sitio (sin distinguir mayúsculas ni acentos) y queda el nombre escrito ahora. Importe y categoría se validan como en `añadir` |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los del mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index e328f31..fc81ec7 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { escapeField, HEADER, parseExpenses } from "./csv";
++import { BUDGET_HEADER, escapeField, HEADER, parseBudgets, parseExpenses } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -92,6 +92,26 @@ const commands:Record<string, Command> = {
+     io.write(path, `${text}${text === "" || /\n$/.test(text) ? "" : eol}${row}${eol}`);
+     return `Añadido: ${formatLine({ date, cents, category, description })}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, category, amount, ...extra] = args;
++    if (!path) throw new Error("Falta el fichero de presupuestos");
++    if (category === undefined || amount === undefined || extra.length > 0) {
++      throw new Error("Uso: presupuesto <fichero> <categoría> <importe>");
++    }
++    if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error(`Importe no válido: ${amount}`);
++    if (category.trim() === "" || /[,\r\n]/.test(category)) throw new Error(`Categoría no válida: ${category}`);
++    const text = io.exists(path) ? io.read(path) : "";
++    const rows = io.exists(path) ? parseBudgets(text) : [];
++    const cents = Math.round(Number(amount) * 100);
++    const row = [category, (cents / 100).toFixed(2)];
++    const index = rows.findIndex(([name]) => fold(name) === fold(category));
++    if (index === -1) rows.push(row);
++    else rows[index] = row;
++    const eol = text.includes("\r\n") ? "\r\n" : "\n";
++    const lines = [BUDGET_HEADER, ...rows.map((r) => r.map(escapeField).join(","))];
++    io.write(path, lines.join(eol) + eol);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   lista: (args, io) => {
+     const { path, from, to } = rangeArgs(args);
+     return load(path, io)
+diff --git a/src/csv.ts b/src/csv.ts
+index b0a735d..27326a9 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -56,3 +56,11 @@ export function parseExpenses(text: string): Expense[] {
+ export function escapeField(value: string): string {
+   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+ }
++
++export const BUDGET_HEADER = "categoria,importe";
++
++export function parseBudgets(text: string): string[][] {
++  const [header, ...rows] = parseRecords(text.trim());
++  if (header.join(",") !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header.join(",")}`);
++  return rows.filter((row) => row.some((field) => field.trim() !== ""));
++}
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 76034f2..87ab74b 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -159,3 +159,23 @@ describe("cuentas", () => {
+     expect(run(["exportar", "gastos.csv"], io).code).toBe(1);
+   });
+ });
++
++describe("presupuesto", () => {
++  it("creates the file, then changes a category in place ignoring case and accents", () => {
++    const io = memoryIo({});
++    expect(shown(run(["presupuesto", "p.csv", "Comida", "100"], io).output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    run(["presupuesto", "p.csv", "Ocio", "50.5"], io);
++    expect(shown(run(["presupuesto", "p.csv", "comída", "120.25"], io).output)).toBe("Presupuesto de comída: 120,25 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\ncomída,120.25\nOcio,50.50\n");
++  });
++
++  it("rejects bad input without touching the file", () => {
++    const io = memoryIo({ "p.csv": "categoria,importe\nComida,100.00\n" });
++    expect(run(["presupuesto", "p.csv", "Comida", "-3"], io)).toEqual({ code: 1, output: "Importe no válido: -3" });
++    expect(run(["presupuesto", "p.csv", "Comida", "1.234"], io).code).toBe(1);
++    expect(run(["presupuesto", "p.csv", "a,b", "5"], io).code).toBe(1);
++    expect(run(["presupuesto", "p.csv", "Comida"], io).code).toBe(1);
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++    expect(run(["presupuesto", "g.csv", "x", "5"], memoryIo({ "g.csv": GASTOS })).output).toMatch(/^Cabecera desconocida/);
++  });
++});

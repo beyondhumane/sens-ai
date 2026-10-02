@@ -3,11 +3,14 @@ use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use sens_agent::canon::keeper::Keeper;
+use sens_agent::canon::tools;
 use sens_agent::said;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -17,6 +20,8 @@ pub const READ_TERMINAL: &str = "read_terminal";
 const PATH: &str = "/mcp";
 const LATEST: &str = "2025-06-18";
 const PATIENCE: Duration = Duration::from_secs(5);
+const INDEX_PATIENCE: Duration = Duration::from_secs(20);
+const UNINDEXED: &str = "Sens has not finished indexing this project yet; try again in a moment.";
 const STALLED: Duration = Duration::from_secs(10);
 const HEAD_CAP: usize = 16 * 1024;
 const BODY_CAP: usize = 1024 * 1024;
@@ -55,6 +60,7 @@ pub struct Reading {
 }
 
 type Ask = Arc<dyn Fn(Reading) + Send + Sync>;
+type Indexed<'a> = &'a dyn Fn(&str, &Value) -> Option<Result<String, String>>;
 
 #[derive(Default)]
 struct Waiting {
@@ -112,10 +118,10 @@ pub struct Bridge {
 }
 
 impl Bridge {
-    pub fn config(&self, within: Vec<String>, ask: impl Fn(Reading) + Send + Sync + 'static) -> Result<String, String> {
+    pub fn config(&self, within: Vec<String>, keeper: Arc<Keeper>, ask: impl Fn(Reading) + Send + Sync + 'static) -> Result<String, String> {
         let mut open = self.open.lock().map_err(|_| broken())?;
         if open.is_none() {
-            *open = Some(start(Arc::new(ask))?);
+            *open = Some(start(Arc::new(ask), keeper)?);
         }
         let served = open.as_ref().ok_or_else(broken)?;
         let scope = served.waiting.scope(within).ok_or_else(broken)?;
@@ -141,10 +147,10 @@ impl Bridge {
 }
 
 pub fn allowed() -> String {
-    format!("mcp__{SERVER}__{READ_TERMINAL}")
+    std::iter::once(READ_TERMINAL).chain(tools::NAMES).map(|name| format!("mcp__{SERVER}__{name}")).collect::<Vec<_>>().join(",")
 }
 
-fn start(ask: Ask) -> Result<Served, String> {
+fn start(ask: Ask, keeper: Arc<Keeper>) -> Result<Served, String> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).map_err(unopened)?;
     let port = listener.local_addr().map_err(unopened)?.port();
     let pass = pass();
@@ -156,8 +162,9 @@ fn start(ask: Ask) -> Result<Served, String> {
             let ask = ask.clone();
             let waiting = serving.clone();
             let pass = checking.clone();
+            let keeper = keeper.clone();
             thread::spawn(move || {
-                let _ = serve(stream, &pass, &waiting, &ask);
+                let _ = serve(stream, &pass, &waiting, &ask, &keeper);
             });
         }
     });
@@ -218,7 +225,7 @@ fn heard(stream: &TcpStream) -> std::io::Result<Option<Asked>> {
     }))
 }
 
-fn serve(stream: TcpStream, pass: &str, waiting: &Waiting, ask: &Ask) -> std::io::Result<()> {
+fn serve(stream: TcpStream, pass: &str, waiting: &Waiting, ask: &Ask, keeper: &Keeper) -> std::io::Result<()> {
     stream.set_read_timeout(Some(STALLED))?;
     let Some(asked) = heard(&stream)? else {
         return reply(&stream, "400 Bad Request", None);
@@ -238,7 +245,11 @@ fn serve(stream: TcpStream, pass: &str, waiting: &Waiting, ask: &Ask) -> std::io
     let Ok(message) = serde_json::from_slice::<Value>(&asked.body) else {
         return reply(&stream, "400 Bad Request", Some(&failure(Value::Null, -32700, "Parse error")));
     };
-    match respond(&message, &|terminal, lines| waiting.read(ask, terminal, lines, within.clone())) {
+    let indexed = |name: &str, arguments: &Value| {
+        let project = keeper.ready(Path::new(within.last()?), INDEX_PATIENCE)?;
+        tools::call(&project, name, arguments)
+    };
+    match respond(&message, &|terminal, lines| waiting.read(ask, terminal, lines, within.clone()), &indexed) {
         Some(answer) => reply(&stream, "200 OK", Some(&answer)),
         None => reply(&stream, "202 Accepted", None),
     }
@@ -260,7 +271,11 @@ fn success(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-fn respond(message: &Value, read: &dyn Fn(Option<u64>, u64) -> Option<String>) -> Option<Value> {
+fn told(text: String, failed: bool) -> Value {
+    json!({ "content": [{ "type": "text", "text": text }], "isError": failed })
+}
+
+fn respond(message: &Value, read: &dyn Fn(Option<u64>, u64) -> Option<String>, indexed: Indexed) -> Option<Value> {
     let id = message.get("id")?.clone();
     let params = &message["params"];
     Some(match message["method"].as_str().unwrap_or_default() {
@@ -273,15 +288,23 @@ fn respond(message: &Value, read: &dyn Fn(Option<u64>, u64) -> Option<String>) -
             }),
         ),
         "ping" => success(id, json!({})),
-        "tools/list" => success(id, json!({ "tools": [tool()] })),
+        "tools/list" => success(id, json!({ "tools": std::iter::once(tool()).chain(tools::listed()).collect::<Vec<_>>() })),
         "tools/call" if params["name"] == READ_TERMINAL => {
             let terminal = params["arguments"]["terminal"].as_u64();
             let lines = params["arguments"]["lines"].as_u64().unwrap_or(LINES).clamp(1, MOST_LINES);
-            let (text, failed) = match read(terminal, lines) {
-                Some(text) => (text, false),
-                None => (LATE.to_string(), true),
+            let answer = match read(terminal, lines) {
+                Some(text) => told(text, false),
+                None => told(LATE.to_string(), true),
             };
-            success(id, json!({ "content": [{ "type": "text", "text": text }], "isError": failed }))
+            success(id, answer)
+        }
+        "tools/call" if params["name"].as_str().is_some_and(|name| tools::NAMES.contains(&name)) => {
+            let answer = match indexed(params["name"].as_str().unwrap_or_default(), &params["arguments"]) {
+                Some(Ok(text)) => told(text, false),
+                Some(Err(reason)) => told(reason, true),
+                None => told(UNINDEXED.to_string(), true),
+            };
+            success(id, answer)
         }
         "tools/call" => failure(id, -32602, "Unknown tool"),
         _ => failure(id, -32601, "Method not found"),
@@ -310,7 +333,7 @@ mod tests {
     use super::*;
 
     fn call(message: Value) -> Option<Value> {
-        respond(&message, &|terminal, lines| Some(format!("leída {terminal:?} · {lines}")))
+        respond(&message, &|terminal, lines| Some(format!("leída {terminal:?} · {lines}")), &|name, arguments| Some(Ok(format!("{name} {arguments}"))))
     }
 
     #[test]
@@ -322,13 +345,27 @@ mod tests {
     }
 
     #[test]
-    fn it_offers_one_read_only_tool() {
+    fn it_offers_the_terminal_and_the_index_and_all_of_them_only_read() {
         let answer = call(json!({ "jsonrpc": "2.0", "id": "a", "method": "tools/list" })).unwrap();
-        let tools = answer["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0]["name"], READ_TERMINAL);
-        assert_eq!(tools[0]["annotations"]["readOnlyHint"], true);
+        let listed = answer["result"]["tools"].as_array().unwrap();
+        let names: Vec<&str> = listed.iter().map(|tool| tool["name"].as_str().unwrap()).collect();
+        assert_eq!(names, std::iter::once(READ_TERMINAL).chain(tools::NAMES).collect::<Vec<_>>());
+        assert!(listed.iter().all(|tool| tool["annotations"]["readOnlyHint"] == true));
         assert_eq!(answer["id"], "a");
+        assert_eq!(allowed().split(',').count(), names.len());
+        assert!(allowed().split(',').all(|name| name.starts_with("mcp__sens__")));
+    }
+
+    #[test]
+    fn an_index_question_goes_to_the_index_and_an_unready_one_says_so() {
+        let asked = |name: &str| json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": { "name": name, "arguments": { "query": "tamaño" } } });
+        let answer = call(asked("already_exists")).unwrap();
+        assert_eq!(answer["result"]["content"][0]["text"], r#"already_exists {"query":"tamaño"}"#);
+        assert_eq!(answer["result"]["isError"], false);
+        let unready = respond(&asked("dead_code"), &|_, _| None, &|_, _| None).unwrap();
+        assert_eq!((unready["result"]["content"][0]["text"].as_str(), unready["result"]["isError"].as_bool()), (Some(UNINDEXED), Some(true)));
+        let refused = respond(&asked("find_symbol"), &|_, _| None, &|_, _| Some(Err("`name` is missing".into()))).unwrap();
+        assert_eq!(refused["result"]["isError"], true);
     }
 
     #[test]
@@ -341,7 +378,7 @@ mod tests {
 
     #[test]
     fn a_read_nobody_answers_says_so_as_an_error() {
-        let answer = respond(&json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": READ_TERMINAL } }), &|_, _| None).unwrap();
+        let answer = respond(&json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": READ_TERMINAL } }), &|_, _| None, &|_, _| None).unwrap();
         assert_eq!(answer["result"]["isError"], true);
         assert_eq!(answer["result"]["content"][0]["text"], LATE);
     }
@@ -372,7 +409,7 @@ mod tests {
         let bridge = Arc::new(Bridge::default());
         let answering = bridge.clone();
         let config = bridge
-            .config(vec![std::env::temp_dir().to_string_lossy().into_owned()], move |reading| {
+            .config(vec![std::env::temp_dir().to_string_lossy().into_owned()], Arc::default(), move |reading| {
                 let _ = answering.answer(reading.ask, "PS C:\\demo> npm run dev\nError: el puerto 5173 ya está en uso".into());
             })
             .unwrap();
@@ -392,8 +429,8 @@ mod tests {
             let answering = answering.clone();
             thread::spawn(move || answering.answer(reading.ask, format!("pantalla {} en {}", reading.lines, reading.within.join(" y "))).unwrap());
         };
-        let here: Value = serde_json::from_str(&bridge.config(vec!["C:/demo".into()], ask).unwrap()).unwrap();
-        let there: Value = serde_json::from_str(&bridge.config(vec!["C:/api".into(), "C:/api/.sens/worktrees/ab12cd34".into()], |_| {}).unwrap()).unwrap();
+        let here: Value = serde_json::from_str(&bridge.config(vec!["C:/demo".into()], Arc::default(), ask).unwrap()).unwrap();
+        let there: Value = serde_json::from_str(&bridge.config(vec!["C:/api".into(), "C:/api/.sens/worktrees/ab12cd34".into()], Arc::default(), |_| {}).unwrap()).unwrap();
         let token = |config: &Value| config["mcpServers"][SERVER]["headers"]["Authorization"].as_str().unwrap().trim_start_matches("Bearer ").to_string();
         let url = here["mcpServers"][SERVER]["url"].as_str().unwrap().to_string();
         let port: u16 = url.trim_start_matches("http://127.0.0.1:").trim_end_matches(PATH).parse().unwrap();
@@ -411,6 +448,6 @@ mod tests {
         }
         assert!(post(port, &token(&here), "Origin: https://evil.example\r\n", call).starts_with("HTTP/1.1 403"));
         assert!(post(port, &token(&here), "", r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#).starts_with("HTTP/1.1 202"));
-        assert_eq!(bridge.config(vec!["C:/demo".into()], |_| {}).unwrap(), here.to_string());
+        assert_eq!(bridge.config(vec!["C:/demo".into()], Arc::default(), |_| {}).unwrap(), here.to_string());
     }
 }

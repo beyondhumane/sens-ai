@@ -1,0 +1,13 @@
+diff --git a/src/click/_compat.py b/src/click/_compat.py
+index 90e328b..514f18e 100644
+--- a/src/click/_compat.py
++++ b/src/click/_compat.py
+@@ -12,7 +12,7 @@ from weakref import WeakKeyDictionary
+ 
+ CYGWIN = sys.platform.startswith("cygwin")
+ WIN = sys.platform.startswith("win")
+-_ansi_re = re.compile(r"\033\[[;?0-9]*[a-zA-Z]")
++_ansi_re = re.compile(r"\033\[[0-?]*[ -/]*[@-~]")
+ 
+ 
+ def _make_text_stream(

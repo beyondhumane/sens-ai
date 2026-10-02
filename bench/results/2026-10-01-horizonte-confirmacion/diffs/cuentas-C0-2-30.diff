@@ -1,0 +1,66 @@
+diff --git a/README.md b/README.md
+index 372dcb7..b9e6b25 100644
+--- a/README.md
++++ b/README.md
+@@ -16,7 +16,7 @@ fecha,importe,categoria,descripcion
+ 
+ | Orden | Qué hace |
+ | --- | --- |
+-| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--orden fecha\|importe]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. Sale por fecha, de la más antigua a la más reciente (los del mismo día, en el orden del fichero); con `--orden importe`, de mayor a menor importe; `Orden no válido: color` si es otro. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe |
++| `lista <fichero> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD] [--categoria <nombre>] [--orden fecha\|importe]` | Un gasto por línea: fecha (`01/03/2026`), categoría, importe y descripción, separados por dos espacios. Sale por fecha, de la más antigua a la más reciente (los del mismo día, en el orden del fichero); con `--orden importe`, de mayor a menor importe; `Orden no válido: color` si es otro. `--desde` y `--hasta` se pueden usar juntas o por separado y incluyen el día indicado; `Fecha no válida: 2026-03-32` si no existe. Con `--categoria` solo salen los gastos de esa categoría, sin distinguir mayúsculas ni acentos, y se puede combinar con el resto; `Falta la categoría` si no se indica |
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+ | `categorias <fichero> [--mes AAAA-MM]` | Lo gastado por categoría (`Ocio: 90,00 €`), una línea por categoría, de más a menos; si empatan, por orden alfabético. Con `--mes` cuenta solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+diff --git a/src/cli.ts b/src/cli.ts
+index ddc9029..25f0bda 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -214,9 +214,18 @@ const commands:Record<string, Command> = {
+     return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
+   },
+   lista: (args, io) => {
+-    const { path, from, to, order } = rangeArgs(args);
++    const flag = args.indexOf("--categoria");
++    const category = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const { path, from, to, order } = rangeArgs(args.filter((_, i) => flag === -1 || (i !== flag && i !== flag + 1)));
++    const wanted = category === undefined ? undefined : fold(category);
+     return load(path, io)
+-      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .filter(
++        (expense) =>
++          (from === undefined || expense.date >= from) &&
++          (to === undefined || expense.date <= to) &&
++          (wanted === undefined || fold(expense.category) === wanted),
++      )
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+       .map(formatLine)
+       .join("\n");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index dfc2da8..ad2e0b0 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -44,6 +44,23 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
+   });
+ 
++  it("filters the list by category, combined with dates and order", () => {
++    const io = memoryIo({
++      "gastos.csv": `fecha,importe,categoria,descripcion
++2026-03-05,10.00,Comida,B
++2026-03-01,20.00,Ocio,A
++2026-03-06,30.00,comida,C
++2026-03-03,5.00,Comida,D
++`,
++    });
++    const names = (...extra: string[]) =>
++      run(["lista", "gastos.csv", ...extra], io).output.split("\n").map((l) => l.slice(-1)).join("");
++    expect(names("--categoria", "COMIDA")).toBe("DBC");
++    expect(run(["lista", "--categoria", "comida", "gastos.csv"], io).code).toBe(0);
++    expect(names("--categoria", "comida", "--desde", "2026-03-04", "--hasta", "2026-03-06", "--orden", "importe")).toBe("CB");
++    expect(run(["lista", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("shows the Monday-to-Sunday week of a date", () => {
+     const gastos = `${GASTOS}2026-03-04,3.10,Ocio,Café
+ 2026-03-04,1.00,Ocio,Prensa

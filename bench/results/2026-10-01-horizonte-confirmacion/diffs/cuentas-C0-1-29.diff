@@ -1,0 +1,56 @@
+diff --git a/README.md b/README.md
+index a0d9568..bf3b373 100644
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,7 @@ fecha,importe,categoria,descripcion
+ | `lista <fichero> --desde 2026-03-01 --hasta 2026-03-15` | Solo los gastos del rango, ambos días incluidos; `--desde` y `--hasta` valen juntos o por separado. Una fecha que no existe da `Fecha no válida: 2026-03-32` |
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; `--desde` y `--hasta` limitan el rango como en `lista`; si no hay ninguno, `Sin resultados` |
+-| `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
++| `categorias <fichero> [--mes 2026-03]` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético. Con `--mes` solo cuenta los gastos de ese mes |
+ | `informe <fichero> --mes 2026-03 [--csv <salida>]` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian. En lugar de `--mes`, `--anio 2026` da el año, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y el total, sin presupuestos; un año que no son cuatro cifras da `Año no válido: 26`. Con `--csv <salida>` además guarda el informe en un CSV con cabecera `categoria,total` y una línea por categoría en el mismo orden, con el total con punto (`60.00`) |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero y con dos decimales como mucho: con coma decimal (`4,20`, y entonces los puntos son de miles: `1.234,56`) o, sin coma, con punto decimal (`4.20`). Si algo no vale, no toca el fichero |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y `Total: 48,30 €` al final. Una fecha que no existe da `Fecha no válida: 2026-02-30` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 0ada2be..59c7554 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -360,8 +360,10 @@ const commands: Record<string, Command> = {
+       .join("\n");
+   },
+   categorias: (args, io) => {
++    const { month, positional } = splitMonth(args);
+     const totals = new Map<string, number>();
+-    for (const expense of load(args[0], io)) {
++    for (const expense of load(positional[0], io)) {
++      if (month !== undefined && !expense.date.startsWith(`${month}-`)) continue;
+       totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
+     }
+     return [...totals]
+diff --git a/tests/categorias.test.ts b/tests/categorias.test.ts
+new file mode 100644
+index 0000000..aebaaa1
+--- /dev/null
++++ b/tests/categorias.test.ts
+@@ -0,0 +1,21 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const csv = `fecha,importe,categoria,descripcion
++2026-03-01,10.00,Ocio,Cine
++2026-03-02,5.00,Casa,Luz
++2026-04-01,99.00,Ocio,Concierto
++`;
++
++const norm = (text: string) => text.replace(/ /g, " ");
++
++it("only counts the given month", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(norm(run(["categorias", "g.csv", "--mes", "2026-03"], io).output)).toBe("Ocio: 10,00 €\nCasa: 5,00 €");
++  expect(norm(run(["categorias", "--mes", "2026-04", "g.csv"], io).output)).toBe("Ocio: 99,00 €");
++});
++
++it("rejects an invalid month", () => {
++  expect(run(["categorias", "g.csv", "--mes", "2026-13"], memoryIo({ "g.csv": csv }))).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++});

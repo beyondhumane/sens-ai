@@ -1,0 +1,21 @@
+diff --git a/src/money.ts b/src/money.ts
+index be1e3cd..11f946c 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -4,8 +4,15 @@ export function formatMoney(cents: number): string {
+   return euros.format(cents / 100);
+ }
+ 
++function decimal(text: string): string | undefined {
++  if (/^(\d{1,3}(\.\d{3})*|\d+),\d{1,2}$/.test(text)) return text.replaceAll(".", "").replace(",", ".");
++  if (/^\d+(\.\d{1,2})?$/.test(text)) return text;
++  return undefined;
++}
++
+ export function parseAmount(text: string): number {
+-  const cents = /^\d+(\.\d{1,2})?$/.test(text) ? Math.round(Number(text) * 100) : 0;
++  const number = decimal(text);
++  const cents = number === undefined ? 0 : Math.round(Number(number) * 100);
+   if (cents <= 0) throw new Error(`Importe no válido: ${text}`);
+   return cents;
+ }

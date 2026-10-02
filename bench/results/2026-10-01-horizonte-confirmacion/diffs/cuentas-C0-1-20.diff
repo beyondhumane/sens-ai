@@ -1,0 +1,74 @@
+diff --git a/README.md b/README.md
+index 309241d..2cd55d4 100644
+--- a/README.md
++++ b/README.md
+@@ -28,6 +28,7 @@ fecha,importe,categoria,descripcion
+ | `exportar <fichero> <salida> --mes 2026-03` | Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`) y añade al final de `<fichero>` solo los importes negativos, en positivo, con el concepto como descripción y categoría `Sin categoría`. Responde `Importados 1 gastos`. Si una línea no se entiende, no importa nada y responde `Línea 3 del banco no válida` (la cabecera es la línea 1) |
++| `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo con las veces que sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); si no hay ninguno, `Sin duplicados` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 50424d5..b3ce95e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -239,6 +239,20 @@ const commands: Record<string, Command> = {
+     if (rows.length > 0) io.write(path, `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}${rows.join("\n")}\n`);
+     return `Importados ${rows.length} gastos`;
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, { first: Expense; count: number }>();
++    for (const expense of load(args[0], io)) {
++      const key = [expense.date, expense.cents, fold(expense.description).trim().replace(/\s+/g, " ")].join("|");
++      const group = groups.get(key);
++      if (group) group.count++;
++      else groups.set(key, { first: expense, count: 1 });
++    }
++    const repeated = [...groups.values()].filter((group) => group.count > 1);
++    if (repeated.length === 0) return "Sin duplicados";
++    return repeated
++      .map(({ first, count }) => `${count} veces: ${[formatDate(first.date), formatMoney(first.cents), first.description].join("  ")}`)
++      .join("\n");
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/duplicados.test.ts b/tests/duplicados.test.ts
+new file mode 100644
+index 0000000..ddf560c
+--- /dev/null
++++ b/tests/duplicados.test.ts
+@@ -0,0 +1,31 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const norm = (text: string) => text.replace(/ /g, " ");
++const csv = (rows: string[]) => [HEADER, ...rows].join("\n");
++
++it("groups expenses with the same date, amount and description ignoring case, accents and spaces", () => {
++  const io = memoryIo({
++    "g.csv": csv([
++      "2026-03-09,8.75,Ocio,Café con Ana",
++      "2026-03-09,8.75,Comida,  CAFE   con ana ",
++      "2026-03-09,8.75,Ocio,cafe con ana",
++      "2026-03-10,3.00,Ocio,Pan",
++      "2026-03-10,3.00,Ocio,Pan",
++    ]),
++  });
++  const ran = run(["duplicados", "g.csv"], io);
++  expect(ran.code).toBe(0);
++  expect(norm(ran.output)).toBe("3 veces: 09/03/2026  8,75 €  Café con Ana\n2 veces: 10/03/2026  3,00 €  Pan");
++});
++
++it("does not group when date, amount or description differ", () => {
++  const io = memoryIo({ "g.csv": csv(["2026-03-09,8.75,Ocio,Café", "2026-03-10,8.75,Ocio,Café", "2026-03-09,8.70,Ocio,Café", "2026-03-09,8.75,Ocio,Té"]) });
++  expect(run(["duplicados", "g.csv"], io)).toEqual({ code: 0, output: "Sin duplicados" });
++});
++
++it("requires a file", () => {
++  expect(run(["duplicados"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++});

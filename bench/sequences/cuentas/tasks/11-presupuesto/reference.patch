@@ -1,0 +1,60 @@
+diff --git a/src/budgets.ts b/src/budgets.ts
+new file mode 100644
+index 0000000..06b8aa6
+--- /dev/null
++++ b/src/budgets.ts
+@@ -0,0 +1,30 @@
++import { quoted, rows, splitFields } from "./csv";
++import { amountInFile } from "./money";
++import { plain } from "./text";
++
++export const BUDGET_HEADER = "categoria,importe";
++
++export interface Budget {
++  category: string;
++  cents: number;
++}
++
++export function parseBudgets(text: string): Budget[] {
++  return rows(text, BUDGET_HEADER).map((row) => {
++    const [category, amount] = splitFields(row);
++    return { category, cents: Math.round(Number(amount) * 100) };
++  });
++}
++
++export function formatBudgets(budgets: Budget[]): string {
++  return [BUDGET_HEADER, ...budgets.map((budget) => `${quoted(budget.category)},${amountInFile(budget.cents)}`)].join("\n") + "\n";
++}
++
++export function budgetFor(budgets: Budget[], category: string): Budget | undefined {
++  return budgets.find((budget) => plain(budget.category) === plain(category));
++}
++
++export function withBudget(budgets: Budget[], changed: Budget): Budget[] {
++  const before = budgetFor(budgets, changed.category);
++  return before ? budgets.map((budget) => (budget === before ? changed : budget)) : [...budgets, changed];
++}
+diff --git a/src/cli.ts b/src/cli.ts
+index 0041207..5cf6640 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,3 +1,4 @@
++import { formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+ import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth } from "./dates";
+ import type { Expense } from "./expense";
+@@ -61,6 +62,14 @@ const commands: Record<string, Command> = {
+     io.write(path, appended(io.read(path), expense));
+     return `Añadido: ${line(expense)}`;
+   },
++  presupuesto: (args, io) => {
++    const [path, category, amount] = parseOptions(args, []).positional;
++    if (amount === undefined) throw new Error("Faltan datos: presupuesto <fichero> <categoría> <importe>");
++    const budget = { category, cents: parseAmount(amount) };
++    const budgets = io.exists(path) ? parseBudgets(io.read(path)) : [];
++    io.write(path, formatBudgets(withBudget(budgets, budget)));
++    return `Presupuesto de ${category}: ${formatMoney(budget.cents)} al mes`;
++  },
+   exportar: (args, io) => {
+     const { expenses, positional } = selected(args, io, ["mes"]);
+     if (positional[1] === undefined) throw new Error("Falta el fichero de salida");

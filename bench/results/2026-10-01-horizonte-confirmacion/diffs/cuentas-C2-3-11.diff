@@ -1,0 +1,88 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 5ae233e..494af7c 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -21,6 +21,25 @@ const formatLine = (expense: Expense) =>
+ 
+ const plain = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+ 
++function parseAmount(amount: string): number {
++  const cents = Math.round(Number(amount) * 100);
++  if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++  return cents;
++}
++
++const BUDGET_HEADER = "categoria,importe";
++
++function parseBudgets(text: string): { category: string; cents: number }[] {
++  const [header, ...rows] = text.trim().split(/\r?\n/);
++  if (header !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++  return rows
++    .filter((row) => row.trim() !== "")
++    .map((row) => {
++      const [category, amount] = row.split(",");
++      return { category, cents: Math.round(Number(amount) * 100) };
++    });
++}
++
+ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+ 
+ function parseMonthFlag(args: string[]): { month: string | undefined; file: string | undefined; positional: string[] } {
+@@ -73,8 +92,7 @@ const commands: Record<string, Command> = {
+   añadir: ([path, date = "", amount = "", category, ...words], io) => {
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
+-    const cents = Math.round(Number(amount) * 100);
+-    if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++    const cents = parseAmount(amount);
+     const description = words.join(" ");
+     if (!category) throw new Error("Falta la categoría");
+     if (!description) throw new Error("Falta la descripción");
+@@ -84,6 +102,20 @@ const commands: Record<string, Command> = {
+     io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${formatExpense(expense)}`);
+     return `Añadido: ${formatLine(expense)}`;
+   },
++  presupuesto: ([path, category, amount = ""], io) => {
++    if (!path) throw new Error("Falta el fichero de presupuestos");
++    if (!category) throw new Error("Falta la categoría");
++    if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
++    const cents = parseAmount(amount);
++    const rows = io.exists(path) ? parseBudgets(io.read(path)) : [];
++    const key = plain(category);
++    const index = rows.findIndex((row) => plain(row.category) === key);
++    const budget = { category, cents };
++    if (index === -1) rows.push(budget);
++    else rows[index] = budget;
++    io.write(path, `${BUDGET_HEADER}\n${rows.map((row) => `${row.category},${(row.cents / 100).toFixed(2)}\n`).join("")}`);
++    return `Presupuesto de ${category}: ${formatMoney(cents)} al mes`;
++  },
+   total: (args, io) => {
+     const { month, file } = parseMonthFlag(args);
+     const expenses = load(file, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index b5c9603..76a9b7d 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -78,6 +78,22 @@ describe("cuentas", () => {
+     expect(io.files["gastos.csv"]).toBe(before);
+   });
+ 
++  it("sets a monthly budget per category, creating or replacing in place", () => {
++    const io = memoryIo({});
++    const ran = run(["presupuesto", "p.csv", "Comida", "100"], io);
++    expect(shown(ran.output)).toBe("Presupuesto de Comida: 100,00 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\nComida,100.00\n");
++
++    run(["presupuesto", "p.csv", "Ocio", "20.5"], io);
++    expect(shown(run(["presupuesto", "p.csv", "cómida", "80"], io).output)).toBe("Presupuesto de cómida: 80,00 € al mes");
++    expect(io.files["p.csv"]).toBe("categoria,importe\ncómida,80.00\nOcio,20.50\n");
++
++    const before = io.files["p.csv"];
++    expect(run(["presupuesto", "p.csv", "Comida", "0"], io)).toEqual({ code: 1, output: "Importe no válido: 0" });
++    expect(run(["presupuesto", "p.csv", "Comida", "1.005"], io)).toEqual({ code: 1, output: "Importe no válido: 1.005" });
++    expect(io.files["p.csv"]).toBe(before);
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

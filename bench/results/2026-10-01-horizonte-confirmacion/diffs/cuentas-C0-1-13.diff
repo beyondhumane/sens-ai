@@ -1,0 +1,93 @@
+diff --git a/README.md b/README.md
+index 3e05653..7cc7a73 100644
+--- a/README.md
++++ b/README.md
+@@ -23,6 +23,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+ | `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero, con punto y dos decimales como mucho. Si algo no vale, no toca el fichero |
++| `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y `Total: 48,30 €` al final. Una fecha que no existe da `Fecha no válida: 2026-02-30` |
+ | `exportar <fichero> <salida> --mes 2026-03` | Escribe en `<salida>` solo los gastos de ese mes, con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. Sin `--mes` exporta todos |
+ | `presupuesto <fichero> <categoría> <importe>` | Guarda el presupuesto mensual de la categoría en un CSV `categoria,importe` (se crea si no existe) y responde `Presupuesto de Comida: 100,00 € al mes`. Si la categoría ya tenía presupuesto (sin distinguir mayúsculas ni acentos) se cambia en su sitio con el nombre nuevo. El importe se valida como en `añadir` |
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 1b90c78..8f63d55 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -34,6 +34,8 @@ function checkAmount(amount: string): void {
+ 
+ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+ 
++const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
++
+ function splitMonth(args: string[]): { month: string | undefined; positional: string[] } {
+   const flag = args.indexOf("--mes");
+   if (flag === -1) return { month: undefined, positional: args };
+@@ -137,6 +139,24 @@ const commands: Record<string, Command> = {
+     const total = expenses.reduce((sum, expense) => sum + expense.cents, 0);
+     return [`${MONTHS[Number(number) - 1]} de ${year}`, ...rows, `Total: ${formatMoney(total)}`].join("\n");
+   },
++  semana: (args, io) => {
++    const [path, date] = args;
++    const expenses = load(path, io);
++    if (date === undefined) throw new Error("Falta la fecha");
++    if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    const [year, month, day] = date.split("-").map(Number);
++    const offset = (new Date(Date.UTC(year, month - 1, day)).getUTCDay() + 6) % 7;
++    const rows: string[] = [];
++    let total = 0;
++    for (let i = 0; i < 7; i++) {
++      const iso = new Date(Date.UTC(year, month - 1, day - offset + i)).toISOString().slice(0, 10);
++      const cents = expenses.filter((expense) => expense.date === iso).reduce((sum, expense) => sum + expense.cents, 0);
++      if (cents === 0) continue;
++      total += cents;
++      rows.push(`${DAYS[i]} ${formatDate(iso)}: ${formatMoney(cents)}`);
++    }
++    return [...rows, `Total: ${formatMoney(total)}`].join("\n");
++  },
+   exportar: (args, io) => {
+     const { month, positional } = splitMonth(args);
+     const [path, output] = positional;
+diff --git a/tests/semana.test.ts b/tests/semana.test.ts
+new file mode 100644
+index 0000000..c794213
+--- /dev/null
++++ b/tests/semana.test.ts
+@@ -0,0 +1,37 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [
++  HEADER,
++  "2026-03-01,99.00,Ocio,domingo anterior",
++  "2026-03-02,40.00,Comida,menu",
++  "2026-03-02,5.20,Comida,cafe",
++  "2026-03-04,3.10,Ocio,libro",
++  "2026-03-08,1.00,Ocio,domingo",
++  "2026-03-09,99.00,Ocio,lunes siguiente",
++].join("\n");
++const norm = (text: string) => text.replace(/ /g, " ");
++const expected = "Lunes 02/03/2026: 45,20 €\nMiércoles 04/03/2026: 3,10 €\nDomingo 08/03/2026: 1,00 €\nTotal: 49,30 €";
++
++it("lists the days with expenses from Monday to Sunday and the total", () => {
++  const io = memoryIo({ "g.csv": csv });
++  for (const date of ["2026-03-02", "2026-03-05", "2026-03-08"]) {
++    const ran = run(["semana", "g.csv", date], io);
++    expect(ran.code).toBe(0);
++    expect(norm(ran.output)).toBe(expected);
++  }
++});
++
++it("handles a week without expenses and weeks crossing months", () => {
++  const io = memoryIo({ "g.csv": csv + "\n2026-02-28,2.00,Ocio,sabado\n" });
++  expect(norm(run(["semana", "g.csv", "2026-04-15"], io).output)).toBe("Total: 0,00 €");
++  expect(norm(run(["semana", "g.csv", "2026-03-01"], io).output)).toBe("Sábado 28/02/2026: 2,00 €\nDomingo 01/03/2026: 99,00 €\nTotal: 101,00 €");
++});
++
++it("rejects missing or impossible dates", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["semana", "g.csv", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  expect(run(["semana", "g.csv"], io)).toEqual({ code: 1, output: "Falta la fecha" });
++});

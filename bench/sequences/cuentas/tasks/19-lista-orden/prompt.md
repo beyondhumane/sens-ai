@@ -1,0 +1,1 @@
+`lista` tiene que salir siempre por fecha, de la más antigua a la más reciente, aunque el fichero esté desordenado (los del mismo día, en el orden en que están en el fichero). Y con `--orden importe`, de mayor a menor importe. Si el orden no es ninguno de esos: `Orden no válido: color`.

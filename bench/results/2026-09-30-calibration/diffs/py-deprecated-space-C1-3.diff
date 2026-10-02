@@ -1,0 +1,55 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index bc04f64..61caf2e 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1159,7 +1159,8 @@ class Command:
+             text = ""
+ 
+         if self.deprecated:
+-            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}"
++            label = _format_deprecated_label(self.deprecated)
++            text = f"{_(text)} {label}" if text else label
+ 
+         return text.strip()
+ 
+@@ -1189,7 +1190,8 @@ class Command:
+             text = ""
+ 
+         if self.deprecated:
+-            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}"
++            label = _format_deprecated_label(self.deprecated)
++            text = f"{_(text)} {label}" if text else label
+ 
+         if text:
+             formatter.write_paragraph()
+@@ -2826,7 +2828,7 @@ class Option(Parameter):
+ 
+         if deprecated:
+             label = _format_deprecated_label(deprecated)
+-            help = f"{help} {label}" if help is not None else label
++            help = f"{help} {label}" if help else label
+ 
+         self.prompt = prompt_text
+         self.confirmation_prompt = confirmation_prompt
+diff --git a/tests/test_options.py b/tests/test_options.py
+index 44cb58f..dc1764e 100644
+--- a/tests/test_options.py
++++ b/tests/test_options.py
+@@ -58,6 +58,17 @@ def test_deprecated_usage(runner, deprecated):
+         assert deprecated in result.output
+ 
+ 
++def test_deprecated_empty_help_no_leading_space(runner):
++    @click.command()
++    @click.option("--foo", help="", deprecated=True)
++    def cmd(foo):
++        pass
++
++    result = runner.invoke(cmd, ["--help"])
++    assert "  (DEPRECATED)" in result.output
++    assert "   (DEPRECATED)" not in result.output
++
++
+ @pytest.mark.parametrize("deprecated", [True, "USE B INSTEAD"])
+ def test_deprecated_warning(runner, deprecated):
+     @click.command()

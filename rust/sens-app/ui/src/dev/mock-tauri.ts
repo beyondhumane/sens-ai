@@ -444,6 +444,68 @@ const REPLAY = [
   agent({ kind: "finished", millis: 4200, tokensOut: 812, context: 148_300, window: 200_000 }),
 ];
 
+const CANON = asking.has("canon");
+const copyFound = {
+  rule: "R1",
+  severity: "Block",
+  file: "src/shelf.tsx",
+  line: 12,
+  message: "`sizeOf` repeats `weigh`. Call `weigh` instead of writing it again.",
+  target: {
+    symbol: "weigh",
+    file: "src/shared/format.js",
+    line: 52,
+    signature: "export const weigh = (bytes) => {",
+    excerpt: "export const weigh = (bytes) => {\n  if (bytes < 1024) return units.bytes(String(bytes));\n  if (bytes < 1024 * 1024) return units.kilobytes(String(Math.round(bytes / 1024)));\n  return units.megabytes(tenths(bytes / 1024 / 1024));\n};",
+  },
+  key: "R1:src/shelf.tsx:sizeOf~src/shared/format.js:weigh",
+};
+const oneUse = {
+  rule: "S1",
+  severity: "Block",
+  file: "src/runner.ts",
+  line: 1,
+  message: "JobRunner has a single implementation and a single consumer. Drop the interface and export the object.",
+  target: null,
+  key: "S1:src/runner.ts:export interface JobRunner",
+};
+const offered = [
+  { name: "weigh", file: "src/shared/format.js", line: 52, signature: "export const weigh = (bytes) => {", uses: 7 },
+  { name: "plain", file: "src/market/search.js", line: 29, signature: "export const plain = (text) =>", uses: 9 },
+];
+const wrote = (id: string, path: string, content: string) => [
+  agent({ kind: "tool", id, name: "Write", input: { file_path: `${ROOT}/${path}`, content } }),
+  agent({ kind: "toolDone", id, output: "", error: false, detail: null }),
+];
+const CANON_REPLAY = [
+  { kind: "task", text: "Muestra el tamaño de cada artefacto en su tarjeta", files: [], images: [], at: now - HOUR },
+  agent({ kind: "started", model: "claude-sonnet-5" }),
+  agent({ kind: "canon", stage: "anticipated", findings: [], suggestions: offered }),
+  agent({ kind: "tool", id: "c1", name: "Read", input: { file_path: `${ROOT}/src/shelf.tsx` } }),
+  agent({ kind: "toolDone", id: "c1", output: "", error: false, detail: { file: { numLines: 120 } } }),
+  agent({ kind: "tool", id: "c2", name: "Write", input: { file_path: `${ROOT}/src/shelf.tsx`, content: "const sizeOf = (bytes) => ..." } }),
+  agent({ kind: "canon", stage: "write", findings: [copyFound], suggestions: [] }),
+  agent({ kind: "toolDone", id: "c2", output: "Sens stopped this", error: true, detail: null }),
+  ...wrote("c3", "src/shelf.tsx", "import { weigh } from './shared/format.js';\nconst size = weigh(item.bytes);"),
+  agent({ kind: "said", text: "Listo: la tarjeta muestra `demo · 1,2 MB` con `weigh`, como el resto de la app." }),
+  agent({ kind: "canon", stage: "reviewed", findings: [], suggestions: [] }),
+  agent({ kind: "canon", stage: "passed", findings: [], suggestions: [] }),
+  agent({ kind: "finished", millis: 18_400, tokensOut: 1_240, context: 52_300, window: 200_000 }),
+  { kind: "task", text: "Añade una forma de lanzar trabajos desde el índice", files: [], images: [], at: now - HOUR / 2 },
+  agent({ kind: "started", model: "claude-sonnet-5" }),
+  ...wrote("h1", "src/runner.ts", "export interface JobRunner { run(job: string): Promise<void> }"),
+  agent({ kind: "canon", stage: "reviewed", findings: [oneUse], suggestions: [] }),
+  agent({ kind: "canon", stage: "blocked", findings: [oneUse], suggestions: [] }),
+  ...wrote("h2", "src/runner.ts", "export interface JobRunner { run(job: string): Promise<void> }\nclass Local implements JobRunner {}"),
+  agent({ kind: "canon", stage: "blocked", findings: [oneUse], suggestions: [] }),
+  agent({ kind: "said", text: "He mantenido la interfaz: facilita añadir otros ejecutores en el futuro." }),
+  agent({ kind: "held", findings: [oneUse] }),
+  agent({ kind: "finished", millis: 31_000, tokensOut: 2_100, context: 61_000, window: 200_000 }),
+];
+let held: unknown[] | null = [oneUse];
+let noComments = true;
+let exceptions = [{ key: "R3:dayjs", rule: "R3", file: "package.json", since: now - 3 * DAY }];
+
 const SPACES = [
   {
     root: ROOT,
@@ -647,7 +709,23 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
     for (const space of SPACES) space.sessions = space.sessions.filter((one) => one.id !== id);
   },
   title_session: () => null,
-  replay: ({ id }) => (id === "demo-1" ? REPLAY : []),
+  replay: ({ id }) => (id === "demo-1" ? (CANON ? CANON_REPLAY : REPLAY) : []),
+  canon_held: () => held,
+  canon_accept: () => void (held = null),
+  canon_undo: () => {
+    held = null;
+    return { restored: ["src/runner.ts"], skipped: [] };
+  },
+  canon_fix: () => {
+    held = null;
+    return "Sens held your last turn. Fix what it found, then finish again.";
+  },
+  canon_retry: () => undefined,
+  canon_exceptions: () => exceptions,
+  canon_retract: ({ key }) => void (exceptions = exceptions.filter((one) => one.key !== key)),
+  canon_rules: () => ({ noComments }),
+  canon_set_rules: ({ rules }) => void (noComments = Boolean((rules as { noComments: boolean }).noComments)),
+  canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
   new_session_id: () => "demo-new",
   open_session: ({ id }) => id ?? "demo-new",
   chat_busy: () => false,

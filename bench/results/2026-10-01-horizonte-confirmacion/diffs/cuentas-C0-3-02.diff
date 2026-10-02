@@ -1,0 +1,58 @@
+diff --git a/README.md b/README.md
+index 1df9abd..fda51f8 100644
+--- a/README.md
++++ b/README.md
+@@ -16,6 +16,7 @@ fecha,importe,categoria,descripcion
+ | Orden | Qué hace |
+ | --- | --- |
+ | `lista <fichero>` | Un gasto por línea: fecha, categoría, importe y descripción, separados por dos espacios |
++| `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero>` | `Total: 57,70 €` |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+diff --git a/src/cli.ts b/src/cli.ts
+index ff673d0..b178856 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -25,6 +25,16 @@ const commands: Record<string, Command> = {
+     load(args[0], io)
+       .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
++  categorias: (args, io) => {
++    const byCategory = new Map<string, number>();
++    for (const expense of load(args[0], io)) {
++      byCategory.set(expense.category, (byCategory.get(expense.category) ?? 0) + expense.cents);
++    }
++    return [...byCategory]
++      .sort(([nameA, centsA], [nameB, centsB]) => centsB - centsA || nameA.localeCompare(nameB, "es"))
++      .map(([name, cents]) => `${name}: ${formatMoney(cents)}`)
++      .join("\n");
++  },
+   total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
+ };
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 420b082..8c3aaf4 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -20,6 +20,20 @@ describe("cuentas", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });
+ 
++  it("adds up each category, biggest first, ties alphabetical", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,50.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++2026-03-04,40.00,Ocio,Concierto
++2026-03-05,10.00,Zapatos,Pinzas
++2026-03-06,10.00,Árboles,Maceta
++`;
++    const ran = run(["categorias", "gastos.csv"], memoryIo({ "gastos.csv": gastos }));
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nÁrboles: 10,00 €\nZapatos: 10,00 €");
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

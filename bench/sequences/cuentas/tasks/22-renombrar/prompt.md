@@ -1,0 +1,1 @@
+Orden nueva: `renombrar <fichero> <categoría> <nueva>`. Cambia esa categoría en todos los gastos, buscándola sin distinguir mayúsculas ni acentos, y guarda el fichero. Responde `Renombrados 3 gastos`.

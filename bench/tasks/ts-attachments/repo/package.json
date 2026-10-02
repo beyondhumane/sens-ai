@@ -1,0 +1,14 @@
+{
+  "name": "attachments",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "dayjs": "1.11.23"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
+  }
+}

@@ -1,0 +1,46 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 8762760..51536e0 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -209,6 +209,19 @@ const commands: Record<string, Command> = {
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
++  duplicados: (args, io) => {
++    const groups = new Map<string, Expense[]>();
++    for (const expense of load(args[0], io)) {
++      const key = [expense.date, expense.cents, plain(expense.description).trim().replace(/\s+/g, " ")].join("|");
++      groups.set(key, [...(groups.get(key) ?? []), expense]);
++    }
++    const repeated = [...groups.values()].filter((group) => group.length > 1);
++    return repeated.length === 0
++      ? "Sin duplicados"
++      : repeated
++          .map(([first, ...others]) => `${others.length + 1} veces: ${formatDate(first.date)}  ${formatMoney(first.cents)}  ${first.description}`)
++          .join("\n");
++  },
+   informe: (args, io) => {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 930074e..5a9a471 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -217,6 +217,17 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos", "x.csv"], io)).toEqual({ code: 1, output: "No existe x.csv" });
+   });
+ 
++  it("reports repeated expenses ignoring case, accents and extra spaces", () => {
++    const gastos = `${GASTOS}2026-03-09,8.75,Comida,Café con Ana
++2026-03-09,8.75,Ocio,  CAFE   con ana
++2026-03-09,8.75,Comida,Café con Ana
++2026-03-10,8.75,Comida,Café con Ana
++`;
++    expect(shown(run(["duplicados", "gastos.csv"], memoryIo({ "gastos.csv": gastos })).output)).toBe("3 veces: 09/03/2026  8,75 €  Café con Ana");
++    expect(run(["duplicados", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS }))).toEqual({ code: 0, output: "Sin duplicados" });
++    expect(run(["duplicados"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

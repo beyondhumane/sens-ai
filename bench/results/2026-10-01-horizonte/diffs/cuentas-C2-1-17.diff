@@ -1,0 +1,75 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index f67d6f4..d45b4f8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -79,7 +79,10 @@ function dateFlag(args: string[], name: string): string | undefined {
+ const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
+-const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
++const monthTitle = (month: string) =>
++  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
++
++const sumCents =(expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
+ 
+ function categoryLines(expenses: Expense[], budgets: { category: string; cents: number }[] = []): string[] {
+   const totals = new Map<string, number>();
+@@ -190,12 +193,20 @@ const commands: Record<string, Command> = {
+     });
+     return [...lines, `Total: ${formatMoney(sumCents(expenses))}`].join("\n");
+   },
++  media: (args, io) => {
++    const month = monthFlag(args);
++    if (month === undefined) throw new Error("Uso: media <fichero> --mes AAAA-MM");
++    const [year, number] = month.split("-").map(Number);
++    const days = new Date(Date.UTC(year, number, 0)).getUTCDate();
++    const average = Math.round(sumCents(inMonth(load(args[0], io), month)) / days);
++    return `Media diaria en ${monthTitle(month)}: ${formatMoney(average)}`;
++  },
+   informe: (args, io) => {
+     const month = monthFlag(args);
+     if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
+     const expenses = inMonth(load(args[0], io), month);
+     const budgets = budgetsFlag(args, io);
+-    const title = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
++    const title = monthTitle(month);
+     return [
+       title.charAt(0).toUpperCase() + title.slice(1),
+       ...categoryLines(expenses, budgets).map((line) => `  ${line}`),
+diff --git a/tests/media.test.ts b/tests/media.test.ts
+new file mode 100644
+index 0000000..ee3f98b
+--- /dev/null
++++ b/tests/media.test.ts
+@@ -0,0 +1,31 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { memoryIo } from "../src/io";
++
++const shown = (output: string) => output.replace(/ /g, " ");
++
++const csv = [
++  "fecha,importe,categoria,descripcion",
++  "2026-02-10,56,casa,Febrero",
++  "2026-03-02,100,casa,Luz",
++  "2026-03-04,45,ocio,Cine",
++  "2026-04-01,500,casa,Otro mes",
++].join("\n");
++
++it("averages the month total over every day of the month, rounded to the cent", () => {
++  const result = run(["media", "g.csv", "--mes", "2026-03"], memoryIo({ "g.csv": csv }));
++  expect(result.code).toBe(0);
++  expect(shown(result.output)).toBe("Media diaria en marzo de 2026: 4,68 €");
++});
++
++it("counts the real length of the month", () => {
++  const result = run(["media", "g.csv", "--mes", "2026-02"], memoryIo({ "g.csv": csv }));
++  expect(shown(result.output)).toBe("Media diaria en febrero de 2026: 2,00 €");
++});
++
++it("requires the month", () => {
++  expect(run(["media", "g.csv"], memoryIo({ "g.csv": csv }))).toEqual({
++    code: 1,
++    output: "Uso: media <fichero> --mes AAAA-MM",
++  });
++});

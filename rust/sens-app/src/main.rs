@@ -3,6 +3,7 @@
 mod artifacts;
 mod bar;
 mod browser;
+mod canon;
 mod capabilities;
 mod claude_code;
 mod files;
@@ -235,7 +236,8 @@ fn equip(app: &AppHandle, root: &str, session_id: &str, settings: &mut Settings)
 fn bridged(app: &AppHandle, root: &str, work: Option<&Path>) -> Vec<String> {
     let within = std::iter::once(root.to_string()).chain(work.map(|work| work.to_string_lossy().into_owned())).collect();
     let asking = app.clone();
-    let config = app.state::<mcp::Bridge>().config(within, move |reading| {
+    let keeper = app.state::<Arc<Engine>>().keeper();
+    let config = app.state::<mcp::Bridge>().config(within, keeper, move |reading| {
         let _ = asking.emit("terminal-read", reading);
     });
     match config {
@@ -849,6 +851,16 @@ fn main() {
             bar::heard(window, event);
         })
         .invoke_handler(tauri::generate_handler![
+            canon::canon_held,
+            canon::canon_accept,
+            canon::canon_undo,
+            canon::canon_fix,
+            canon::canon_retry,
+            canon::canon_exceptions,
+            canon::canon_retract,
+            canon::canon_rules,
+            canon::canon_set_rules,
+            canon::canon_avoided,
             chat_send,
             chat_stop,
             chat_answer,

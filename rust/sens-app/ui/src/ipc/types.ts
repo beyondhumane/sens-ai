@@ -462,6 +462,77 @@ export interface Slash {
   hint: string;
 }
 
+export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7";
+export type Severity = "Block" | "Consider" | "Ask" | "Note";
+
+export interface Target {
+  symbol: string;
+  file: string;
+  line: number;
+  signature: string;
+  excerpt: string;
+}
+
+export interface Finding {
+  rule: Rule;
+  severity: Severity;
+  file: string;
+  line: number;
+  message: string;
+  target: Target | null;
+  key: string;
+}
+
+export interface Suggested {
+  name: string;
+  file: string;
+  line: number;
+  signature: string;
+  uses: number;
+}
+
+export interface Canon {
+  kind: "canon";
+  stage: string;
+  findings: Finding[];
+  suggestions: Suggested[];
+}
+
+export interface Held {
+  kind: "held";
+  findings: Finding[];
+}
+
+export interface Excepted {
+  key: string;
+  rule: Rule | null;
+  file: string;
+  since: number;
+}
+
+export interface Avoided {
+  copies: number;
+  comments: number;
+  dependencies: number;
+  protected: number;
+  tests: number;
+  orphans: number;
+  judgment: number;
+  held: number;
+  accepted: number;
+  reviews: number;
+  reviewerCost: number;
+}
+
+export interface ProjectRules {
+  noComments: boolean;
+}
+
+export interface Restored {
+  restored: string[];
+  skipped: string[];
+}
+
 export type ChatEvent =
   | { kind: "started"; model: string }
   | { kind: "delta"; thinking: boolean; text: string }
@@ -477,7 +548,9 @@ export type ChatEvent =
   | { kind: "compacted"; before: number; auto: boolean }
   | Finished
   | { kind: "failed"; reason: string }
-  | { kind: "lockedOut"; reason: Lockout };
+  | { kind: "lockedOut"; reason: Lockout }
+  | Canon
+  | Held;
 
 export type Lockout = "signIn" | "billing";
 

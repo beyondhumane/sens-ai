@@ -1,0 +1,22 @@
+diff --git a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+index e71efb0..79cdcdc 100644
+--- a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
++++ b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+@@ -3,7 +3,7 @@ import { useStore } from "zustand";
+ import type { Artifact } from "../../ipc/types";
+ import { resume } from "../../app/session";
+ import { EmptyView } from "../../shared/EmptyView";
+-import { ago, when } from "../../shared/format.js";
++import { ago, weigh, when } from "../../shared/format.js";
+ import { Icon } from "../../shared/Icon";
+ import { ICONS } from "../../shared/icons.js";
+ import { useSeen } from "../../shared/useSeen";
+@@ -119,7 +119,7 @@ function ArtifactCard({ item }: { item: Artifact }) {
+       </div>
+       <button className="card-main" title={item.target} onClick={(event) => openArtifact(item, event.currentTarget)}>
+         <span className={item.kind === "link" ? "name url" : "name"}>{item.name}</span>
+-        <span className="sub">{item.project}</span>
++        <span className="sub">{item.bytes == null ? item.project : `${item.project} · ${weigh(item.bytes)}`}</span>
+       </button>
+       <div className="card-controls">
+         <Origin item={item} />

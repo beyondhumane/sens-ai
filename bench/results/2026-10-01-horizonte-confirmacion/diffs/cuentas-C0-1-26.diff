@@ -1,0 +1,39 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 75cb0b2..9c58f7a 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -75,6 +75,7 @@ const commands: Record<string, Command> = {
+     const [path, date = "", amount = "", category = "", ...words] = args;
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!isRealDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseAmount(amount);
+     const description = words.join(" ").trim();
+     if (!category.trim()) throw new Error("Falta la categoría");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 6e0b491..dbdf0e8 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -143,13 +143,20 @@ describe("cuentas", () => {
+     const io = memoryIo({ "g.csv": GASTOS });
+     expect(shown(run(["añadir", "g.csv", "2026-03-19", "4,20", "Comida", "Churros"], io).output)).toBe("Añadido: 19/03/2026  Comida  4,20 €  Churros");
+     run(["añadir", "g.csv", "2026-03-20", "1.234,56", "Comida", "Mucho"], io);
+-    run(["añadir", "g.csv", "2026-03-21", "1234,5", "Comida", "Otro"], io);
+-    expect(io.files["g.csv"]).toBe(GASTOS + "2026-03-19,4.20,Comida,Churros\n2026-03-20,1234.56,Comida,Mucho\n2026-03-21,1234.50,Comida,Otro\n");
++    run(["añadir", "g.csv", "2026-03-18", "1234,5", "Comida", "Otro"], io);
++    expect(io.files["g.csv"]).toBe(GASTOS + "2026-03-19,4.20,Comida,Churros\n2026-03-20,1234.56,Comida,Mucho\n2026-03-18,1234.50,Comida,Otro\n");
+     const budgets = memoryIo({});
+     expect(shown(run(["presupuesto", "p.csv", "Comida", "1.234,56"], budgets).output)).toBe("Presupuesto de Comida: 1234,56 € al mes");
+     expect(budgets.files["p.csv"]).toBe("categoria,importe\nComida,1234.56\n");
+   });
+ 
++  it("refuses future dates but accepts today", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    expect(run(["añadir", "g.csv", "2026-03-25", "4", "Comida", "x"], io)).toEqual({ code: 1, output: "La fecha 2026-03-25 es futura" });
++    expect(io.files["g.csv"]).toBe(GASTOS);
++    expect(run(["añadir", "g.csv", "2026-03-20", "4", "Comida", "x"], io).code).toBe(0);
++  });
++
+   it("refuses bad input and leaves the file alone", () => {
+     const bad = (args: string[]) => {
+       const io = memoryIo({ "g.csv": GASTOS });

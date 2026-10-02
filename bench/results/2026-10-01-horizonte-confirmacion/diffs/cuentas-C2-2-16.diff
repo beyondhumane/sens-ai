@@ -1,0 +1,70 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 5cbbee4..24efbad 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -137,6 +137,42 @@ const commands: Record<string, Command> = {
+     io.write(path, text.endsWith("\n") ? text + row : `${text}\n${row}`);
+     return `Añadido: ${line({ date, cents, category, description })}`;
+   },
++  importar: (args, io) => {
++    const [bankPath, path] = args;
++    if (!bankPath || !path) throw new Error("Uso: importar <fichero-del-banco> <fichero>");
++    const imported: Expense[] = [];
++    io.read(bankPath)
++      .split(/\r?\n/)
++      .forEach((text, index) => {
++        if (index > 0 && text.trim() === "") return;
++        const invalid = () => new Error(`Línea ${index + 1} del banco no válida`);
++        const fields = text.split(";");
++        if (index === 0) {
++          if (text.replace(/^﻿/, "") !== "Fecha;Concepto;Importe") throw invalid();
++          return;
++        }
++        const [day, description, amount] = fields;
++        const date = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(day ?? "");
++        const iso = date ? `${date[3]}-${date[2]}-${date[1]}` : "";
++        if (fields.length !== 3 || !isRealDate(iso) || !description.trim() || !/^[+-]?[\d.,]+$/.test(amount)) {
++          throw invalid();
++        }
++        let cents: number;
++        try {
++          cents = parseCents(amount.replace(/^[+-]/, ""));
++        } catch {
++          throw invalid();
++        }
++        if (amount.startsWith("-")) {
++          imported.push({ date: iso, cents, category: "Sin categoría", description: description.trim() });
++        }
++      });
++    const current = io.read(path);
++    parseExpenses(current);
++    const rows = imported.map((expense) => `${csvRow(expense)}\n`).join("");
++    io.write(path, current.endsWith("\n") ? current + rows : `${current}\n${rows}`);
++    return `Importados ${imported.length} gastos`;
++  },
+   presupuesto: (args, io) => {
+     const [path, category, amount] = args;
+     if (!path || !category || amount === undefined) {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 894cd47..c5052cb 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -189,6 +189,18 @@ describe("cuentas", () => {
+     expect(io.files["todo.csv"]).toBe(gastos);
+   });
+ 
++  it("imports only the bank's expenses, or nothing if a line is invalid", () => {
++    const banco = "Fecha;Concepto;Importe\n09/03/2026;Bar Paco;-8,75\n10/03/2026;Nómina;1.850,00\n11/03/2026;Cine, centro;-1.020,5\n";
++    const io = memoryIo({ "gastos.csv": GASTOS, "banco.csv": banco });
++    expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 0, output: "Importados 2 gastos" });
++    expect(io.files["gastos.csv"]).toBe(
++      `${GASTOS}2026-03-09,8.75,Sin categoría,Bar Paco\n2026-03-11,1020.50,Sin categoría,"Cine, centro"\n`,
++    );
++    const bad = memoryIo({ "gastos.csv": GASTOS, "banco.csv": "Fecha;Concepto;Importe\n09/03/2026;Bar;-8,75\n31/02/2026;X;-1,00\n" });
++    expect(run(["importar", "banco.csv", "gastos.csv"], bad)).toEqual({ code: 1, output: "Línea 3 del banco no válida" });
++    expect(bad.files["gastos.csv"]).toBe(GASTOS);
++  });
++
+   it("creates the budget file and updates a category in place ignoring case and accents", () => {
+     const io = memoryIo({});
+     const ran = run(["presupuesto", "presupuestos.csv", "Comida", "100"], io);

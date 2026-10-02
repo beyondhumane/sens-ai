@@ -1,0 +1,48 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 7c06071..125274f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -146,8 +146,16 @@ const commands:Record<string, Command> = {
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (args, io) => {
+-    const { path, month } = monthArgs(args);
+-    const expenses = load(path, io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    const flag = args.indexOf("--categoria");
++    const category = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const { path, month } = monthArgs(args.filter((_, i) => flag === -1 || (i !== flag && i !== flag + 1)));
++    const wanted = category === undefined ? undefined : fold(category);
++    const expenses = load(path, io).filter(
++      (expense) =>
++        (month === undefined || expense.date.startsWith(`${month}-`)) &&
++        (wanted === undefined || fold(expense.category) === wanted),
++    );
+     return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   exportar: (args, io) => {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f249166..5cc63b0 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -57,6 +57,20 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes", "2026-13"], io())).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("filters the total by category, ignoring case and accents, combinable with month", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,10.00,Comida,Pan
++2026-04-01,5.00,Comida,Fruta
++2026-04-02,7.00,Ocio,Cine
++`;
++    const total = (...args: string[]) => shown(run(["total", "gastos.csv", ...args], memoryIo({ "gastos.csv": gastos })).output);
++    expect(total("--categoria", "cómida")).toBe("Total: 15,00 €");
++    expect(total("--categoria", "COMIDA", "--mes", "2026-04")).toBe("Total: 5,00 €");
++    expect(total("--mes", "2026-04", "--categoria", "ocio")).toBe("Total: 7,00 €");
++    expect(total("--categoria", "Viajes")).toBe("Total: 0,00 €");
++    expect(run(["total", "gastos.csv", "--categoria"], memoryIo({ "gastos.csv": gastos }))).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("sums each category, biggest first, ties alphabetical", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan y fruta

@@ -1,0 +1,16 @@
+setup = "npm ci --offline --no-audit --no-fund"
+check = "npx tsc --noEmit && npx vitest run"
+accept_into = "tests/_accept"
+accept = 'npx vitest run tests/_accept --reporter=json --outputFile="{report}"'
+source = "src"
+
+[probes]
+dinero = 'Intl\.NumberFormat|€'
+fechas = 'reverse\(\)\.join\("/"\)|\}/\$\{|day:\s*"2-digit"'
+meses = "(?i)[\"']enero[\"']|month:\\s*[\"']long[\"']"
+dias = "(?i)[\"']lunes[\"']|weekday:\\s*[\"']long[\"']"
+acentos = '\.normalize\('
+importes = 'Importe no válido'
+fechas_validas = 'Fecha no válida'
+meses_validos = 'Mes no válido'
+opciones = "startsWith\\(\\s*[\"']--|indexOf\\(\\s*[\"']--"

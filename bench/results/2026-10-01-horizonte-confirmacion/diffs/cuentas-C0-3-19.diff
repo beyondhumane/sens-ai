@@ -1,0 +1,18 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index ee1cad7..c9851b0 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -149,9 +149,12 @@ const commands: Record<string, Command> = {
+   },
+   lista: (args, io) => {
+     const { date: since, rest: afterSince } = takeDate(args, "--desde");
+-    const { date: until, rest } = takeDate(afterSince, "--hasta");
++    const { date: until, rest: afterUntil } = takeDate(afterSince, "--hasta");
++    const { value: order = "fecha", rest } = takeOption(afterUntil, "--orden");
++    if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+     return load(rest[0], io)
+       .filter((expense) => (since === undefined || expense.date >= since) && (until === undefined || expense.date <= until))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+       .map(formatLine)
+       .join("\n");
+   },

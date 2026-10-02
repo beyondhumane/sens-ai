@@ -1,0 +1,6 @@
+language = "rust"
+format = "cargo fmt"
+check = "cargo test -q"
+accept = "cargo build -q && node accept/quiet.mjs"
+reuse = ["config.quiet"]
+allow = []

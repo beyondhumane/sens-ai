@@ -1,0 +1,68 @@
+diff --git a/README.md b/README.md
+index fa1b3df..a0d9568 100644
+--- a/README.md
++++ b/README.md
+@@ -21,7 +21,7 @@ fecha,importe,categoria,descripcion
+ | `total <fichero>` | `Total: 57,70 €` |
+ | `buscar <fichero> <texto> [--desde AAAA-MM-DD] [--hasta AAAA-MM-DD]` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos, con las mismas líneas que `lista`; `--desde` y `--hasta` limitan el rango como en `lista`; si no hay ninguno, `Sin resultados` |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de más a menos gastado; si empatan, por orden alfabético |
+-| `informe <fichero> --mes 2026-03` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian. En lugar de `--mes`, `--anio 2026` da el año, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y el total, sin presupuestos; un año que no son cuatro cifras da `Año no válido: 26` |
++| `informe <fichero> --mes 2026-03 [--csv <salida>]` | `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`) de más a menos gastado ese mes, y `Total: 104,65 €` al final. `--mes` es obligatorio. Con `--presupuestos <fichero>` (el CSV de `presupuesto`), las categorías con presupuesto añaden `de 100,00 € (quedan 55,35 €)` o `de 55,00 € (te pasas 5,00 €)`; el emparejamiento no distingue mayúsculas ni acentos y las demás líneas no cambian. En lugar de `--mes`, `--anio 2026` da el año, una línea por mes con gasto en orden de calendario (`  Marzo: 149,85 €`) y el total, sin presupuestos; un año que no son cuatro cifras da `Año no válido: 26`. Con `--csv <salida>` además guarda el informe en un CSV con cabecera `categoria,total` y una línea por categoría en el mismo orden, con el total con punto (`60.00`) |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha es `2026-03-19` y existe; el importe es mayor que cero y con dos decimales como mucho: con coma decimal (`4,20`, y entonces los puntos son de miles: `1.234,56`) o, sin coma, con punto decimal (`4.20`). Si algo no vale, no toca el fichero |
+ | `semana <fichero> <fecha>` | Los gastos de la semana (de lunes a domingo) en la que cae la fecha: una línea por día con gasto (`Lunes 02/03/2026: 45,20 €`) y `Total: 48,30 €` al final. Una fecha que no existe da `Fecha no válida: 2026-02-30` |
+ | `media <fichero> --mes 2026-03` | Lo que gastas de media al día ese mes, contando todos los días del mes aunque no haya gasto, redondeado al céntimo: `Media diaria en marzo de 2026: 4,83 €`. `--mes` es obligatorio |
+diff --git a/src/cli.ts b/src/cli.ts
+index ffce0ac..0ada2be 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -146,8 +146,13 @@ const commands: Record<string, Command> = {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+     if (flag !== -1 && !budgetPath) throw new Error("Falta el fichero de presupuestos");
+-    const yearly = splitYear(flag === -1 ? args : [...args.slice(0, flag), ...args.slice(flag + 2)]);
++    const afterBudgets = flag === -1 ? args : [...args.slice(0, flag), ...args.slice(flag + 2)];
++    const csvFlag = afterBudgets.indexOf("--csv");
++    const csvPath = csvFlag === -1 ? undefined : afterBudgets[csvFlag + 1];
++    if (csvFlag !== -1 && !csvPath) throw new Error("Falta el fichero de salida");
++    const yearly = splitYear(csvFlag === -1 ? afterBudgets : [...afterBudgets.slice(0, csvFlag), ...afterBudgets.slice(csvFlag + 2)]);
+     if (yearly.year !== undefined) {
++      if (csvPath) throw new Error("--csv solo se puede usar con --mes");
+       if (yearly.rest.includes("--mes")) throw new Error("Usa --mes o --anio, no los dos");
+       const spent = load(yearly.rest[0], io).filter((expense) => expense.date.startsWith(`${yearly.year}-`));
+       const perMonth = new Map<number, number>();
+@@ -173,8 +178,12 @@ const commands: Record<string, Command> = {
+     for (const expense of expenses) {
+       totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.cents);
+     }
+-    const rows = [...totals]
+-      .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"))
++    const sorted = [...totals].sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"));
++    if (csvPath) {
++      const csvRows = sorted.map(([category, cents]) => [quoteField(category), (cents / 100).toFixed(2)].join(","));
++      io.write(csvPath, `${["categoria,total", ...csvRows].join("\n")}\n`);
++    }
++    const rows = sorted
+       .map(([category, cents]) => {
+         const budget = budgets.get(fold(category));
+         if (budget === undefined) return `  ${category}: ${formatMoney(cents)}`;
+diff --git a/tests/informe.test.ts b/tests/informe.test.ts
+index d7814a4..d34337e 100644
+--- a/tests/informe.test.ts
++++ b/tests/informe.test.ts
+@@ -68,3 +68,16 @@ it("reports a year without spending and rejects an invalid year", () => {
+   expect(run(["informe", "g.csv", "--anio", "26"], io)).toEqual({ code: 1, output: "Año no válido: 26" });
+   expect(run(["informe", "g.csv", "--anio"], io)).toEqual({ code: 1, output: "Año no válido:" });
+ });
++
++it("saves the monthly report to a CSV with --csv", () => {
++  const io = memoryIo({ "g.csv": csv });
++  const ran = run(["informe", "g.csv", "--mes", "2026-03", "--csv", "out.csv"], io);
++  expect(norm(ran.output)).toBe("Marzo de 2026\n  Ocio: 60,00 €\n  Comida: 44,65 €\nTotal: 104,65 €");
++  expect(io.files["out.csv"]).toBe("categoria,total\nOcio,60.00\nComida,44.65\n");
++});
++
++it("requires an output file for --csv and rejects it with --anio", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["informe", "g.csv", "--mes", "2026-03", "--csv"], io)).toEqual({ code: 1, output: "Falta el fichero de salida" });
++  expect(run(["informe", "g.csv", "--anio", "2026", "--csv", "o.csv"], io).code).toBe(1);
++});

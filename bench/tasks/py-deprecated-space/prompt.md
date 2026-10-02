@@ -1,0 +1,1 @@
+In `--help`, an option or a command declared with `deprecated=True` (or a deprecation message) and no help text shows ` (DEPRECATED)` with a stray space in front of it. It should read `(DEPRECATED)` on its own.

@@ -1,0 +1,13 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 0eb8462..f3c56ff 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -1156,7 +1156,7 @@ class Path(ParamType[str | bytes | os.PathLike[str]]):
+ 
+         if not is_dash:
+             if self.resolve_path:
+-                rv = os.path.realpath(rv)
++                rv = os.path.realpath(os.path.expanduser(rv))
+ 
+             try:
+                 st = os.stat(rv)

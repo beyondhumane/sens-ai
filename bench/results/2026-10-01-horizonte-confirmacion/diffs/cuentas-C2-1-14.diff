@@ -1,0 +1,41 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a231f55..185afaa 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -84,9 +84,13 @@ const commands: Record<string, Command> = {
+     const found = load(args[0], io).filter((expense) => fold(expense.description).includes(needle) || fold(expense.category).includes(needle));
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+-  total: (args, io) => {
+-    const { path, month } = withMonth(args);
+-    return `Total: ${formatMoney(inMonth(load(path, io), month).reduce((sum, expense) => sum + expense.cents, 0))}`;
++  total: (rawArgs, io) => {
++    const flag = rawArgs.indexOf("--categoria");
++    const category = flag === -1 ? undefined : rawArgs[flag + 1];
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const { path, month } = withMonth(rawArgs.filter((_, i) => flag === -1 || (i !== flag && i !== flag + 1)));
++    const expenses = inMonth(load(path, io), month).filter((expense) => category === undefined || fold(expense.category) === fold(category));
++    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
+   },
+   semana: ([path, date = ""], io) => {
+     const expenses = load(path, io);
+diff --git a/tests/total.test.ts b/tests/total.test.ts
+index 0433a3a..f5b05d9 100644
+--- a/tests/total.test.ts
++++ b/tests/total.test.ts
+@@ -16,6 +16,15 @@ it("sums only the given month", () => {
+   expect(clean(total("--mes", "2026-02", "g.csv").output)).toBe("Total: 10,00 €");
+ });
+ 
++it("filters by category ignoring case and accents, combinable with --mes", () => {
++  expect(clean(total("g.csv", "--categoria", "COMIDA").output)).toBe("Total: 30,00 €");
++  expect(clean(total("--categoria", "cómida", "g.csv", "--mes", "2026-03").output)).toBe("Total: 20,00 €");
++});
++
++it("rejects --categoria without a value", () => {
++  expect(total("g.csv", "--categoria")).toEqual({ code: 1, output: "Falta la categoría" });
++});
++
+ it("rejects an invalid month", () => {
+   expect(total("g.csv", "--mes", "2026-13")).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+ });

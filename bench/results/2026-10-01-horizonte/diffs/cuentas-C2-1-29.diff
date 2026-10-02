@@ -1,0 +1,31 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 8513149..208730e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -293,7 +293,7 @@ const commands: Record<string, Command> = {
+       })
+       .join("\n");
+   },
+-  categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
++  categorias: (args, io) => categoryLines(inMonth(load(args[0], io), monthFlag(args))).join("\n"),
+   exportar: (args, io) => {
+     const month = monthFlag(args);
+     const bank = formatFlag(args) === "banco";
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f8517f1..24ef52b 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -81,6 +81,13 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 45,20 €\nTransporte: 45,20 €\nComida: 45,00 €\nCasa: 5,00 €");
+   });
+ 
++  it("sums by category for only the requested month", () => {
++    const io = memoryIo({ "gastos.csv": `${GASTOS}2026-04-01,10.00,Casa,Llave\n` });
++    expect(shown(run(["categorias", "gastos.csv", "--mes", "2026-04"], io).output)).toBe("Casa: 10,00 €");
++    expect(shown(run(["categorias", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Transporte: 45,20 €\nComida: 12,50 €");
++    expect(run(["categorias", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("reports one month by category", () => {
+     const csv = `${GASTOS}2026-03-03,32.50,Comida,Cena
+ 2026-03-04,60.00,Ocio,Cine

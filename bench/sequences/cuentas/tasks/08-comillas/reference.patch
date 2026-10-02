@@ -1,0 +1,61 @@
+diff --git a/src/csv.ts b/src/csv.ts
+index 04996a3..f54cdb9 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -3,19 +3,47 @@ import { amountInFile } from "./money";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
+ 
++export function splitFields(row: string, separator = ","): string[] {
++  const fields: string[] = [];
++  let field = "";
++  let inside = false;
++  for (let at = 0; at < row.length; at++) {
++    const letter = row[at];
++    if (inside && letter === '"' && row[at + 1] === '"') {
++      field += '"';
++      at++;
++    } else if (letter === '"') {
++      inside = !inside;
++    } else if (letter === separator && !inside) {
++      fields.push(field);
++      field = "";
++    } else {
++      field += letter;
++    }
++  }
++  fields.push(field);
++  return fields;
++}
++
++export function quoted(field: string, separator = ","): string {
++  return field.includes(separator) || field.includes('"') ? `"${field.replaceAll('"', '""')}"` : field;
++}
++
++export function rows(text: string, header: string): string[] {
++  const [first, ...rest] = text.trim().split(/\r?\n/);
++  if (first !== header) throw new Error(`Cabecera desconocida: ${first}`);
++  return rest.filter((row) => row.trim() !== "");
++}
++
+ export function parseExpenses(text: string): Expense[] {
+-  const [header, ...rows] = text.trim().split(/\r?\n/);
+-  if (header !== HEADER) throw new Error(`Cabecera desconocida: ${header}`);
+-  return rows
+-    .filter((row) => row.trim() !== "")
+-    .map((row) => {
+-      const [date, amount, category, ...rest] = row.split(",");
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
+-    });
++  return rows(text, HEADER).map((row) => {
++    const [date, amount, category, ...rest] = splitFields(row);
++    return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
++  });
+ }
+ 
+ export function formatRow(expense: Expense): string {
+-  return [expense.date, amountInFile(expense.cents), expense.category, expense.description].join(",");
++  return [expense.date, amountInFile(expense.cents), expense.category, expense.description].map((field) => quoted(field)).join(",");
+ }
+ 
+ export function appended(text: string, expense: Expense): string {

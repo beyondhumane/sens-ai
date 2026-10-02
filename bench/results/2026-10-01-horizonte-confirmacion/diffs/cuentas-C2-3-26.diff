@@ -1,0 +1,32 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index db27553..27edee0 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -137,6 +137,7 @@ const commands: Record<string, Command> = {
+   añadir: ([path, date = "", amount = "", category, ...words], io) => {
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    if (date > io.today) throw new Error(`La fecha ${date} es futura`);
+     const cents = parseAmount(amount);
+     const description = words.join(" ");
+     if (!category) throw new Error("Falta la categoría");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 2d86c48..9379019 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -99,6 +99,15 @@ describe("cuentas", () => {
+     expect(io.files["gastos.csv"]).toBe(before);
+   });
+ 
++  it("rejects future dates but accepts today", () => {
++    const io = memoryIo({ "gastos.csv": GASTOS });
++    const add = (date: string) => run(["añadir", "gastos.csv", date, "4", "Comida", "X"], io);
++    expect(add("2026-03-25")).toEqual({ code: 1, output: "La fecha 2026-03-25 es futura" });
++    expect(io.files["gastos.csv"]).toBe(GASTOS);
++    expect(add("2026-03-20").code).toBe(0);
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-20,4.00,Comida,X\n`);
++  });
++
+   it("accepts comma decimals with dots as thousands separators", () => {
+     const io = memoryIo({ "g.csv": GASTOS });
+     run(["añadir", "g.csv", "2026-03-19", "4,20", "Comida", "X"], io);

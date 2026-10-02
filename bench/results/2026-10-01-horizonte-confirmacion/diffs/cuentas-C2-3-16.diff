@@ -1,0 +1,96 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 08e6b2d..2912736 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -30,7 +30,32 @@ function parseAmount(amount: string): number {
+   return cents;
+ }
+ 
+-const BUDGET_HEADER = "categoria,importe";
++function appendExpenses(path: string, expenses: Expense[], io: Io): void {
++  if (expenses.length === 0) return;
++  const text = io.read(path);
++  io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${expenses.map(formatExpense).join("")}`);
++}
++
++// Devuelve undefined para los ingresos; lanza si la línea no se entiende.
++function parseBankRow(row: string, lineNumber: number): Expense | undefined {
++  const invalid = new Error(`Línea ${lineNumber} del banco no válida`);
++  const fields = row.split(";");
++  if (fields.length < 3) throw invalid;
++  const [day, month, year] = fields[0].trim().split("/");
++  const date = `${year}-${month}-${day}`;
++  const description = fields.slice(1, -1).join(";").trim();
++  const amount = fields[fields.length - 1].trim();
++  if (!isValidDate(date) || description === "") throw invalid;
++  let cents: number;
++  try {
++    cents = parseAmount(amount.replace(/^-/, ""));
++  } catch {
++    throw invalid;
++  }
++  return amount.startsWith("-") ? { date, cents, category: "Sin categoría", description } : undefined;
++}
++
++const BUDGET_HEADER ="categoria,importe";
+ 
+ function parseBudgets(text: string): { category: string; cents: number }[] {
+   const [header, ...rows] = text.trim().split(/\r?\n/);
+@@ -102,11 +127,21 @@ const commands: Record<string, Command> = {
+     if (!category) throw new Error("Falta la categoría");
+     if (!description) throw new Error("Falta la descripción");
+     if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
+-    const text = io.read(path);
+     const expense: Expense = { date, cents, category, description };
+-    io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${formatExpense(expense)}`);
++    appendExpenses(path, [expense], io);
+     return `Añadido: ${formatLine(expense)}`;
+   },
++  importar: ([bankPath, path], io) => {
++    if (!bankPath) throw new Error("Falta el fichero del banco");
++    if (!path) throw new Error("Falta el fichero de gastos");
++    const expenses = io
++      .read(bankPath)
++      .split(/\r?\n/)
++      .flatMap((row, index) => (index === 0 || row.trim() === "" ? [] : [parseBankRow(row, index + 1)]))
++      .filter((expense) => expense !== undefined);
++    appendExpenses(path, expenses, io);
++    return `Importados ${expenses.length} gastos`;
++  },
+   presupuesto: ([path, category, amount = ""], io) => {
+     if (!path) throw new Error("Falta el fichero de presupuestos");
+     if (!category) throw new Error("Falta la categoría");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 2f5d469..7abf387 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -199,4 +199,29 @@ describe("cuentas", () => {
+     expect(io.files["todo.csv"]).toBe(gastos);
+     expect(run(["exportar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el fichero de salida" });
+   });
++
++  it("imports only the expenses of a bank file, all or nothing", () => {
++    const banco = `Fecha;Concepto;Importe
++09/03/2026;Bar Paco;-8,75
++10/03/2026;Nómina;1.850,00
++11/03/2026;Cena, con Ana;-1.234,50
++`;
++    const io = memoryIo({ "gastos.csv": GASTOS, "banco.csv": banco });
++    expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 0, output: "Importados 2 gastos" });
++    expect(io.files["gastos.csv"]).toBe(`${GASTOS}2026-03-09,8.75,Sin categoría,Bar Paco
++2026-03-11,1234.50,Sin categoría,"Cena, con Ana"
++`);
++
++    const before = io.files["gastos.csv"];
++    io.files["banco.csv"] = `Fecha;Concepto;Importe
++09/03/2026;Bar Paco;-8,75
++31/02/2026;Mal;-1,00
++`;
++    expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 1, output: "Línea 3 del banco no válida" });
++    io.files["banco.csv"] = `Fecha;Concepto;Importe
++09/03/2026;Bar Paco;abc
++`;
++    expect(run(["importar", "banco.csv", "gastos.csv"], io)).toEqual({ code: 1, output: "Línea 2 del banco no válida" });
++    expect(io.files["gastos.csv"]).toBe(before);
++  });
+ });

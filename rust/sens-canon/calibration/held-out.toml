@@ -1,0 +1,13 @@
+base = "7eb9269"
+
+[[query]]
+text = "En la estantería de artefactos, cada tarjeta muestra debajo del nombre el proyecto del que viene (por ejemplo `demo`). Añade ahí el tamaño del artefacto cuando se conoce, escrito como la app escribe los tamaños en otros sitios: `demo · 1,2 MB`. Si no se conoce el tamaño, que siga mostrando solo el proyecto."
+expect = ["shared/format.js:weigh"]
+
+[[query]]
+text = "Quiero ver el lenguaje de cada fichero en dos sitios: en la cabecera del visor de ficheros, junto a la ruta del fichero abierto, y en cada fila del panel de cambios, junto al nombre del fichero. Con el nombre del lenguaje basta: `TypeScript`, `Python`, `Markdown`. Un script sin extensión que empieza por `#!/usr/bin/env python3` es Python. Si el lenguaje no se reconoce, no muestres nada."
+expect = ["shared/syntax/languages.ts:titleOf", "shared/syntax/languages.ts:languageOf"]
+
+[[query]]
+text = "En la barra flotante, al buscar una sesión o un proyecto, escribir `cancion` no encuentra la sesión «Canción de cuna» y escribir `diseno` no encuentra el proyecto «Diseño». Haz que esa búsqueda no distinga acentos ni mayúsculas."
+expect = ["features/market/search.js:plain"]

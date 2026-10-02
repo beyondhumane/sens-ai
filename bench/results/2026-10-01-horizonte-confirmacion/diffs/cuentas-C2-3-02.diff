@@ -1,0 +1,44 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 69a8e03..6d359ae 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -22,6 +22,14 @@ const commands: Record<string, Command> = {
+       .map((expense) => [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  "))
+       .join("\n"),
+   total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  categorias: (args, io) => {
++    const totals = new Map<string, number>();
++    for (const { category, cents } of load(args[0], io)) totals.set(category, (totals.get(category) ?? 0) + cents);
++    return [...totals]
++      .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b, "es"))
++      .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
++      .join("\n");
++  },
+ };
+ 
+ export function run(argv: string[], io: Io): Ran {
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 420b082..83926d5 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -20,6 +20,20 @@ describe("cuentas", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });
+ 
++  it("sums per category, biggest first and alphabetical on ties", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,90.00,Ocio,Cine
++2026-03-03,32.15,Comida,Cena
++2026-03-04,10.00,Viajes,Bus
++2026-03-05,10.00,Hogar,Luz
++`;
++    const ran = run(["categorias", "gastos.csv"], memoryIo({ "gastos.csv": gastos }));
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nHogar: 10,00 €\nViajes: 10,00 €");
++    expect(run(["categorias"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
++  });
++
+   it("says what is missing or unknown", () => {
+     expect(run(["lista"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+     expect(run(["borrar"], memoryIo({}))).toEqual({ code: 1, output: "Orden desconocida: borrar" });

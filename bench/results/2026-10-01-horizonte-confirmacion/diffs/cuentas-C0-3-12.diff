@@ -1,0 +1,118 @@
+diff --git a/README.md b/README.md
+index 34d4c06..80c7c37 100644
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,7 @@ fecha,importe,categoria,descripcion
+ | `buscar <fichero> <texto>` | Los gastos cuya descripción o categoría contiene el texto, sin distinguir mayúsculas ni acentos (`cafe` encuentra «Café con Ana»), con las mismas líneas que `lista`; `Sin resultados` si no hay ninguno |
+ | `categorias <fichero>` | Una línea por categoría (`Ocio: 90,00 €`), de la que más gasta a la que menos; si empatan, por orden alfabético |
+ | `total <fichero> [--mes AAAA-MM]` | `Total: 57,70 €`; con `--mes 2026-03` suma solo los gastos de ese mes (`Mes no válido: 2026-13` si no existe) |
+-| `informe <fichero> --mes AAAA-MM` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio |
++| `informe <fichero> --mes AAAA-MM [--presupuestos <fichero>]` | Primera línea el mes (`Marzo de 2026`), luego una línea por categoría con lo gastado ese mes (`  Ocio: 60,00 €`, con dos espacios delante), de más a menos, y al final `Total: 104,65 €`. `--mes` es obligatorio. Con `--presupuestos` (el CSV de `presupuesto`), las categorías con presupuesto dicen cuánto queda o cuánto te pasas (`  Comida: 44,65 € de 100,00 € (quedan 55,35 €)`, `  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)`); se emparejan sin distinguir mayúsculas ni acentos y las demás quedan igual |
+ | `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato que el original, y responde `Exportados 5 gastos a marzo.csv`. La salida debe ser otro fichero distinto del original |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Escribe el gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`; la fecha es `2026-03-19` y debe existir, el importe lleva punto decimal, es mayor que cero y tiene dos decimales como mucho. Si algo no vale no toca el fichero (`Fecha no válida: 2026-02-30`, `Importe no válido: -3`) |
+ | `presupuesto <fichero-de-presupuestos> <categoría> <importe>` | Fija el presupuesto mensual de una categoría en un CSV con cabecera `categoria,importe` (`Comida,100.00`); si el fichero no existe lo crea, y si la categoría ya estaba (sin distinguir mayúsculas ni acentos) cambia su importe y se queda con el nombre escrito. Importe y categoría se validan como en `añadir`. Responde `Presupuesto de Comida: 100,00 € al mes` |
+diff --git a/src/cli.ts b/src/cli.ts
+index 6fc7352..15324db 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { BUDGET_HEADER, formatField, HEADER, parseExpenses, parseRecords } from "./csv";
++import { BUDGET_HEADER, formatField, HEADER, parseBudgets, parseExpenses, parseRecords } from "./csv";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
+@@ -52,6 +52,12 @@ function takeDate(args: string[], name: string): { date: string | undefined; res
+   return { date, rest: [...args.slice(0, flag), ...args.slice(flag + 2)] };
+ }
+ 
++function takeOption(args: string[], name: string): { value: string | undefined; rest: string[] } {
++  const flag = args.indexOf(name);
++  if (flag === -1) return { value: undefined, rest: args };
++  return { value: args[flag + 1], rest: [...args.slice(0, flag), ...args.slice(flag + 2)] };
++}
++
+ function inMonth(expenses: Expense[], month: string | undefined): Expense[] {
+   return expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ }
+@@ -147,13 +153,25 @@ const commands: Record<string, Command> = {
+     return `Exportados ${expenses.length} ${expenses.length === 1 ? "gasto" : "gastos"} a ${output}`;
+   },
+   informe: (args, io) => {
+-    const { month, rest } = takeMonth(args);
++    const { value: budgetPath, rest: afterBudgets } = takeOption(args, "--presupuestos");
++    const { month, rest } = takeMonth(afterBudgets);
+     if (month === undefined) throw new Error("Falta el mes (--mes AAAA-MM)");
+     const expenses = inMonth(load(rest[0], io), month);
++    const budgets = new Map<string, number>();
++    if (args.includes("--presupuestos")) {
++      if (!budgetPath) throw new Error("Falta el fichero de presupuestos");
++      for (const { category, cents } of parseBudgets(io.read(budgetPath))) budgets.set(fold(category), cents);
++    }
+     const [year, number] = month.split("-");
+     return [
+       `${MONTHS[Number(number) - 1]} de ${year}`,
+-      ...sumByCategory(expenses).map(([name, cents]) => `  ${name}: ${formatMoney(cents)}`),
++      ...sumByCategory(expenses).map(([name, cents]) => {
++        const budget = budgets.get(fold(name));
++        if (budget === undefined) return `  ${name}: ${formatMoney(cents)}`;
++        const balance =
++          cents <= budget ? `quedan ${formatMoney(budget - cents)}` : `te pasas ${formatMoney(cents - budget)}`;
++        return `  ${name}: ${formatMoney(cents)} de ${formatMoney(budget)} (${balance})`;
++      }),
+       `Total: ${formatMoney(sumCents(expenses))}`,
+     ].join("\n");
+   },
+diff --git a/src/csv.ts b/src/csv.ts
+index 9465ab2..f37b2a8 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -52,3 +52,12 @@ export function parseExpenses(text: string): Expense[] {
+       description: rest.join(","),
+     }));
+ }
++
++export function parseBudgets(text: string): { category: string; cents: number }[] {
++  const [headerFields, ...rows] = parseRecords(text.trim());
++  const header = headerFields.join(",");
++  if (header !== BUDGET_HEADER) throw new Error(`Cabecera desconocida: ${header}`);
++  return rows
++    .filter((fields) => fields.some((field) => field.trim() !== ""))
++    .map(([category, amount]) => ({ category, cents: Math.round(Number(amount) * 100) }));
++}
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index a6e9f45..f92e963 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -108,6 +108,32 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv"], io())).toEqual({ code: 1, output: "Falta el mes (--mes AAAA-MM)" });
+   });
+ 
++  it("shows what is left or exceeded for categories with a budget in informe --presupuestos", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan y fruta
++2026-03-02,32.15,comida,Cena
++2026-03-03,60.00,Ocio,Cine
++2026-03-04,10.00,Transporte,Bus
++`;
++    const presupuestos = `categoria,importe
++COMIDA,100.00
++ócio,55.00
++`;
++    const io = () => memoryIo({ "gastos.csv": gastos, "p.csv": presupuestos });
++    const ran = run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos", "p.csv"], io());
++    expect(ran.code).toBe(0);
++    expect(shown(ran.output).split("\n")).toEqual([
++      "Marzo de 2026",
++      "  Ocio: 60,00 € de 55,00 € (te pasas 5,00 €)",
++      "  comida: 32,15 € de 100,00 € (quedan 67,85 €)",
++      "  Comida: 12,50 € de 100,00 € (quedan 87,50 €)",
++      "  Transporte: 10,00 €",
++      "Total: 114,65 €",
++    ]);
++    expect(run(["informe", "--presupuestos", "nada.csv", "gastos.csv", "--mes", "2026-03"], io())).toEqual({ code: 1, output: "No existe nada.csv" });
++    expect(run(["informe", "gastos.csv", "--mes", "2026-03", "--presupuestos"], io())).toEqual({ code: 1, output: "Falta el fichero de presupuestos" });
++  });
++
+   it("appends an expense to the end of the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

@@ -1,0 +1,69 @@
+diff --git a/README.md b/README.md
+index bba8129..7fa6ffb 100644
+--- a/README.md
++++ b/README.md
+@@ -30,6 +30,7 @@ fecha,importe,categoria,descripcion
+ | `importar <fichero-del-banco> <fichero>` | Lee el CSV del banco (`Fecha;Concepto;Importe`, fecha `09/03/2026`, importe `-8,75` o `1.850,00`) y añade al final de `<fichero>` solo los importes negativos, en positivo, con el concepto como descripción y categoría `Sin categoría`. Responde `Importados 1 gastos`. Si una línea no se entiende, no importa nada y responde `Línea 3 del banco no válida` (la cabecera es la línea 1) |
+ | `duplicados <fichero>` | Avisa de los gastos que parecen repetidos: misma fecha, mismo importe y misma descripción, sin distinguir mayúsculas, acentos ni espacios de más. Una línea por grupo con las veces que sale y el primero (`2 veces: 09/03/2026  8,75 €  Café con Ana`); si no hay ninguno, `Sin duplicados` |
+ | `avisos <fichero> <presupuestos> --mes 2026-03` | Una línea por cada categoría que ese mes se pasa de su presupuesto, de la que más se pasa a la que menos, con el nombre como está en los gastos (`Ocio: te pasas 5,00 €`); gastar justo el presupuesto no es pasarse. El emparejamiento no distingue mayúsculas ni acentos y las categorías sin presupuesto no cuentan. Si ninguna se pasa, `Todo en orden`. `--mes` y el fichero de presupuestos son obligatorios |
++| `renombrar <fichero> <categoría> <nueva>` | Cambia esa categoría por la nueva en todos los gastos, buscándola sin distinguir mayúsculas ni acentos, y guarda el fichero. Responde `Renombrados 3 gastos` (con 0 coincidencias no toca el fichero). La categoría nueva no puede llevar comas ni saltos de línea |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index ded7382..d6e053e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -271,6 +271,24 @@ const commands: Record<string, Command> = {
+       .map(({ first, count }) => `${count} veces: ${[formatDate(first.date), formatMoney(first.cents), first.description].join("  ")}`)
+       .join("\n");
+   },
++  renombrar: ([path, rawOld = "", rawNew = ""], io) => {
++    const expenses = load(path, io);
++    const oldName = rawOld.trim();
++    const newName = rawNew.trim();
++    if (!oldName || !newName) throw new Error("Falta la categoría");
++    if (/[,\r\n]/.test(newName)) throw new Error(`Categoría no válida: ${rawNew}`);
++    let count = 0;
++    for (const expense of expenses) {
++      if (fold(expense.category) !== fold(oldName)) continue;
++      expense.category = newName;
++      count++;
++    }
++    if (count > 0) {
++      const rows = expenses.map((e) => [e.date, (e.cents / 100).toFixed(2), e.category, quoteField(e.description)].join(","));
++      io.write(path as string, `${[HEADER, ...rows].join("\n")}\n`);
++    }
++    return `Renombrados ${count} gastos`;
++  },
+   categorias: (args, io) => {
+     const totals = new Map<string, number>();
+     for (const expense of load(args[0], io)) {
+diff --git a/tests/renombrar.test.ts b/tests/renombrar.test.ts
+new file mode 100644
+index 0000000..98a52e5
+--- /dev/null
++++ b/tests/renombrar.test.ts
+@@ -0,0 +1,22 @@
++import { expect, it } from "vitest";
++import { run } from "../src/cli";
++import { HEADER } from "../src/csv";
++import { memoryIo } from "../src/io";
++
++const csv = [HEADER, "2026-03-01,20.00,Comida,menu", "2026-03-02,50.00,Ocio,teatro", "2026-03-03,34.65,cómida,\"cena, tarde\""].join("\n");
++
++it("renames the category ignoring case and accents and saves the file", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["renombrar", "g.csv", "COMIDA", "Alimentación"], io)).toEqual({ code: 0, output: "Renombrados 2 gastos" });
++  expect(io.files["g.csv"]).toBe(
++    [HEADER, "2026-03-01,20.00,Alimentación,menu", "2026-03-02,50.00,Ocio,teatro", "2026-03-03,34.65,Alimentación,\"cena, tarde\""].join("\n") + "\n",
++  );
++});
++
++it("leaves the file alone when nothing matches or the new name is invalid", () => {
++  const io = memoryIo({ "g.csv": csv });
++  expect(run(["renombrar", "g.csv", "Viajes", "Ocio"], io)).toEqual({ code: 0, output: "Renombrados 0 gastos" });
++  expect(run(["renombrar", "g.csv", "Ocio", "a,b"], io)).toEqual({ code: 1, output: "Categoría no válida: a,b" });
++  expect(run(["renombrar", "g.csv", "Ocio"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  expect(io.files["g.csv"]).toBe(csv);
++});

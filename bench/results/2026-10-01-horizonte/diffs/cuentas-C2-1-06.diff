@@ -1,0 +1,89 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 36415df..60b7847 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -25,6 +25,27 @@ const normalize = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "")
+ const isRealDate = (text: string) =>
+   /^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
+ 
++function monthFlag(args: string[]): string | undefined {
++  const flag = args.indexOf("--mes");
++  if (flag === -1) return undefined;
++  const month = args[flag + 1] ?? "";
++  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
++  return month;
++}
++
++const inMonth = (expenses: Expense[], month: string | undefined) =>
++  expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++
++const sumCents = (expenses: Expense[]) => expenses.reduce((sum, expense) => sum + expense.cents, 0);
++
++function categoryLines(expenses: Expense[]): string[] {
++  const totals = new Map<string, number>();
++  for (const { category, cents } of expenses) totals.set(category, (totals.get(category) ?? 0) + cents);
++  return [...totals]
++    .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b))
++    .map(([category, cents]) => `${category}: ${formatMoney(cents)}`);
++}
++
+ const commands: Record<string, Command> = {
+   añadir: ([path, date = "", amount = "", category = "", ...words], io) => {
+     const description = words.join(" ");
+@@ -45,19 +66,20 @@ const commands: Record<string, Command> = {
+     return found.length === 0 ? "Sin resultados" : found.map(formatLine).join("\n");
+   },
+   total: (args, io) => {
+-    const flag = args.indexOf("--mes");
+-    const month = flag === -1 ? undefined : (args[flag + 1] ?? "");
+-    if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error(`Mes no válido: ${month}`);
+-    const expenses = load(args[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+-    return `Total: ${formatMoney(expenses.reduce((sum, expense) => sum + expense.cents, 0))}`;
++    const month = monthFlag(args);
++    return `Total: ${formatMoney(sumCents(inMonth(load(args[0], io), month)))}`;
+   },
+-  categorias: (args, io) => {
+-    const totals = new Map<string, number>();
+-    for (const { category, cents } of load(args[0], io)) totals.set(category, (totals.get(category) ?? 0) + cents);
+-    return [...totals]
+-      .sort(([a, centsA], [b, centsB]) => centsB - centsA || a.localeCompare(b))
+-      .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+-      .join("\n");
++  categorias: (args, io) => categoryLines(load(args[0], io)).join("\n"),
++  informe: (args, io) => {
++    const month = monthFlag(args);
++    if (month === undefined) throw new Error("Uso: informe <fichero> --mes AAAA-MM");
++    const expenses = inMonth(load(args[0], io), month);
++    const title = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
++    return [
++      title.charAt(0).toUpperCase() + title.slice(1),
++      ...categoryLines(expenses).map((line) => `  ${line}`),
++      `Total: ${formatMoney(sumCents(expenses))}`,
++    ].join("\n");
+   },
+ };
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 24a8428..1ad965c 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -37,6 +37,19 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 45,20 €\nTransporte: 45,20 €\nComida: 45,00 €\nCasa: 5,00 €");
+   });
+ 
++  it("reports one month by category", () => {
++    const csv = `${GASTOS}2026-03-03,32.50,Comida,Cena
++2026-03-04,60.00,Ocio,Cine
++2026-04-01,10.00,Casa,Llave
++`;
++    const io = memoryIo({ "gastos.csv": csv });
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-03"], io).output)).toBe(
++      "Marzo de 2026\n  Ocio: 60,00 €\n  Transporte: 45,20 €\n  Comida: 45,00 €\nTotal: 150,20 €",
++    );
++    expect(shown(run(["informe", "gastos.csv", "--mes", "2026-05"], io).output)).toBe("Mayo de 2026\nTotal: 0,00 €");
++    expect(run(["informe", "gastos.csv"], io).code).toBe(1);
++  });
++
+   it("appends a valid expense at the end of the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

@@ -1,0 +1,13 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 0dbed67..0041207 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -51,7 +51,7 @@ const commands: Record<string, Command> = {
+     const { expenses, positional } = selected(args, io, []);
+     if (positional[1] === undefined) throw new Error("Falta el texto a buscar");
+     const wanted = plain(positional[1]);
+-    const found = expenses.filter((expense) => plain(expense.description).includes(wanted));
++    const found = expenses.filter((expense) => plain(expense.description).includes(wanted) || plain(expense.category).includes(wanted));
+     return found.length ? found.map(line).join("\n") : "Sin resultados";
+   },
+   añadir: (args, io) => {

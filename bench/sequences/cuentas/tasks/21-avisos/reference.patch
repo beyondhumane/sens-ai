@@ -1,0 +1,50 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 7b2991e..a995c47 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -46,6 +46,12 @@ function line(expense: Expense): string {
+   return [formatDate(expense.date), expense.category, formatMoney(expense.cents), expense.description].join("  ");
+ }
+ 
++function required(flags: Map<string, string>, name: string): string {
++  const value = flags.get(name);
++  if (value === undefined) throw new Error(`Falta --${name}`);
++  return value;
++}
++
+ function sorted(expenses: Expense[], order = "fecha"): Expense[] {
+   if (order === "fecha") return [...expenses].sort((one, other) => one.date.localeCompare(other.date));
+   if (order === "importe") return [...expenses].sort((one, other) => other.cents - one.cents);
+@@ -121,10 +127,20 @@ const commands: Record<string, Command> = {
+     if (!repeated.length) return "Sin duplicados";
+     return repeated.map(([first, ...rest]) => `${rest.length + 1} veces: ${[formatDate(first.date), formatMoney(first.cents), first.description].join("  ")}`).join("\n");
+   },
++  avisos: (args, io) => {
++    const { expenses, positional, flags } = selected(args, io, ["mes"]);
++    required(flags, "mes");
++    if (positional[1] === undefined) throw new Error("Falta el fichero de presupuestos");
++    const budgets = parseBudgets(io.read(positional[1]));
++    const over = [...totalsBy(expenses, (expense) => expense.category)]
++      .map(([category, cents]): [string, number] => [category, cents - (budgetFor(budgets, category)?.cents ?? Infinity)])
++      .filter(([, cents]) => cents > 0);
++    if (!over.length) return "Todo en orden";
++    return biggestFirst(new Map(over)).map(([category, cents]) => `${category}: te pasas ${formatMoney(cents)}`).join("\n");
++  },
+   media: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes"]);
+-    if (!flags.has("mes")) throw new Error("Falta --mes");
+-    const month = flags.get("mes")!;
++    const month = required(flags, "mes");
+     return `Media diaria en ${monthAndYear(month)}: ${formatMoney(Math.round(sum(expenses) / daysInMonth(month)))}`;
+   },
+   informe: (args, io) => {
+@@ -133,8 +149,7 @@ const commands: Record<string, Command> = {
+       const rows = byKey(totalsBy(expenses, (expense) => monthOf(expense.date))).map(([month, cents]) => `  ${capitalized(monthName(month))}: ${formatMoney(cents)}`);
+       return [flags.get("anio")!, ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");
+     }
+-    if (!flags.has("mes")) throw new Error("Falta --mes");
+-    const month = flags.get("mes")!;
++    const month = required(flags, "mes");
+     const budgets = flags.has("presupuestos") ? parseBudgets(io.read(flags.get("presupuestos")!)) : [];
+     const rows = biggestFirst(totalsBy(expenses, (expense) => expense.category)).map(([category, cents]) => `  ${category}: ${spent(cents, budgetFor(budgets, category))}`);
+     return [capitalized(monthAndYear(month)), ...rows, `Total: ${formatMoney(sum(expenses))}`].join("\n");

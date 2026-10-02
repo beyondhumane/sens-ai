@@ -1,0 +1,69 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index c9c7796..dcf87e8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,6 +1,6 @@
+ import { type Budget, budgetFor, formatBudgets, parseBudgets, withBudget } from "./budgets";
+ import { appended, formatExpenses, parseExpenses } from "./csv";
+-import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth } from "./dates";
++import { capitalized, formatDate, monthName, monthOf, parseDay, parseMonth, weekdayName, weekOf } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney, parseAmount } from "./money";
+@@ -82,6 +82,15 @@ const commands: Record<string, Command> = {
+     io.write(positional[1], formatExpenses(expenses));
+     return `Exportados ${expenses.length} gastos a ${positional[1]}`;
+   },
++  semana: (args, io) => {
++    const { expenses, positional } = selected(args, io, []);
++    if (positional[1] === undefined) throw new Error("Falta la fecha");
++    const { monday, sunday } = weekOf(parseDay(positional[1]));
++    const week = expenses.filter((expense) => expense.date >= monday && expense.date <= sunday);
++    const days = [...totalsBy(week, (expense) => expense.date)].sort(([one], [other]) => one.localeCompare(other));
++    const rows = days.map(([day, cents]) => `${capitalized(weekdayName(day))} ${formatDate(day)}: ${formatMoney(cents)}`);
++    return [...rows, `Total: ${formatMoney(sum(week))}`].join("\n");
++  },
+   informe: (args, io) => {
+     const { expenses, flags } = selected(args, io, ["mes", "presupuestos"]);
+     if (!flags.has("mes")) throw new Error("Falta --mes");
+diff --git a/src/dates.ts b/src/dates.ts
+index 41a3e57..7c84600 100644
+--- a/src/dates.ts
++++ b/src/dates.ts
+@@ -4,7 +4,7 @@ export function formatDate(iso: string): string {
+ }
+ 
+ export function parseDay(text: string): string {
+-  const day = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : undefined;
++  const day = /^\d{4}-\d{2}-\d{2}$/.test(text) ? utc(text) : undefined;
+   if (!day || Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== text) throw new Error(`Fecha no válida: ${text}`);
+   return text;
+ }
+@@ -24,6 +24,27 @@ export function monthName(month: string): string {
+   return MONTHS[Number(month.slice(5, 7)) - 1];
+ }
+ 
++const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
++
++function utc(iso: string): Date {
++  return new Date(`${iso}T00:00:00Z`);
++}
++
++export function addDays(iso: string, days: number): string {
++  const day = utc(iso);
++  day.setUTCDate(day.getUTCDate() + days);
++  return day.toISOString().slice(0, 10);
++}
++
++export function weekdayName(iso: string): string {
++  return WEEKDAYS[utc(iso).getUTCDay()];
++}
++
++export function weekOf(iso: string): { monday: string; sunday: string } {
++  const monday = addDays(iso, -((utc(iso).getUTCDay() + 6) % 7));
++  return { monday, sunday: addDays(monday, 6) };
++}
++
+ export function capitalized(text: string): string {
+   return text.charAt(0).toLocaleUpperCase() + text.slice(1);
+ }

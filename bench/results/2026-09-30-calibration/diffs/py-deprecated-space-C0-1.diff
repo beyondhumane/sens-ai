@@ -1,0 +1,31 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index bc04f64..516c313 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1159,7 +1159,7 @@ class Command:
+             text = ""
+ 
+         if self.deprecated:
+-            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}"
++            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}".strip()
+ 
+         return text.strip()
+ 
+@@ -1189,7 +1189,7 @@ class Command:
+             text = ""
+ 
+         if self.deprecated:
+-            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}"
++            text = f"{_(text)} {_format_deprecated_label(self.deprecated)}".strip()
+ 
+         if text:
+             formatter.write_paragraph()
+@@ -2826,7 +2826,7 @@ class Option(Parameter):
+ 
+         if deprecated:
+             label = _format_deprecated_label(deprecated)
+-            help = f"{help} {label}" if help is not None else label
++            help = f"{help} {label}" if help else label
+ 
+         self.prompt = prompt_text
+         self.confirmation_prompt = confirmation_prompt

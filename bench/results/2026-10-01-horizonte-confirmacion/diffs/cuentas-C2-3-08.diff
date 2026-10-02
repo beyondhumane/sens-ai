@@ -1,0 +1,77 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 3437eae..26f10f2 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { parseExpenses } from "./csv";
++import { formatDescription, parseExpenses } from "./csv";
+ import { formatDate, isValidDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -79,7 +79,7 @@ const commands: Record<string, Command> = {
+     if (category.includes(",")) throw new Error(`Categoría no válida: ${category}`);
+     const text = io.read(path);
+     const expense: Expense = { date, cents, category, description };
+-    io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${date},${(cents / 100).toFixed(2)},${category},${description}\n`);
++    io.write(path, `${text}${text.endsWith("\n") ? "" : "\n"}${date},${(cents / 100).toFixed(2)},${category},${formatDescription(description)}\n`);
+     return `Añadido: ${formatLine(expense)}`;
+   },
+   total: (args, io) => {
+diff --git a/src/csv.ts b/src/csv.ts
+index f21bd0a..d2e4360 100644
+--- a/src/csv.ts
++++ b/src/csv.ts
+@@ -2,6 +2,12 @@ import type { Expense } from "./expense";
+ 
+ export const HEADER = "fecha,importe,categoria,descripcion";
+ 
++const QUOTED = /^"(.*)"$/;
++
++export function formatDescription(description: string): string {
++  return /[",]/.test(description) ? `"${description.replaceAll('"', '""')}"` : description;
++}
++
+ export function parseExpenses(text: string): Expense[] {
+   const [header, ...rows] = text.trim().split(/\r?\n/);
+   if (header !== HEADER) throw new Error(`Cabecera desconocida: ${header}`);
+@@ -9,6 +15,9 @@ export function parseExpenses(text: string): Expense[] {
+     .filter((row) => row.trim() !== "")
+     .map((row) => {
+       const [date, amount, category, ...rest] = row.split(",");
+-      return { date, cents: Math.round(Number(amount) * 100), category, description: rest.join(",") };
++      const raw = rest.join(",");
++      const quoted = QUOTED.exec(raw);
++      const description = quoted ? quoted[1].replaceAll('""', '"') : raw;
++      return { date, cents: Math.round(Number(amount) * 100), category, description };
+     });
+ }
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 1fdd70f..db69ae9 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -39,6 +39,25 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el texto a buscar" });
+   });
+ 
++  it("reads quoted descriptions and writes them quoted when they have commas or quotes", () => {
++    const gastos = `${GASTOS}2026-03-05,18.00,Ocio,"Cena, con amigos"
++2026-03-06,2.00,Ocio,"Dijo ""hola"""
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["lista", "gastos.csv", "--desde", "2026-03-05"], io).output)).toBe(
++      '05/03/2026  Ocio  18,00 €  Cena, con amigos\n06/03/2026  Ocio  2,00 €  Dijo "hola"',
++    );
++    expect(shown(run(["buscar", "gastos.csv", "hola"], io).output)).toBe('06/03/2026  Ocio  2,00 €  Dijo "hola"');
++    expect(shown(run(["total", "gastos.csv"], io).output)).toBe("Total: 77,70 €");
++
++    run(["añadir", "gastos.csv", "2026-03-07", "1", "Ocio", "Pan,", 'dijo "hola"'], io);
++    run(["añadir", "gastos.csv", "2026-03-08", "1", "Ocio", "Sin", "comas"], io);
++    expect(io.files["gastos.csv"]).toBe(`${gastos}2026-03-07,1.00,Ocio,"Pan, dijo ""hola"""\n2026-03-08,1.00,Ocio,Sin comas\n`);
++    expect(shown(run(["lista", "gastos.csv", "--desde", "2026-03-07", "--hasta", "2026-03-07"], io).output)).toBe(
++      '07/03/2026  Ocio  1,00 €  Pan, dijo "hola"',
++    );
++  });
++
+   it("appends an expense, validating date and amount first", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const ran = run(["añadir", "gastos.csv", "2026-03-19", "4.2", "Comida", "Churros", "con", "chocolate"], io);

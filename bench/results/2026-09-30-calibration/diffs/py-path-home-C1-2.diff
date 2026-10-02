@@ -1,0 +1,44 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 0eb8462..3fc264e 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -1059,8 +1059,7 @@ class Path(ParamType[str | bytes | os.PathLike[str]]):
+     :param writable: if true, a writable check is performed.
+     :param executable: if true, an executable check is performed.
+     :param resolve_path: Make the value absolute and resolve any
+-        symlinks. A ``~`` is not expanded, as this is supposed to be
+-        done by the shell only.
++        symlinks. A leading ``~`` is expanded to the home directory.
+     :param allow_dash: Allow a single dash as a value, which indicates
+         a standard stream (but does not open it). Use
+         :func:`~click.open_file` to handle opening this value.
+@@ -1156,7 +1155,7 @@ class Path(ParamType[str | bytes | os.PathLike[str]]):
+ 
+         if not is_dash:
+             if self.resolve_path:
+-                rv = os.path.realpath(rv)
++                rv = os.path.realpath(os.path.expanduser(rv))
+ 
+             try:
+                 st = os.stat(rv)
+diff --git a/tests/test_types.py b/tests/test_types.py
+index 63992cc..8db3c5b 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -190,6 +190,16 @@ def test_path_resolve_symlink(tmp_path, runner):
+     assert rel_rv == test_file_str
+ 
+ 
++def test_path_resolve_expands_home(tmp_path, monkeypatch):
++    monkeypatch.setenv("HOME", os.fspath(tmp_path))
++    monkeypatch.setenv("USERPROFILE", os.fspath(tmp_path))
++    (tmp_path / "notes.txt").write_text("")
++
++    path_type = click.Path(exists=True, resolve_path=True)
++    rv = path_type.convert("~/notes.txt", None, None)
++    assert rv == os.path.realpath(tmp_path / "notes.txt")
++
++
+ def _non_utf8_filenames_supported():
+     with tempfile.TemporaryDirectory(prefix="click-pytest-") as tempdir:
+         try:

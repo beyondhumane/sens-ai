@@ -1,0 +1,35 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2bf7d87..a109b1e 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -315,7 +315,7 @@ const commands: Record<string, Command> = {
+       .join("\n");
+   },
+   categorias: (args, io) => {
+-    return categoryTotals(load(args[0], io))
++    return categoryTotals(inMonth(load(args[0], io), monthFlag(args)))
+       .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
+       .join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 796b9fa..c69effa 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -144,6 +144,17 @@ describe("cuentas", () => {
+     expect(shown(ran.output)).toBe("Ocio: 90,00 €\nComida: 44,65 €\nAgua: 10,00 €\nZapatos: 10,00 €");
+   });
+ 
++  it("limits categories to one month with --mes and rejects a bad month", () => {
++    const gastos = `fecha,importe,categoria,descripcion
++2026-03-01,12.50,Comida,Pan
++2026-03-02,60.00,Ocio,Cine
++2026-04-01,99.00,Ocio,Concierto
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["categorias", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Ocio: 60,00 €\nComida: 12,50 €");
++    expect(run(["categorias", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("reports one month by category, biggest first, with the total", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

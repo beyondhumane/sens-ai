@@ -1,0 +1,40 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 2912736..4fbc9c8 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -180,6 +180,14 @@ const commands: Record<string, Command> = {
+     io.write(output, `${HEADER}\n${expenses.map(formatExpense).join("")}`);
+     return `Exportados ${expenses.length} gastos a ${output}`;
+   },
++  media: (args, io) => {
++    const { month, file } = parseMonthFlag(args);
++    if (month === undefined) throw new Error("Falta el mes");
++    const expenses = load(file, io).filter((expense) => expense.date.startsWith(`${month}-`));
++    const [year, number] = month.split("-").map(Number);
++    const days = new Date(Date.UTC(year, number, 0)).getUTCDate();
++    return `Media diaria en ${MONTHS[number - 1].toLowerCase()} de ${year}: ${formatMoney(Math.round(sumCents(expenses) / days))}`;
++  },
+   semana: ([path, date = ""], io) => {
+     if (!path) throw new Error("Falta el fichero de gastos");
+     if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 7abf387..b1ef638 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -171,6 +171,16 @@ describe("cuentas", () => {
+     expect(run(["informe", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("averages a month per day counting every day of the month", () => {
++    const gastos = `${GASTOS}2026-04-01,99.00,Viajes,Tren
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["media", "gastos.csv", "--mes", "2026-03"], io).output)).toBe("Media diaria en marzo de 2026: 1,86 €");
++    expect(shown(run(["media", "--mes", "2026-02", "gastos.csv"], io).output)).toBe("Media diaria en febrero de 2026: 0,00 €");
++    expect(run(["media", "gastos.csv"], io)).toEqual({ code: 1, output: "Falta el mes" });
++    expect(run(["media", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++  });
++
+   it("shows what is left or exceeded for categories with a budget", () => {
+     const gastos = `${GASTOS}2026-03-05,60.00,Ocio,Cine
+ 2026-03-06,32.15,Comida,Cena

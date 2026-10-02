@@ -1,0 +1,1 @@
+Orden nueva: `avisos <fichero> <presupuestos> --mes 2026-03`. Una línea por cada categoría que ese mes se ha pasado de su presupuesto, de la que más se pasa a la que menos, con el nombre de la categoría como está en los gastos: `Ocio: te pasas 5,00 €`. Si ninguna se pasa: `Todo en orden`.

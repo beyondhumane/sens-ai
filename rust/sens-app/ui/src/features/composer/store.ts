@@ -348,10 +348,12 @@ export async function send(text: string, pane: Pane = focused()) {
   await sendChat({ message, shownFiles: files, pictures: pasted.map((picture) => picture.url) }, currentSettings(pane), pane);
 }
 
-export async function compactNow(pane: Pane = focused()) {
+export async function sendPlain(text: string, pane: Pane = focused()) {
   if (pane.chat.getState().busy || !pane.desk.getState().session) return;
-  await sendChat({ message: { text: COMPACT, files: [], images: [] }, shownFiles: [], pictures: [] }, currentSettings(pane), pane);
+  await sendChat({ message: { text, files: [], images: [] }, shownFiles: [], pictures: [] }, currentSettings(pane), pane);
 }
+
+export const compactNow = (pane: Pane = focused()) => sendPlain(COMPACT, pane);
 
 export function hearDrops() {
   getCurrentWindow().onDragDropEvent(({ payload }) => {

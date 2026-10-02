@@ -1,0 +1,40 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a0b3fa3..12f4900 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -78,7 +78,13 @@ const commands: Record<string, Command> = {
+   },
+   total: (args, io) => {
+     const month = monthFlag(args);
+-    return `Total: ${formatMoney(sumCents(inMonth(load(args[0], io), month)))}`;
++    const flag = args.indexOf("--categoria");
++    const category = flag === -1 ? undefined : args[flag + 1];
++    if (flag !== -1 && !category) throw new Error("Falta la categoría");
++    const expenses = inMonth(load(args[0], io), month).filter(
++      (expense) => category === undefined || plain(expense.category) === plain(category),
++    );
++    return `Total: ${formatMoney(sumCents(expenses))}`;
+   },
+   informe: (args, io) => {
+     const month = monthFlag(args);
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index e3d5b46..6a36797 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -79,6 +79,16 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
+   });
+ 
++  it("totals one category with --categoria, ignoring case and accents, and combines it with --mes", () => {
++    const gastos = `${GASTOS}2026-04-01,10.00,Comida,Cena\n2026-04-02,5.00,Ocio,Cine\n`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    const total = (...flags: string[]) => shown(run(["total", "gastos.csv", ...flags], io).output);
++    expect(total("--categoria", "comida")).toBe("Total: 22,50 €");
++    expect(total("--categoria", "COMÍDA", "--mes", "2026-04")).toBe("Total: 10,00 €");
++    expect(total("--mes", "2026-03", "--categoria", "Ocio")).toBe("Total: 0,00 €");
++    expect(run(["total", "gastos.csv", "--categoria"], io)).toEqual({ code: 1, output: "Falta la categoría" });
++  });
++
+   it("sums each category, biggest first, ties alphabetical", () => {
+     const gastos = `fecha,importe,categoria,descripcion
+ 2026-03-01,12.50,Comida,Pan

@@ -1,0 +1,33 @@
+diff --git a/blog/text.py b/blog/text.py
+index d450c78..831b39a 100644
+--- a/blog/text.py
++++ b/blog/text.py
+@@ -1,4 +1,5 @@
+ import re
++import unicodedata
+ 
+ MAX_TITLE = 200
+ MAX_SLUG = 60
+@@ -7,5 +8,6 @@ MAX_SLUG = 60
+ def slugify(title: str) -> str:
+     if len(title) > MAX_TITLE:
+         raise ValueError(f"title longer than {MAX_TITLE} characters")
+-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
++    folded = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
++    slug = re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
+     return slug[:MAX_SLUG].rstrip("-")
+diff --git a/tests/test_text.py b/tests/test_text.py
+index b3ded8f..dd12b9f 100644
+--- a/tests/test_text.py
++++ b/tests/test_text.py
+@@ -8,6 +8,10 @@ class SlugifyTest(unittest.TestCase):
+     def test_plain_titles_become_lowercase_words_joined_by_hyphens(self):
+         self.assertEqual(slugify("Hello, World!"), "hello-world")
+ 
++    def test_accents_are_folded_to_their_base_letters(self):
++        self.assertEqual(slugify("Canción de otoño"), "cancion-de-otono")
++        self.assertEqual(articles.url("Canción de otoño"), "/articulos/cancion-de-otono")
++
+     def test_slugs_are_capped_without_a_trailing_hyphen(self):
+         slug = slugify("word " * 40)
+         self.assertLessEqual(len(slug), MAX_SLUG)

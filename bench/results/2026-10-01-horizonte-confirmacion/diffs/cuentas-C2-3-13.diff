@@ -1,0 +1,62 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 9a06333..4a39751 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -42,6 +42,8 @@ function parseBudgets(text: string): { category: string; cents: number }[] {
+ 
+ const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+ 
++const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
++
+ function parseMonthFlag(args: string[]): { month: string | undefined; file: string | undefined; positional: string[] } {
+   const flag = args.indexOf("--mes");
+   const month = flag === -1 ? undefined : args[flag + 1];
+@@ -133,6 +135,23 @@ const commands: Record<string, Command> = {
+     io.write(output, `${HEADER}\n${expenses.map(formatExpense).join("")}`);
+     return `Exportados ${expenses.length} gastos a ${output}`;
+   },
++  semana: ([path, date = ""], io) => {
++    if (!path) throw new Error("Falta el fichero de gastos");
++    if (!isValidDate(date)) throw new Error(`Fecha no válida: ${date}`);
++    const day = new Date(`${date}T00:00:00Z`);
++    const monday = new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
++    const sunday = new Date(new Date(`${monday}T00:00:00Z`).getTime() + 6 * 86_400_000).toISOString().slice(0, 10);
++    const expenses = load(path, io).filter((expense) => expense.date >= monday && expense.date <= sunday);
++    const perDay = new Map<string, number>();
++    for (const { date: when, cents } of expenses) perDay.set(when, (perDay.get(when) ?? 0) + cents);
++    return [
++      ...[...perDay].sort(([a], [b]) => a.localeCompare(b)).map(([when, cents]) => {
++        const name = WEEKDAYS[new Date(`${when}T00:00:00Z`).getUTCDay()];
++        return `${name} ${formatDate(when)}: ${formatMoney(cents)}`;
++      }),
++      `Total: ${formatMoney(sumCents(expenses))}`,
++    ].join("\n");
++  },
+   informe: (args, io) => {
+     const flag = args.indexOf("--presupuestos");
+     const budgetPath = flag === -1 ? undefined : args[flag + 1];
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index a4c231d..6b89adc 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -121,6 +121,20 @@ describe("cuentas", () => {
+     expect(run(["categorias"], memoryIo({}))).toEqual({ code: 1, output: "Falta el fichero de gastos" });
+   });
+ 
++  it("shows the expenses of the Monday-to-Sunday week of a date, day by day", () => {
++    const gastos = `${GASTOS}2026-03-04,3.10,Comida,Café
++2026-03-04,1.00,Comida,Pan
++2026-03-08,2.00,Ocio,Cine
++2026-03-09,9.00,Ocio,Lunes siguiente
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["semana", "gastos.csv", "2026-03-08"], io).output)).toBe(
++      "Lunes 02/03/2026: 45,20 €\nMiércoles 04/03/2026: 4,10 €\nDomingo 08/03/2026: 2,00 €\nTotal: 51,30 €",
++    );
++    expect(shown(run(["semana", "gastos.csv", "2026-03-04"], io).output)).toBe(shown(run(["semana", "gastos.csv", "2026-03-02"], io).output));
++    expect(run(["semana", "gastos.csv", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  });
++
+   it("reports a month by category, biggest first, with the total", () => {
+     const gastos = `${GASTOS}2026-03-05,60.00,Ocio,Cine
+ 2026-03-06,32.15,Comida,Cena

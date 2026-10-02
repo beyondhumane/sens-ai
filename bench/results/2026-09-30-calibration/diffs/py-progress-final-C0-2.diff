@@ -1,0 +1,18 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index d4912ee..3cc172a 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -382,6 +382,13 @@ class ProgressBar(t.Generic[V]):
+                 yield rv
+                 self.update(1)
+ 
++            # Flush steps still pending below the update_min_steps threshold
++            # so the bar ends at its full length.
++            if self._completed_intervals > 0:
++                self.make_step(self._completed_intervals)
++                self.render_progress()
++                self._completed_intervals = 0
++
+             self.finish()
+             self.render_progress()
+ 

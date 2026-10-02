@@ -1,0 +1,1 @@
+`informe` con `--mes` tiene que aceptar `--csv <salida>`: además de mostrar el informe, lo guarda en un CSV con cabecera `categoria,total` y una línea por categoría en el mismo orden, con el total escrito con punto (`60.00`).

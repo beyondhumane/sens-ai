@@ -1,6 +1,7 @@
 import { Fragment, memo, useEffect, useState, type ReactNode } from "react";
 import { compact, seconds, whole } from "../../shared/format.js";
 import { Ask } from "./Ask";
+import { Held } from "./Held";
 import { Run } from "./Run";
 import { Said } from "./Said";
 import { t } from "./thread.copy";
@@ -41,6 +42,8 @@ export function Flow({ turn }: { turn: ReplyTurn }) {
             return <Foot key={piece.key} part={piece} />;
           case "compacted":
             return <Note key={piece.key} part={piece} />;
+          case "held":
+            return <Held key={piece.key} part={piece} />;
         }
       })}
     </div>

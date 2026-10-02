@@ -1,0 +1,62 @@
+diff --git a/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx b/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
+index 46f4edd..a0f6e2a 100644
+--- a/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
++++ b/rust/sens-app/ui/src/features/artifacts/Shelf.test.tsx
+@@ -83,6 +83,13 @@ describe("the shelf", () => {
+     expect(screen.getByRole("tab", { name: /Ficheros/ }).textContent).toBe("Ficheros 2");
+   });
+ 
++  it("writes the size after the project when it is known", async () => {
++    ipc.commands.artifacts.mockResolvedValue([artifact("plan.md", { bytes: 1_258_291 }), artifact("informe.html", { bytes: null })]);
++    await open();
++    expect(card("plan.md").querySelector(".sub")?.textContent).toMatch(/^demo · 1[.,]2 MB$/);
++    expect(card("informe.html").querySelector(".sub")?.textContent).toBe("demo");
++  });
++
+   it("opens text in the file panel, pages in the browser, and the rest outside", async () => {
+     await open();
+     await act(async () => fireEvent.click(within(card("plan.md")).getByRole("button", { name: /plan.md/ })));
+diff --git a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+index e71efb0..3d43fde 100644
+--- a/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
++++ b/rust/sens-app/ui/src/features/artifacts/Shelf.tsx
+@@ -10,7 +10,7 @@ import { useSeen } from "../../shared/useSeen";
+ import { CountTabs, ProjectFocus, ViewSeek } from "../../shared/ViewParts";
+ import { plain } from "../market/search.js";
+ import { t } from "./copy";
+-import { KIND_ICON, keeps, keptTally, kindOf, originOf, pictureKey, saying, sessionOf, shelfTabs, type ShelfTab } from "./items";
++import { KIND_ICON, keeps, keptTally, kindOf, originOf, pictureKey, saying, sessionOf, shelfTabs, subOf, type ShelfTab } from "./items";
+ import { artifacts, openArtifact, pickTab, picture } from "./store";
+ 
+ export function Shelf() {
+@@ -119,7 +119,7 @@ function ArtifactCard({ item }: { item: Artifact }) {
+       </div>
+       <button className="card-main" title={item.target} onClick={(event) => openArtifact(item, event.currentTarget)}>
+         <span className={item.kind === "link" ? "name url" : "name"}>{item.name}</span>
+-        <span className="sub">{item.project}</span>
++        <span className="sub">{subOf(item)}</span>
+       </button>
+       <div className="card-controls">
+         <Origin item={item} />
+diff --git a/rust/sens-app/ui/src/features/artifacts/items.ts b/rust/sens-app/ui/src/features/artifacts/items.ts
+index 3966046..6617dcc 100644
+--- a/rust/sens-app/ui/src/features/artifacts/items.ts
++++ b/rust/sens-app/ui/src/features/artifacts/items.ts
+@@ -1,5 +1,5 @@
+ import type { Artifact } from "../../ipc/types";
+-import { PAGE, TEXTUAL } from "../../shared/format.js";
++import { PAGE, TEXTUAL, weigh } from "../../shared/format.js";
+ import { ICONS } from "../../shared/icons.js";
+ import { plain } from "../market/search.js";
+ import { t } from "./copy";
+@@ -20,7 +20,9 @@ export const sessionOf = (item: Artifact) => (item.session ? item.sessionTitle |
+ 
+ export const originOf = (item: Artifact) => [item.project, sessionOf(item)].filter(Boolean).join(" · ");
+ 
+-export const saying = (needle: string) => (item: Artifact) =>
++export const subOf = (item: Artifact) => [item.project, item.bytes == null ? "" : weigh(item.bytes)].filter(Boolean).join(" · ");
++
++export const saying =(needle: string) => (item: Artifact) =>
+   plain([item.name, item.project, sessionOf(item)].filter(Boolean).join("\n")).includes(needle);
+ 
+ export const pictureKey = (item: Artifact) => `${item.at}:${item.target}`;

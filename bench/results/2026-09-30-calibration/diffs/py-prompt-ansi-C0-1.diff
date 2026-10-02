@@ -1,0 +1,27 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..1231fc4 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -11,6 +11,9 @@ from contextlib import AbstractContextManager
+ from contextlib import redirect_stdout
+ from gettext import gettext as _
+ 
++from . import _compat
++from ._compat import _default_text_stderr
++from ._compat import _default_text_stdout
+ from ._compat import isatty
+ from ._compat import strip_ansi
+ from .exceptions import Abort
+@@ -84,6 +87,12 @@ def _readline_prompt(func: t.Callable[[str], str], text: str, err: bool) -> str:
+     """Call a prompt function, passing the full prompt on non-Windows so
+     readline can handle line editing and cursor positioning correctly.
+     """
++    stream = _default_text_stderr() if err else _default_text_stdout()
++    if stream is not None and _compat.should_strip_ansi(
++        stream, resolve_color_default()
++    ):
++        text = strip_ansi(text)
++
+     if err:
+         with redirect_stdout(sys.stderr):
+             return func(text)

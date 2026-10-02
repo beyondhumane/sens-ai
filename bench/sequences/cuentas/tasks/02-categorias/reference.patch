@@ -1,0 +1,49 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 58ca236..1854752 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -3,6 +3,7 @@ import { formatDate } from "./dates";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+ import { formatMoney } from "./money";
++import { biggestFirst, sum, totalsBy } from "./totals";
+ 
+ export interface Ran {
+   code: number;
+@@ -22,7 +23,11 @@ function line(expense: Expense): string {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => load(args[0], io).map(line).join("\n"),
+-  total: (args, io) => `Total: ${formatMoney(load(args[0], io).reduce((sum, expense) => sum + expense.cents, 0))}`,
++  total: (args, io) => `Total: ${formatMoney(sum(load(args[0], io)))}`,
++  categorias: (args, io) =>
++    biggestFirst(totalsBy(load(args[0], io), (expense) => expense.category))
++      .map(([category, cents]) => `${category}: ${formatMoney(cents)}`)
++      .join("\n"),
+ };
+ 
+ export function run(argv: string[], io: Io): Ran {
+diff --git a/src/totals.ts b/src/totals.ts
+new file mode 100644
+index 0000000..98f8b19
+--- /dev/null
++++ b/src/totals.ts
+@@ -0,0 +1,18 @@
++import type { Expense } from "./expense";
++
++export function sum(expenses: Expense[]): number {
++  return expenses.reduce((total, expense) => total + expense.cents, 0);
++}
++
++export function totalsBy(expenses: Expense[], key: (expense: Expense) => string): Map<string, number> {
++  const totals = new Map<string, number>();
++  for (const expense of expenses) {
++    const name = key(expense);
++    totals.set(name, (totals.get(name) ?? 0) + expense.cents);
++  }
++  return totals;
++}
++
++export function biggestFirst(totals: Map<string, number>): [string, number][] {
++  return [...totals].sort(([one, a], [other, b]) => b - a || one.localeCompare(other));
++}

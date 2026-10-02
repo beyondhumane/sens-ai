@@ -1,0 +1,80 @@
+diff --git a/README.md b/README.md
+index 9339da9..894d34f 100644
+--- a/README.md
++++ b/README.md
+@@ -21,6 +21,7 @@ fecha,importe,categoria,descripcion
+ | `categorias <fichero>` | Lo gastado en cada categoría (`Ocio: 90,00 €`), una por línea, de más a menos y, si empatan, por orden alfabético |
+ | `informe <fichero> --mes AAAA-MM` | Informe del mes: `Marzo de 2026`, una línea por categoría con dos espacios delante (`  Ocio: 60,00 €`), de más a menos, y al final `Total: 104,65 €`. `Falta el mes` sin `--mes` |
+ | `añadir <fichero> <fecha> <importe> <categoría> <descripción>` | Añade un gasto al final del fichero y responde `Añadido: 19/03/2026  Comida  4,20 €  Churros`. La fecha va como `2026-03-19` y debe existir; el importe con punto, mayor que cero y con dos decimales como mucho. Si algo no vale no toca el fichero: `Fecha no válida: 2026-02-30`, `Importe no válido: -3` |
++| `exportar <fichero> <salida> [--mes AAAA-MM]` | Escribe en `<salida>` los gastos (solo los de ese mes con `--mes`) con la misma cabecera y formato, y responde `Exportados 5 gastos a marzo.csv`. `Falta el fichero de salida` si no se indica |
+ 
+ Los errores salen como una línea de texto y la orden termina con código 1.
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index 6a9c255..a439913 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,4 +1,4 @@
+-import { csvField, parseExpenses } from "./csv";
++import { csvField, HEADER, parseExpenses } from "./csv";
+ import { formatDate, isRealDate } from "./date";
+ import type { Expense } from "./expense";
+ import type { Io } from "./io";
+@@ -92,6 +92,17 @@ const commands: Record<string, Command> = {
+     io.write(path!, `${text}${separator}${date},${(expense.cents / 100).toFixed(2)},${category},${csvField(description)}\n`);
+     return `Añadido: ${line(expense)}`;
+   },
++  exportar: (args, io) => {
++    const { month, rest } = parseMonth(args);
++    const expenses = load(rest[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
++    const output = rest[1];
++    if (!output) throw new Error("Falta el fichero de salida");
++    const rows = expenses.map(
++      (e) => `${e.date},${(e.cents / 100).toFixed(2)},${csvField(e.category)},${csvField(e.description)}`,
++    );
++    io.write(output, `${[HEADER, ...rows].join("\n")}\n`);
++    return `Exportados ${expenses.length} gastos a ${output}`;
++  },
+   total: (args, io) => {
+     const { month, rest } = parseMonth(args);
+     const expenses = load(rest[0], io).filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 2ef0d5e..d81169a 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -129,6 +129,35 @@ describe("añadir", () => {
+   });
+ });
+ 
++describe("exportar", () => {
++  const CSV = `fecha,importe,categoria,descripcion
++2026-02-28,1.00,Ocio,Antes
++2026-03-01,12.50,Comida,"Pan, y fruta"
++2026-03-31,2.00,Ocio,Fin
++2026-04-01,3.00,Ocio,Despues
++`;
++
++  it("exports only the month given, with the same header and format", () => {
++    const io = memoryIo({ "g.csv": CSV });
++    expect(run(["exportar", "g.csv", "marzo.csv", "--mes", "2026-03"], io)).toEqual({
++      code: 0,
++      output: "Exportados 2 gastos a marzo.csv",
++    });
++    expect(io.files["marzo.csv"]).toBe(
++      'fecha,importe,categoria,descripcion\n2026-03-01,12.50,Comida,"Pan, y fruta"\n2026-03-31,2.00,Ocio,Fin\n',
++    );
++  });
++
++  it("exports everything without --mes and validates input", () => {
++    const io = memoryIo({ "g.csv": CSV });
++    expect(run(["exportar", "g.csv", "todo.csv"], io).output).toBe("Exportados 4 gastos a todo.csv");
++    expect(io.files["todo.csv"]).toBe(CSV);
++    expect(run(["exportar", "g.csv"], io)).toEqual({ code: 1, output: "Falta el fichero de salida" });
++    expect(run(["exportar", "g.csv", "x.csv", "--mes", "2026-13"], io)).toEqual({ code: 1, output: "Mes no válido: 2026-13" });
++    expect("x.csv" in io.files).toBe(false);
++  });
++});
++
+ describe("comillas CSV", () => {
+   const QUOTED = `fecha,importe,categoria,descripcion
+ 2026-03-05,18.00,Ocio,"Cena, con amigos"

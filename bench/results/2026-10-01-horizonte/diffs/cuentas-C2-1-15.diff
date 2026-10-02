@@ -1,0 +1,38 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index d823217..f190842 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -26,8 +26,9 @@ const isRealDate = (text: string) =>
+   /^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toJSON()?.slice(0, 10) === text;
+ 
+ function parseCents(amount: string): number {
+-  const cents = Math.round(Number(amount) * 100);
+-  if (!/^\d+(\.\d{1,2})?$/.test(amount) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
++  const european = /^(\d+|\d{1,3}(\.\d{3})+),\d{1,2}$/.test(amount);
++  const cents = Math.round(Number(european ? amount.replaceAll(".", "").replace(",", ".") : amount) * 100);
++  if (!(european || /^\d+(\.\d{1,2})?$/.test(amount)) || cents <= 0) throw new Error(`Importe no válido: ${amount}`);
+   return cents;
+ }
+ 
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index f7a5969..f09e7e3 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -99,6 +99,17 @@ describe("cuentas", () => {
+     expect(run(["total", "gastos.csv"], io).code).toBe(0);
+   });
+ 
++  it("accepts amounts with a decimal comma and dots as thousands", () => {
++    const io = memoryIo({ "g.csv": GASTOS });
++    run(["añadir", "g.csv", "2026-03-19", "4,20", "Comida", "Churros"], io);
++    run(["añadir", "g.csv", "2026-03-19", "1.234,56", "Ocio", "Concierto"], io);
++    expect(io.files["g.csv"]).toBe(`${GASTOS}2026-03-19,4.20,Comida,Churros\n2026-03-19,1234.56,Ocio,Concierto\n`);
++    run(["presupuesto", "p.csv", "Comida", "1.234,5"], io);
++    expect(io.files["p.csv"]).toContain("Comida,1234.50");
++    for (const bad of ["1,234.56", "1.23,4", "1,234,5", ",5", "4,", "0,00"])
++      expect(run(["añadir", "g.csv", "2026-03-19", bad, "Comida", "X"], io)).toEqual({ code: 1, output: `Importe no válido: ${bad}` });
++  });
++
+   it("rejects invalid expenses without touching the file", () => {
+     const io = memoryIo({ "gastos.csv": GASTOS });
+     const add = (date: string, amount: string) => run(["añadir", "gastos.csv", date, amount, "Comida", "Churros"], io);

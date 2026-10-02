@@ -1,0 +1,63 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index b152d5b..ee99322 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -50,6 +50,12 @@ function dateFlag(args: string[], name: string): string | undefined {
+   return date;
+ }
+ 
++function inRange(expenses: Expense[], args: string[]): Expense[] {
++  const from = dateFlag(args, "--desde");
++  const to = dateFlag(args, "--hasta");
++  return expenses.filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to));
++}
++
+ const inMonth =(expenses: Expense[], month: string | undefined) =>
+   expenses.filter((expense) => month === undefined || expense.date.startsWith(`${month}-`));
+ 
+@@ -65,20 +71,18 @@ function categoryTotals(expenses: Expense[]): [string, number][] {
+ 
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+-    const from = dateFlag(args, "--desde");
+-    const to = dateFlag(args, "--hasta");
+     const orderFlag = args.indexOf("--orden");
+     const order = orderFlag === -1 ? "fecha" : (args[orderFlag + 1] ?? "");
+     if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order}`);
+-    return load(args[0], io)
+-      .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++    return inRange(load(args[0], io), args)
+       .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(line)
+       .join("\n");
+   },
+   buscar: (args, io) => {
+-    const needle = plain(args.slice(1).join(" "));
+-    const found = load(args[0], io).filter(
++    const words = args.slice(1).filter((word, i, rest) => ![word, rest[i - 1]].some((w) => w === "--desde" || w === "--hasta"));
++    const needle = plain(words.join(" "));
++    const found = inRange(load(args[0], io), args).filter(
+       (expense) => plain(expense.description).includes(needle) || plain(expense.category).includes(needle),
+     );
+     return found.length === 0 ? "Sin resultados" : found.map(line).join("\n");
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index a609390..fe581a8 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -220,6 +220,16 @@ describe("cuentas", () => {
+     expect(run(["buscar", "gastos.csv", "zzz"], io)).toEqual({ code: 0, output: "Sin resultados" });
+   });
+ 
++  it("limits search results with --desde and --hasta", () => {
++    const gastos = `${GASTOS}2026-03-03,3.00,Comida,Café con Ana
++2026-03-20,4.00,Comida,Café solo
++`;
++    const io = memoryIo({ "gastos.csv": gastos });
++    expect(shown(run(["buscar", "gastos.csv", "cafe", "--desde", "2026-03-10"], io).output)).toBe("20/03/2026  Comida  4,00 €  Café solo");
++    expect(shown(run(["buscar", "gastos.csv", "--hasta", "2026-03-10", "cafe"], io).output)).toBe("03/03/2026  Comida  3,00 €  Café con Ana");
++    expect(run(["buscar", "gastos.csv", "cafe", "--desde", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
++  });
++
+   it("reports repeated expenses ignoring case, accents and extra spaces", () => {
+     const gastos = `${GASTOS}2026-03-09,8.75,Comida,Café con Ana
+ 2026-03-09,8.75,Ocio,  CAFE  con   ana

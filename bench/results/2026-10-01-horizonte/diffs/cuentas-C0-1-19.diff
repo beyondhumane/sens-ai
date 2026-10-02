@@ -1,0 +1,46 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index 983f3c6..08359c5 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -132,9 +132,14 @@ function parseBankAmount(text: string): number | undefined {
+ const commands: Record<string, Command> = {
+   lista: (args, io) => {
+     const { date: from, rest: afterFrom } = takeDate(args, "--desde");
+-    const { date: to, rest } = takeDate(afterFrom, "--hasta");
++    const { date: to, rest: afterTo } = takeDate(afterFrom, "--hasta");
++    const orderFlag = afterTo.indexOf("--orden");
++    const order = orderFlag === -1 ? "fecha" : afterTo[orderFlag + 1];
++    if (order !== "fecha" && order !== "importe") throw new Error(`Orden no válido: ${order ?? ""}`.trim());
++    const rest = orderFlag === -1 ? afterTo : afterTo.filter((_, i) => i !== orderFlag && i !== orderFlag + 1);
+     return load(rest[0], io)
+       .filter((expense) => (from === undefined || expense.date >= from) && (to === undefined || expense.date <= to))
++      .sort((a, b) => (order === "importe" ? b.cents - a.cents : a.date.localeCompare(b.date)))
+       .map(line)
+       .join("\n");
+   },
+diff --git a/tests/cli.test.ts b/tests/cli.test.ts
+index 0f7ef9e..165ded7 100644
+--- a/tests/cli.test.ts
++++ b/tests/cli.test.ts
+@@ -32,6 +32,21 @@ describe("cuentas", () => {
+     expect(run(["lista", "gastos.csv", "--hasta", "2026-02-30"], io)).toEqual({ code: 1, output: "Fecha no válida: 2026-02-30" });
+   });
+ 
++  it("sorts lista by date (ties keep file order) or by --orden importe, largest first", () => {
++    const csv = `fecha,importe,categoria,descripcion
++2026-03-05,5.00,A,Tarde1
++2026-03-01,9.00,A,Primero
++2026-03-05,5.00,A,Tarde2
++2026-03-03,20.00,A,Medio
++`;
++    const io = memoryIo({ "gastos.csv": csv });
++    const names = (args: string[]) => shown(run(["lista", ...args], io).output).split("\n").map((l) => l.split("  ")[3]);
++    expect(names(["gastos.csv"])).toEqual(["Primero", "Medio", "Tarde1", "Tarde2"]);
++    expect(names(["gastos.csv", "--orden", "importe"])).toEqual(["Medio", "Primero", "Tarde1", "Tarde2"]);
++    expect(names(["--orden", "importe", "gastos.csv"])).toEqual(["Medio", "Primero", "Tarde1", "Tarde2"]);
++    expect(run(["lista", "gastos.csv", "--orden", "color"], io)).toEqual({ code: 1, output: "Orden no válido: color" });
++  });
++
+   it("adds everything up", () => {
+     expect(shown(run(["total", "gastos.csv"], memoryIo({ "gastos.csv": GASTOS })).output)).toBe("Total: 57,70 €");
+   });

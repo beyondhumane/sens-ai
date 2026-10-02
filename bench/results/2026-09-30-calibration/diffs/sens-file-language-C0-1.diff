@@ -1,0 +1,220 @@
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.test.tsx b/rust/sens-app/ui/src/features/changes/Changes.test.tsx
+index 3cad9a2..5e11204 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.test.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.test.tsx
+@@ -68,6 +68,21 @@ describe("changes panel", () => {
+     expect(row("notes.md").querySelector(".marks")?.textContent).toBe("nuevo");
+   });
+ 
++  it("names each file's language beside its name, reading a file without extension for its shebang", async () => {
++    ipc.commands.changes.mockResolvedValue({ diff: DIFF, fresh: ["notes.md", "bin/run", "bin/plain"] });
++    ipc.commands.openFile.mockImplementation(async (_root: string, path: string) => ({
++      kind: "text",
++      text: path === "bin/run" ? "#!/usr/bin/env python3\nprint(1)\n" : "nada\n",
++    }));
++    showChanges();
++    await act(async () => loadChanges());
++    const language = (name: string) => row(name).querySelector(".language")?.textContent ?? null;
++    expect(language("app.js")).toBe("JavaScript");
++    expect(language("notes.md")).toBe("Markdown");
++    expect(language("run")).toBe("Python");
++    expect(language("plain")).toBeNull();
++  });
++
+   it("says why there is nothing to list", async () => {
+     ipc.commands.changes.mockResolvedValue(null);
+     showChanges();
+diff --git a/rust/sens-app/ui/src/features/changes/Changes.tsx b/rust/sens-app/ui/src/features/changes/Changes.tsx
+index 330f0ed..af9a938 100644
+--- a/rust/sens-app/ui/src/features/changes/Changes.tsx
++++ b/rust/sens-app/ui/src/features/changes/Changes.tsx
+@@ -6,7 +6,7 @@ import { FileIcon } from "../../shared/FileIcon";
+ import { Icon } from "../../shared/Icon";
+ import { LinesCard } from "../../shared/LinesCard";
+ import { addedRows, patchRows } from "../../shared/rows";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf, mayHaveShebang } from "../../shared/syntax/languages";
+ import { ICONS } from "../../shared/icons.js";
+ import { project } from "../project/store";
+ import { t } from "./copy";
+@@ -74,6 +74,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+   const touched = useStore(project, (s) => s.touched.has(file.path));
+   const [counted, setCounted] = useState<number | null>(null);
+   const plus = file.fresh ? (counted ?? file.plus) : file.plus;
++  const language = useLanguage(file);
+ 
+   return (
+     <details
+@@ -91,6 +92,7 @@ function ChangeRow({ file }: { file: DiffFile }) {
+         </span>
+         <FileIcon path={file.path} />
+         <span className="name">{stem(file.path)}</span>
++        {language && <span className="language">{language}</span>}
+         <span className="dirname">{parentOf(file.path)}</span>
+         <Counts file={file} plus={plus} />
+         {file.state !== "D" && (
+@@ -114,6 +116,24 @@ function ChangeRow({ file }: { file: DiffFile }) {
+   );
+ }
+ 
++// By its name; a file without an extension is read for a `#!` line.
++function useLanguage(file: DiffFile) {
++  const [head, setHead] = useState("");
++  const reads = mayHaveShebang(file.path) && file.state !== "D" && !file.binary;
++  useEffect(() => {
++    if (!reads) return;
++    let live = true;
++    commands.openFile(project.getState().work, file.path).then(
++      (opened) => live && setHead(opened.kind === "text" ? opened.text.slice(0, 200) : ""),
++      () => {},
++    );
++    return () => {
++      live = false;
++    };
++  }, [reads, file.path]);
++  return languageTitleOf(file.path, head);
++}
++
+ function Counts({ file, plus }: { file: DiffFile; plus: number }) {
+   return (
+     <span className="marks">
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.test.tsx b/rust/sens-app/ui/src/features/files/Viewer.test.tsx
+index 0d48821..fcdcef1 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.test.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.test.tsx
+@@ -19,6 +19,8 @@ const FILES: Record<string, string> = {
+   "src/app.ts": "import { a } from './a';\r\nexport const app = a + 1;\r\n",
+   "README.md": "---\ntitle: demo\n---\n# Demo\n\nHola.",
+   "site/index.html": "<h1>Hola</h1>",
++  "bin/run": "#!/usr/bin/env python3\nprint(1)\n",
++  "bin/plain": "nada\n",
+ };
+ 
+ let head: HTMLElement;
+@@ -81,6 +83,20 @@ describe("file viewer", () => {
+     expect(lines()[1]).toBe("export const app = a + 1;");
+   });
+ 
++  it("names the language beside the path, from the extension or a shebang, or shows none", async () => {
++    show();
++    const language = () => head.querySelector(".language")?.textContent ?? null;
++    expect(language()).toBeNull();
++    await act(async () => openFile("src/app.ts"));
++    expect(language()).toBe("TypeScript");
++    await act(async () => openFile("README.md"));
++    expect(language()).toBe("Markdown");
++    await act(async () => openFile("bin/run"));
++    expect(language()).toBe("Python");
++    await act(async () => openFile("bin/plain"));
++    expect(language()).toBeNull();
++  });
++
+   it("marks the lines the agent added, with its counts, and opens there", async () => {
+     show();
+     act(() => noteEdit({ path: "src/app.ts", lines: [2], plus: 1, minus: 3 }));
+diff --git a/rust/sens-app/ui/src/features/files/Viewer.tsx b/rust/sens-app/ui/src/features/files/Viewer.tsx
+index ef5756f..fc39039 100644
+--- a/rust/sens-app/ui/src/features/files/Viewer.tsx
++++ b/rust/sens-app/ui/src/features/files/Viewer.tsx
+@@ -6,7 +6,7 @@ import { FRONT_MATTER, stem, weigh } from "../../shared/format.js";
+ import { ICONS } from "../../shared/icons.js";
+ import { Markdown } from "../../shared/markdown/Markdown";
+ import { useCode } from "../../shared/syntax/code";
+-import { languageOf } from "../../shared/syntax/languages";
++import { languageOf, languageTitleOf } from "../../shared/syntax/languages";
+ import type { Look, Painted, Runs } from "../../shared/syntax/paint";
+ import { useSeen } from "../../shared/useSeen";
+ import { project, type Edits } from "../project/store";
+@@ -38,13 +38,17 @@ const useEdits = () => {
+ };
+ 
+ export function ViewerHead() {
+-  const title = useStore(viewer, (s) => s.title) || t.noneOpen;
++  const opened = useStore(viewer, (s) => s.title);
++  const head = useStore(viewer, (s) => textOf(s.body).slice(0, 200));
++  const title = opened || t.noneOpen;
++  const language = useMemo(() => (opened ? languageTitleOf(opened, head) : null), [opened, head]);
+   const edits = useEdits();
+   return (
+     <>
+       <span className="where" title={title}>
+         {title}
+       </span>
++      {language && <span className="language">{language}</span>}
+       <span className="marks">
+         {edits && (
+           <>
+diff --git a/rust/sens-app/ui/src/shared/syntax/languages.ts b/rust/sens-app/ui/src/shared/syntax/languages.ts
+index a736a08..49648cf 100644
+--- a/rust/sens-app/ui/src/shared/syntax/languages.ts
++++ b/rust/sens-app/ui/src/shared/syntax/languages.ts
+@@ -21,6 +21,15 @@ export function languageOf(path: string, text = "") {
+   return interpreters[program] ?? interpreters[program.replace(/[\d.]+$/, "")] ?? null;
+ }
+ 
++// The language's name for a file, as a person reads it: `TypeScript`, `Python`.
++export function languageTitleOf(path: string, text = "") {
++  const grammar = languageOf(path, text);
++  return grammar && Object.hasOwn(titles, grammar) ? titles[grammar] : null;
++}
++
++// Only a file without an extension may be told by its first line.
++export const mayHaveShebang = (path: string) => !languageOf(path) && !/\.[^./\\]+$/.test(path);
++
+ // The grammar a code fence names: ```ts, ```python, ```console, ```ps1.
+ export function languageNamed(tag: string) {
+   const name = tag.trim().toLowerCase();
+diff --git a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+index 4e34892..164776b 100644
+--- a/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
++++ b/rust/sens-app/ui/src/shared/syntax/syntax.test.ts
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ import { describe, expect, it } from "vitest";
+ import { codeNow, paintCode } from "./code";
+-import { languageNamed, languageOf, titleOf } from "./languages";
++import { languageNamed, languageOf, languageTitleOf, mayHaveShebang, titleOf } from "./languages";
+ import { paint, paintedNow, paintRows } from "./paint";
+ 
+ const KEYWORD = "light-dark(#0000ff, #569cd6)";
+@@ -81,6 +81,28 @@ describe("languages", () => {
+   });
+ });
+ 
++describe("a file's language title", () => {
++  it("names it by its extension, or by the shebang of a file without one", () => {
++    expect(languageTitleOf("src/app.ts")).toBe("TypeScript");
++    expect(languageTitleOf("tool.py")).toBe("Python");
++    expect(languageTitleOf("README.md")).toBe("Markdown");
++    expect(languageTitleOf("bin/run", "#!/usr/bin/env python3\nprint(1)")).toBe("Python");
++    expect(languageTitleOf("bin/run", "#!/usr/bin/env node\n")).toBe("JavaScript");
++  });
++
++  it("says nothing when the language is not known", () => {
++    expect(languageTitleOf("bin/run")).toBeNull();
++    expect(languageTitleOf("bin/run", "just text")).toBeNull();
++    expect(languageTitleOf("data.unknownext")).toBeNull();
++  });
++
++  it("reads only files without an extension for a shebang", () => {
++    expect(mayHaveShebang("bin/run")).toBe(true);
++    expect(mayHaveShebang("Makefile")).toBe(false);
++    expect(mayHaveShebang("data.unknownext")).toBe(false);
++  });
++});
++
+ describe("painting", () => {
+   it("colors code as VS Code's Light+ and Dark+ do, keeping every character", async () => {
+     const text = 'def greet(name):\n    return "hola"  # saludo\n';
+diff --git a/rust/sens-app/ui/src/styles.css b/rust/sens-app/ui/src/styles.css
+index a70d69b..5f11467 100644
+--- a/rust/sens-app/ui/src/styles.css
++++ b/rust/sens-app/ui/src/styles.css
+@@ -1335,6 +1335,7 @@
+     font-family: var(--mono); font-size: 12px; color: var(--text);
+     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+   }
++  .language { flex: none; font-size: 11px; color: var(--ghost); white-space: nowrap; }
+   .marks { font-family: var(--mono); font-size: 12px; display: flex; gap: 10px; flex: none; }
+   .marks .plus { color: var(--green); }
+   .marks .minus { color: var(--red); }

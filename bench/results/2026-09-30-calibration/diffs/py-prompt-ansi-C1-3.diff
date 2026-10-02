@@ -1,0 +1,54 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..f5dcaf9 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -11,6 +11,7 @@ from contextlib import AbstractContextManager
+ from contextlib import redirect_stdout
+ from gettext import gettext as _
+ 
++from . import _compat
+ from ._compat import isatty
+ from ._compat import strip_ansi
+ from .exceptions import Abort
+@@ -84,6 +85,11 @@ def _readline_prompt(func: t.Callable[[str], str], text: str, err: bool) -> str:
+     """Call a prompt function, passing the full prompt on non-Windows so
+     readline can handle line editing and cursor positioning correctly.
+     """
++    if _compat.should_strip_ansi(
++        sys.stderr if err else sys.stdout, resolve_color_default()
++    ):
++        text = strip_ansi(text)
++
+     if err:
+         with redirect_stdout(sys.stderr):
+             return func(text)
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index ce974f0..2305934 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -1560,3 +1560,25 @@ def test_hide_input_value_never_leaks_when_err_true(runner):
+     result = runner.invoke(cli, input="leaky\n", mix_stderr=False)
+     assert "leaky" not in result.stdout
+     assert "leaky" not in result.stderr
++
++
++@pytest.mark.parametrize("color", [False, True])
++def test_prompts_strip_ansi_like_echo(monkeypatch, color):
++    seen = []
++
++    def fake_input(text):
++        seen.append(text)
++        raise EOFError
++
++    monkeypatch.setattr(click.termui, "visible_prompt_func", fake_input)
++    monkeypatch.setattr(click.termui, "hidden_prompt_func", fake_input)
++    monkeypatch.setattr(click.termui, "resolve_color_default", lambda c=None: color)
++    styled = click.style("Go", fg="red")
++
++    with pytest.raises(click.Abort):
++        click.confirm(styled)
++    with pytest.raises(click.Abort):
++        click.prompt(styled, hide_input=True)
++
++    expected = "[31mGo[0m" if color else "Go"
++    assert [s.split(" [")[0].rstrip(": ") for s in seen] == [expected] * 2

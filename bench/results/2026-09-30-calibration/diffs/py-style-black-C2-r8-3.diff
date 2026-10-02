@@ -1,0 +1,35 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 5bf48d0..41d7c72 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -675,13 +675,13 @@ def style(
+ 
+     bits = []
+ 
+-    if fg:
++    if fg is not None:
+         try:
+             bits.append(f"\033[{_interpret_color(fg)}m")
+         except KeyError:
+             raise TypeError(_("Unknown color {colour!r}").format(colour=fg)) from None
+ 
+-    if bg:
++    if bg is not None:
+         try:
+             bits.append(f"\033[{_interpret_color(bg, 10)}m")
+         except KeyError:
+diff --git a/tests/test_utils/test_style.py b/tests/test_utils/test_style.py
+index 85e27f5..9be5512 100644
+--- a/tests/test_utils/test_style.py
++++ b/tests/test_utils/test_style.py
+@@ -22,7 +22,9 @@ import click
+         ({"bg": "magenta"}, "\x1b[45mx y\x1b[0m"),
+         ({"bg": "cyan"}, "\x1b[46mx y\x1b[0m"),
+         ({"bg": "white"}, "\x1b[47mx y\x1b[0m"),
+-        ({"bg": 91}, "\x1b[48;5;91mx y\x1b[0m"),
++        ({"fg": 0}, "\x1b[38;5;0mx y\x1b[0m"),
++        ({"bg": 0}, "\x1b[48;5;0mx y\x1b[0m"),
++        ({"bg": 91},"\x1b[48;5;91mx y\x1b[0m"),
+         ({"bg": (135, 0, 175)}, "\x1b[48;2;135;0;175mx y\x1b[0m"),
+         ({"bold": True}, "\x1b[1mx y\x1b[0m"),
+         ({"dim": True}, "\x1b[2mx y\x1b[0m"),
