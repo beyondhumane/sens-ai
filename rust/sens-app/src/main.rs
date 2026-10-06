@@ -861,6 +861,8 @@ fn main() {
             canon::canon_rules,
             canon::canon_set_rules,
             canon::canon_avoided,
+            canon::canon_map,
+            canon::canon_reach,
             chat_send,
             chat_stop,
             chat_answer,

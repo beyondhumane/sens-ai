@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { focused } from "../features/panes/store";
@@ -83,8 +82,26 @@ describe("the shell", () => {
     expect(body().dataset.code).toBe("open");
     expect(document.querySelector<HTMLElement>('.tool[data-tool="changes"]')?.hidden).toBe(false);
     expect(document.querySelector<HTMLElement>('.tool[data-tool="files"]')?.hidden).toBe(true);
-    fireEvent.click(within(document.querySelector<HTMLElement>('.tool[data-tool="changes"]')!).getByRole("button", { name: "Cerrar" }));
+    fireEvent.click(within(document.querySelector<HTMLElement>(".tool-tabs")!).getByRole("button", { name: "Cerrar" }));
     expect(body().dataset.code).toBe("closed");
+  });
+
+  it("keeps each tool opened as a tab, and closing one shows its neighbour", () => {
+    render(<App />);
+    act(() => showTool("changes"));
+    act(() => showTool("map"));
+    act(() => showTool("files"));
+    const tabs = () => within(document.querySelector<HTMLElement>(".tool-tabs")!).getAllByRole("tab");
+    expect(tabs().map((tab) => tab.textContent)).toEqual(["Cambios", "Mapa", "Ficheros"]);
+    expect(tabs()[2].getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(tabs()[0]);
+    expect(shell.getState().tool).toBe("changes");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Cambios" }));
+    expect(shell.getState()).toMatchObject({ tool: "map", tabs: ["map", "files"], toolsOpen: true });
+    expect(JSON.parse(localStorage.getItem("sens.tabs")!)).toEqual(["map", "files"]);
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Mapa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Ficheros" }));
+    expect(shell.getState()).toMatchObject({ tabs: [], toolsOpen: false });
   });
 
   it("puts a view over the chat, and a new session brings the chat back", async () => {

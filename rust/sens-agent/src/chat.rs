@@ -607,6 +607,9 @@ impl Live {
             }
             Event::Compacted { .. } => {
                 self.compacted.store(true, Ordering::SeqCst);
+                if let Some(circuit) = &self.circuit {
+                    circuit.forget_map();
+                }
                 event
             }
             Event::Finished {
@@ -911,7 +914,11 @@ impl Engine {
         let cwd = settings.cwd.clone().unwrap_or_else(|| root.to_path_buf());
         let full = settings.canon == Canon::Full;
         let circuit = full.then(|| Arc::new(Circuit::new(&cwd, session, self.keeper.clone(), resumed).reviewed_by(self.reviewer.clone())));
-        let card = full.then(|| self.keeper.ready(&cwd, CARD_PATIENCE)).flatten().map(|project| sens_canon::card::card(&project.index));
+        let project = full.then(|| self.keeper.ready(&cwd, CARD_PATIENCE)).flatten();
+        if let (Some(circuit), Some(project)) = (&circuit, &project) {
+            circuit.greeted(project);
+        }
+        let card = project.map(|project| sens_canon::card::card(&project.index, &project.map));
         let greeted = greeting(&settings, card.as_deref());
 
         let mut child = hidden(&mut self.command())

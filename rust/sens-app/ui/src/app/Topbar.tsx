@@ -1,23 +1,22 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { commands } from "../ipc/commands";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
-import { focused, panes } from "../features/panes/store";
+import { focused } from "../features/panes/store";
 import { project } from "../features/project/store";
 import { runningTasks, tasks } from "../features/tasks/store";
-import { consoles, runningConsoles } from "../features/terminal/store";
 import { openUpdate } from "../features/updates/UpdatePanel";
 import { updates } from "../features/updates/store";
-import { anchorMenu } from "../shared/anchorMenu";
 import { shared } from "../shared/copy";
 import { stem } from "../shared/format.js";
 import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import { Mark } from "../shared/Mark";
-import { useSheet, type Sheet } from "../shared/useSheet";
+import { useSheet } from "../shared/useSheet";
 import { t } from "./copy";
-import { panelShows, railFolded, shell, showTool, toggleRail, type Tool } from "./shell";
+import { railFolded, shell, toggleRail } from "./shell";
+import { ToolsMenu } from "./ToolsMenu";
 
 export function Topbar() {
   const closed = useStore(shell, railFolded);
@@ -130,14 +129,6 @@ function FocusButton() {
   );
 }
 
-const TOOLS: { tool: Tool; icon: string }[] = [
-  { tool: "files", icon: ICONS.files },
-  { tool: "changes", icon: ICONS.compare },
-  { tool: "web", icon: ICONS.globe },
-  { tool: "terminal", icon: ICONS.terminal },
-  { tool: "tasks", icon: ICONS.activity },
-];
-
 function ToolsButton() {
   const sheet = useSheet();
   const running = useStore(tasks, () => runningTasks());
@@ -156,49 +147,7 @@ function ToolsButton() {
       >
         <Icon svg={ICONS.moreVertical} />
       </button>
-      {createPortal(<ToolsMenu sheet={sheet} />, document.body)}
+      {createPortal(<ToolsMenu sheet={sheet} id="tool-menu" />, document.body)}
     </>
-  );
-}
-
-function ToolsMenu({ sheet }: { sheet: Sheet }) {
-  const pane = useStore(panes, () => focused());
-  const dirty = useStore(pane.desk, (s) => s.repo?.dirty ?? 0);
-  const running = useStore(tasks, () => runningTasks());
-  const shells = useStore(consoles, () => runningConsoles());
-  useStore(shell, (s) => `${s.toolsOpen}/${s.tool}`);
-
-  useLayoutEffect(() => {
-    if (sheet.open && sheet.sheet.ref.current && sheet.anchor.current) anchorMenu(sheet.sheet.ref.current, sheet.anchor.current);
-  }, [sheet.open]);
-
-  const counts: Partial<Record<Tool, number>> = { changes: dirty, tasks: running, terminal: shells };
-  const count = (tool: Tool) => (counts[tool] ? String(counts[tool]) : "");
-  return (
-    <div className="sheet menu float-menu tool-menu" id="tool-menu" role="menu" aria-label={t.tools} {...sheet.sheet}>
-      {TOOLS.map((one) => (
-        <button
-          key={one.tool}
-          type="button"
-          className="menu-item"
-          tabIndex={-1}
-          role="menuitemradio"
-          aria-checked={panelShows(one.tool)}
-          onClick={() => {
-            sheet.shut();
-            showTool(one.tool);
-          }}
-        >
-          <span className="act-icon">
-            <Icon svg={one.icon} />
-          </span>
-          <span className="mode-text">
-            <span>{t.tool[one.tool]}</span>
-            <span className="mode-sub">{t.toolSaid[one.tool]}</span>
-          </span>
-          <span className="tool-count">{count(one.tool)}</span>
-        </button>
-      ))}
-    </div>
   );
 }
