@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use crate::index::Index;
@@ -174,8 +175,8 @@ impl Map {
                 continue;
             }
             for &from in &self.dependents[file] {
-                if !distance.contains_key(&from) {
-                    distance.insert(from, next);
+                if let Entry::Vacant(slot) = distance.entry(from) {
+                    slot.insert(next);
                     queue.push_back(from);
                 }
             }
