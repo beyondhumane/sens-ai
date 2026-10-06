@@ -4,6 +4,7 @@ use sens_index::build;
 use sens_index::index::Index;
 
 use crate::orphans::{self, Dead};
+use crate::shape::{self, Shape};
 use crate::verdict::{Change, Exceptions, Finding, ProjectRules, Rule, TurnStats, Verdict};
 use crate::{comments, copies, dependencies, integrity, protected};
 
@@ -65,14 +66,18 @@ fn stats(changes: &[Change]) -> TurnStats {
     stats
 }
 
-pub fn judge_turn(index: &Index, changes: &[Change], dead_before: &Dead, rules: &ProjectRules, exceptions: &Exceptions) -> (Verdict, TurnStats) {
+pub fn judge_turn(index: &Index, changes: &[Change], dead_before: &Dead, shape_before: Option<&Shape>, rules: &ProjectRules, exceptions: &Exceptions) -> (Verdict, TurnStats) {
     let mut seen: HashSet<(String, String)> = HashSet::new();
     let mut verdict = Verdict::default();
     for change in changes {
         let found = judge_change(index, change, rules, exceptions).findings.into_iter().filter(|finding| pair(finding).is_none_or(|pair| seen.insert(pair)));
         verdict = verdict.with(found);
     }
-    let verdict = verdict.with(exceptions.filter(Verdict::default().with(orphans::findings(index, dead_before))).findings);
+    let mut whole = Verdict::default().with(orphans::findings(index, dead_before));
+    if let Some(before) = shape_before {
+        whole = whole.with(shape::findings(index, before));
+    }
+    let verdict = verdict.with(exceptions.filter(whole).findings);
     (verdict, stats(changes))
 }
 
@@ -129,7 +134,7 @@ mod tests {
         let second = TOTALS.replace("totals", "second").replace("rows", "items").replace("row", "item");
         let index = project("turn", &[("package.json", r#"{ "main": "src/index.ts" }"#), ("src/index.ts", "import { first } from './a.ts';\nimport { second } from './b.ts';\nfirst([], 1);\nsecond([], 1);\n"), ("src/a.ts", &first), ("src/b.ts", &second)]);
         let changes = [Change { path: "src/a.ts".into(), before: None, after: Some(first.clone()) }, Change { path: "src/b.ts".into(), before: None, after: Some(second.clone()) }];
-        let (verdict, stats) = judge_turn(&index, &changes, &Dead::new(), &ProjectRules::default(), &Exceptions::default());
+        let (verdict, stats) = judge_turn(&index, &changes, &Dead::new(), None, &ProjectRules::default(), &Exceptions::default());
         let copies: Vec<&Finding> = verdict.findings.iter().filter(|finding| finding.rule == Rule::R1).collect();
         assert_eq!(copies.len(), 1, "{:?}", verdict.findings);
         assert_eq!(copies[0].severity, Severity::Block);

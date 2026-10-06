@@ -10,6 +10,7 @@ const DOORS: usize = 2;
 const HUBS: usize = 8;
 const HUB_FLOOR: usize = 3;
 const STRAY_FLOOR: usize = 3;
+const CYCLE_LANGUAGES: [&str; 2] = ["typescript", "python"];
 const ROOT: &str = ".";
 
 #[derive(Debug, Default, PartialEq)]
@@ -191,6 +192,80 @@ impl Map {
     }
 }
 
+fn finished(out: &[Vec<usize>]) -> Vec<usize> {
+    let mut seen = vec![false; out.len()];
+    let mut order = Vec::with_capacity(out.len());
+    for start in 0..out.len() {
+        if seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        let mut stack = vec![(start, 0)];
+        while let Some(&(node, next)) = stack.last() {
+            let top = stack.len() - 1;
+            match out[node].get(next) {
+                Some(&child) => {
+                    stack[top].1 += 1;
+                    if !seen[child] {
+                        seen[child] = true;
+                        stack.push((child, 0));
+                    }
+                }
+                None => {
+                    order.push(node);
+                    stack.pop();
+                }
+            }
+        }
+    }
+    order
+}
+
+pub fn cycles(index: &Index) -> Vec<Vec<String>> {
+    let slot: HashMap<&str, usize> = index
+        .files
+        .iter()
+        .enumerate()
+        .filter(|(_, file)| CYCLE_LANGUAGES.contains(&file.language) && !is_test_file(&file.path))
+        .map(|(at, file)| (file.path.as_str(), at))
+        .collect();
+    let mut out: Vec<Vec<usize>> = vec![Vec::new(); index.files.len()];
+    let mut into: Vec<Vec<usize>> = vec![Vec::new(); index.files.len()];
+    for edge in &index.imports {
+        if let (Some(&from), Some(&to)) = (slot.get(edge.from.as_str()), slot.get(edge.to.as_str()))
+            && from != to
+        {
+            out[from].push(to);
+            into[to].push(from);
+        }
+    }
+    let mut group = vec![usize::MAX; index.files.len()];
+    let mut found: Vec<Vec<String>> = Vec::new();
+    for start in finished(&out).into_iter().rev() {
+        if group[start] != usize::MAX {
+            continue;
+        }
+        group[start] = start;
+        let mut members = vec![start];
+        let mut stack = vec![start];
+        while let Some(node) = stack.pop() {
+            for &from in &into[node] {
+                if group[from] == usize::MAX {
+                    group[from] = start;
+                    members.push(from);
+                    stack.push(from);
+                }
+            }
+        }
+        if members.len() > 1 {
+            members.sort();
+            found.push(members.into_iter().map(|file| index.files[file].path.clone()).collect());
+        }
+    }
+    found.sort();
+    found
+}
+
 pub fn moved(before: &BTreeMap<String, String>, after: &BTreeMap<String, String>) -> Vec<String> {
     let mut lines = Vec::new();
     for (file, area) in after {
@@ -321,6 +396,24 @@ mod tests {
         let (one, two) = (Map::of(&index), Map::of(&index));
         assert_eq!(one.areas, two.areas);
         assert_eq!((one.hubs, one.strays), (two.hubs, two.strays));
+    }
+
+    #[test]
+    fn import_cycles_are_found_where_they_hurt_and_tests_stay_out() {
+        let index = project(
+            "cycles",
+            &[
+                ("web/a.ts", "import { b } from './b.ts';\nexport const a = () => b();\n"),
+                ("web/b.ts", "import { c } from './c.ts';\nexport const b = () => c();\n"),
+                ("web/c.ts", "import { a } from './a.ts';\nexport const c = () => a();\n"),
+                ("web/d.ts", "import { a } from './a.ts';\nexport const d = () => a();\n"),
+                ("web/a.test.ts", "import { d } from './d.ts';\nimport { a } from './a.ts';\nexport const t = () => d() + a();\n"),
+                ("crate/lib.rs", "mod one;\nmod two;\n"),
+                ("crate/one.rs", "use crate::two::two;\npub fn one() { two() }\n"),
+                ("crate/two.rs", "use crate::one::one;\npub fn two() { one() }\n"),
+            ],
+        );
+        assert_eq!(cycles(&index), [vec!["web/a.ts".to_string(), "web/b.ts".into(), "web/c.ts".into()]]);
     }
 
     #[test]

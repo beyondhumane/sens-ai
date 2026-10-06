@@ -6,6 +6,7 @@ use std::time::Duration;
 use sens_canon::card;
 use sens_canon::judge::{judge_command, judge_since, judge_turn};
 use sens_canon::orphans;
+use sens_canon::shape;
 use sens_canon::review::Review;
 use sens_canon::verdict::{Change, Finding, Rule, Severity, Verdict};
 use sens_index::index::Index;
@@ -294,6 +295,7 @@ impl Circuit {
             if let Some(project) = &project {
                 state.dead = orphans::dead(&project.index).into_iter().collect();
                 state.dead_known = true;
+                state.shape = Some(shape::shape(&project.index));
             }
         }
         state.seen = now;
@@ -487,7 +489,7 @@ impl Circuit {
         }
         let project = self.keeper.refresh(&self.work);
         let dead: orphans::Dead = if state.dead_known { state.dead.iter().cloned().collect() } else { orphans::dead(&project.index) };
-        let (verdict, _) = judge_turn(&project.index, &changes, &dead, &state::rules(&self.work), &state::exceptions(&self.work));
+        let (verdict, _) = judge_turn(&project.index, &changes, &dead, state.shape.as_ref(), &state::rules(&self.work), &state::exceptions(&self.work));
         let changed: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
         let mut judged = self.weigh(voice, "close", verdict, |finding| self.put_back(&approved, &finding.file, &changed));
         if judged.blocks.is_empty() && !provisional {
@@ -517,6 +519,7 @@ impl Circuit {
             state.approved = Some(now);
             state.dead = orphans::dead(&project.index).into_iter().collect();
             state.dead_known = true;
+            state.shape = Some(shape::shape(&project.index));
             state.rounds = 0;
             state.held = None;
             let _ = state.save(&self.work);
@@ -992,6 +995,19 @@ test('plain again', () => {{
         let state = State::load(&root);
         assert_eq!(state.approved, state.end);
         assert_eq!(ear.stages(), ["pending", "passed"]);
+    }
+
+    #[test]
+    fn a_turn_that_closes_an_import_cycle_is_stopped_once_and_passes_if_the_model_keeps_it() {
+        let (root, circuit, ear) = started("cycle");
+        assert!(State::load(&root).shape.is_some_and(|shape| shape.cycles.is_empty()));
+        std::fs::write(root.join("src/lib/text.ts"), format!("import {{ totals }} from './totals.ts';\n{PLAIN}\nexport const counted = () => totals([], 1);\n")).unwrap();
+        std::fs::write(root.join("src/lib/totals.ts"), format!("import {{ plain }} from './text.ts';\n{TOTALS}export const named = () => plain('a');\n")).unwrap();
+        let first = circuit.answer(&ear, CLOSE, &close());
+        assert_eq!(decision(&first), "block", "{first}");
+        assert!(first["reason"].as_str().unwrap().contains("src/lib/text.ts, src/lib/totals.ts import each other"), "{first}");
+        assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "allow");
+        assert!(log::read(&root).iter().any(|entry| entry.rule == Some(Rule::R9) && entry.decision == Some(Decision::Kept)));
     }
 
     struct Scripted(Result<Value, String>);

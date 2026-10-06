@@ -755,7 +755,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   canon_retract: ({ key }) => void (exceptions = exceptions.filter((one) => one.key !== key)),
   canon_rules: () => ({ noComments }),
   canon_set_rules: ({ rules }) => void (noComments = Boolean((rules as { noComments: boolean }).noComments)),
-  canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
+  canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, cycles: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
   new_session_id: () => "demo-new",
   open_session: ({ id }) => id ?? "demo-new",
   chat_busy: () => false,

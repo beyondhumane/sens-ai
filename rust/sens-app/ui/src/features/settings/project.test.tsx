@@ -10,14 +10,14 @@ const ipc = vi.hoisted(() => ({
 
 vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: {} }));
 
-const nothing = { copies: 0, comments: 0, dependencies: 0, protected: 0, tests: 0, orphans: 0, judgment: 0, held: 0, accepted: 0, reviews: 0, reviewerCost: 0 };
+const nothing = { copies: 0, comments: 0, dependencies: 0, protected: 0, tests: 0, orphans: 0, cycles: 0, judgment: 0, held: 0, accepted: 0, reviews: 0, reviewerCost: 0 };
 
 beforeEach(() => {
   project.setState({ root: "C:/demo", work: "C:/demo/.sens/worktrees/ab12" });
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.commands.canonRules.mockResolvedValue({ noComments: false });
   ipc.commands.canonExceptions.mockResolvedValue([{ key: "R1:src/a.ts:a~src/b.ts:b", rule: "R1", file: "src/a.ts", since: Date.UTC(2026, 8, 30, 10) }]);
-  ipc.commands.canonAvoided.mockResolvedValue({ ...nothing, copies: 3, dependencies: 1, reviews: 2, reviewerCost: 0.012 });
+  ipc.commands.canonAvoided.mockResolvedValue({ ...nothing, copies: 3, dependencies: 1, cycles: 2, reviews: 2, reviewerCost: 0.012 });
 });
 
 afterEach(() => {
@@ -37,6 +37,7 @@ describe("the project section", () => {
     expect(screen.getByText("src/a.ts")).toBeTruthy();
     expect(screen.getByText("3 copias paradas")).toBeTruthy();
     expect(screen.getByText("1 dependencia rechazada")).toBeTruthy();
+    expect(screen.getByText("2 ciclos de imports parados")).toBeTruthy();
     expect(screen.getByText("2 revisiones · $0.01")).toBeTruthy();
   });
 
