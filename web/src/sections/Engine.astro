@@ -1,0 +1,52 @@
+---
+import Crop from "../product/Crop.astro";
+import Held from "../product/Held.astro";
+import { home } from "../i18n/home";
+import { pathFor, type Locale } from "../i18n/locales";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = home(locale);
+const measured = t.measured;
+const checks = t.checks;
+---
+
+<section class="engine" id="engine" aria-labelledby="engine-title">
+  <div class="wrap engine-inner">
+    <div class="engine-intro">
+      <p class="label">{t.engineLabel}</p>
+      <h2 class="engine-title" id="engine-title">{t.engineTitle}</h2>
+      <p class="engine-lead">{t.engineLead}</p>
+    </div>
+    <dl class="measured">
+      {
+        measured.map((item) => (
+          <div>
+            <dt>{item.figure}</dt>
+            <dd>{item.said}</dd>
+          </div>
+        ))
+      }
+    </dl>
+    <p class="mono engine-note">{t.engineNote}{" "}<a href={pathFor(locale, "/research")}>{t.methodLink}</a></p>
+    <ol class="checks">
+      {
+        checks.map((check) => (
+          <li>
+            <h3>{check.title}</h3>
+            <p>{check.text}</p>
+          </li>
+        ))
+      }
+    </ol>
+    <div class="engine-proof" aria-hidden="true" inert>
+      <Crop id="held">
+        <Held />
+      </Crop>
+    </div>
+    <p class="engine-languages">{t.languages}</p>
+  </div>
+</section>

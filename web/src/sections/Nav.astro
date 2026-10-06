@@ -1,0 +1,102 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import Mark from "../components/Mark.astro";
+import { siteIcons } from "../content/icons";
+import { links } from "../content/site";
+import releases from "../data/releases.json";
+import { htmlLang, locales, names, pathFor, type Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+
+interface Props {
+  locale: Locale;
+  path: string;
+}
+
+const { locale, path } = Astro.props;
+const t = site(locale);
+const items = [
+  { label: t.product, href: pathFor(locale, "/#how-it-works"), external: false },
+  { label: t.research, href: pathFor(locale, "/research"), external: false },
+  { label: t.releases, href: pathFor(locale, "/releases"), external: false },
+  { label: "GitHub", href: links.repo, external: true },
+];
+const latest = releases[0];
+const external = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${siteIcons.external}</svg>`,
+)}")`;
+---
+
+<header class="nav" data-nav>
+  <div class="nav-inner wrap">
+    <a class="nav-home" href={pathFor(locale, "/#top")} aria-label={t.home}>
+      <Mark id="nav" size={28} />
+      <span class="nav-word" aria-hidden="true">sens</span>
+    </a>
+    {
+      latest && (
+        <a class="version" href={pathFor(locale, `/releases#v${latest.version}`)} aria-label={t.version(latest.version)}>
+          v{latest.version}
+        </a>
+      )
+    }
+    <nav class="nav-links" aria-label={t.main}>
+      {
+        items.map((item) => (
+          <a class="nav-link" href={item.href}>
+            <span class="nav-word-split">{item.label}</span>
+            {item.external && <span class="nav-icon" style={`--icon: ${external}`} aria-hidden="true" />}
+          </a>
+        ))
+      }
+    </nav>
+    <div class="nav-end">
+      <Download label={t.download} locale={locale} size="small" />
+      <details class="languages" data-menu>
+        <summary class="icon-button" aria-label={`${t.language}: ${names[locale]}`}>
+          <Icon paths={siteIcons.languages} size={20} />
+        </summary>
+        <ul class="languages-sheet">
+          {
+            locales.map((other) => (
+              <li>
+                <a href={pathFor(other, path)} hreflang={htmlLang[other]} lang={htmlLang[other]} aria-current={other === locale ? "page" : undefined}>
+                  {names[other]}
+                  {other === locale && <Icon paths={siteIcons.check} size={16} />}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </details>
+      <button class="icon-button theme" type="button" aria-label={t.darkMode} aria-pressed="false" data-theme-toggle>
+        <Icon paths={siteIcons.theme} size={20} class="theme-icon" />
+      </button>
+      <details class="menu" data-menu>
+        <summary class="icon-button" aria-label={t.menu}>
+          <span class="menu-icon open"><Icon paths={siteIcons.menu} size={22} /></span>
+          <span class="menu-icon shut"><Icon paths={siteIcons.close} size={22} /></span>
+        </summary>
+        <div class="menu-sheet">
+          {
+            items.map((item, index) => (
+              <a href={item.href} style={`--i: ${index}`}>
+                {item.label}
+                <Icon paths={item.external ? siteIcons.external : siteIcons.arrow} size={20} />
+              </a>
+            ))
+          }
+          <nav class="menu-languages" aria-label={t.language}>
+            {
+              locales.map((other) => (
+                <a href={pathFor(other, path)} hreflang={htmlLang[other]} lang={htmlLang[other]} aria-current={other === locale ? "page" : undefined}>
+                  {names[other]}
+                </a>
+              ))
+            }
+          </nav>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>

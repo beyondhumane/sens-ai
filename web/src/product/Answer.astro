@@ -1,0 +1,35 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+import { session } from "../content/session";
+import Code from "./Code.astro";
+
+const { answer, foot } = session;
+const [before, strong, after] = answer.lead;
+---
+
+<div class="said" data-part="said">
+  <div class="prose">
+    <p>{before}<strong>{strong}</strong>{after}</p>
+    <div class="codeblock">
+      <div class="codeblock-head">
+        <span class="tongue"></span>
+        <span>{answer.code.label}</span>
+        <span class="copy"><Icon paths={appIcons.copy} size={14} /></span>
+      </div>
+      <pre><code><Code code={answer.code.source} lang="tsx" /></code></pre>
+    </div>
+    <ul>
+      {
+        answer.bullets.map((bullet) => (
+          <li>
+            {bullet.map((piece) => ("code" in piece ? <code>{piece.code}</code> : "strong" in piece ? <strong>{piece.strong}</strong> : piece.text))}
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</div>
+<div class="reply-foot" data-part="foot">
+  <span>{foot.took}</span> · <span><b class="foot-count">{foot.tokens}</b> tokens</span>
+</div>

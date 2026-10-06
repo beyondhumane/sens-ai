@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.astro/
+
+*.log
+
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.md
+
+.DS_Store
+Thumbs.db

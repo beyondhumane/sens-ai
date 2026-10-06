@@ -1,0 +1,10 @@
+---
+import Research from "../../views/Research.astro";
+import { routes, type Translated } from "../../i18n/locales";
+
+export const getStaticPaths = routes;
+
+const { lang } = Astro.params as { lang: Translated };
+---
+
+<Research locale={lang} />

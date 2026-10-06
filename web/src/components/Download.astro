@@ -1,0 +1,39 @@
+---
+import Icon from "./Icon.astro";
+import { siteIcons } from "../content/icons";
+import { megabytes, type Release } from "../content/release";
+import data from "../data/release.json";
+import type { Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+
+interface Props {
+  label: string;
+  locale: Locale;
+  size?: "small" | "large";
+  class?: string;
+}
+
+const { label, locale, size = "large", class: className } = Astro.props;
+const t = site(locale);
+const release = data as Release;
+const installer = release.installer;
+const direct = installer?.url ?? release.page;
+---
+
+<a
+  class:list={["button", size === "small" && "button-small", "only-wide", className]}
+  href={direct}
+  aria-label={t.installer(label, release.version, installer ? megabytes(installer.bytes) : null)}
+  data-download
+>
+  <span class="button-icon"><Icon paths={siteIcons.download} size={20} /></span>
+  <span>{label}</span>
+</a>
+<a
+  class:list={["button", size === "small" && "button-small", "only-cards", className]}
+  href={release.page}
+  aria-label={t.releasePage(label, release.version)}
+>
+  <span class="button-icon"><Icon paths={siteIcons.download} size={20} /></span>
+  <span>{label}</span>
+</a>

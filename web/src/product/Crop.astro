@@ -1,0 +1,29 @@
+---
+import Mark from "../components/Mark.astro";
+import { session } from "../content/session";
+
+interface Props {
+  id: string;
+  bar?: boolean;
+  class?: string;
+}
+
+const { id, bar = false, class: className } = Astro.props;
+---
+
+<div class:list={["product", "product-crop", className]} data-crop={id}>
+  {
+    bar && (
+      <div class="crop-bar">
+        <span class="brand">
+          <Mark id={`crop-${id}`} size={18} micro />
+          <b>sens</b>
+        </span>
+        <span class="crop-title">{session.project}</span>
+      </div>
+    )
+  }
+  <div class="crop-body">
+    <slot />
+  </div>
+</div>

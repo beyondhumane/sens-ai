@@ -1,0 +1,98 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import Mark from "../components/Mark.astro";
+import { siteIcons } from "../content/icons";
+import { links } from "../content/site";
+import releases from "../data/releases.json";
+import { htmlLang, locales, names, pathFor, type Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+
+interface Props {
+  locale: Locale;
+  path: string;
+}
+
+const { locale, path } = Astro.props;
+const t = site(locale);
+const RECENT = 4;
+const recent = releases.slice(0, RECENT);
+
+const columns = [
+  {
+    title: t.sens,
+    items: [
+      { label: t.howItWorks, href: pathFor(locale, "/#how-it-works"), external: false },
+      { label: t.whatSensChecks, href: pathFor(locale, "/#engine"), external: false },
+      { label: t.research, href: pathFor(locale, "/research"), external: false },
+      { label: t.allReleases, href: pathFor(locale, "/releases"), external: false },
+    ],
+  },
+  {
+    title: t.project,
+    items: [
+      { label: "GitHub", href: links.repo, external: true },
+      { label: t.issues, href: links.issues, external: true },
+      { label: "README", href: links.readme, external: true },
+      { label: t.licence, href: links.license, external: true },
+    ],
+  },
+];
+---
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="footer-brand">
+      <a class="footer-home" href={pathFor(locale, "/#top")} aria-label={t.home}>
+        <Mark id="footer" size={32} />
+        <span class="footer-word" aria-hidden="true">sens</span>
+      </a>
+      <p class="footer-claim">{t.claim}</p>
+      <Download label={t.downloadForWindows} locale={locale} size="small" />
+    </div>
+    {
+      columns.map((column) => (
+        <nav class="footer-column" aria-label={column.title}>
+          <p class="label">{column.title}</p>
+          <ul>
+            {column.items.map((item) => (
+              <li>
+                <a href={item.href}>
+                  {item.label}
+                  {item.external && <Icon paths={siteIcons.external} size={14} />}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ))
+    }
+    <nav class="footer-column footer-releases" aria-label={t.recentReleases}>
+      <p class="label">{t.recentReleases}</p>
+      <ul>
+        {
+          recent.map((release) => (
+            <li>
+              <a href={pathFor(locale, `/releases#v${release.version}`)}>
+                <span class="footer-version">v{release.version}</span>
+                <span class="footer-headline" lang="en">{release.headline ?? `Sens ${release.version}`}</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+  <div class="wrap footer-base">
+    <p>{t.disclaimer}</p>
+    <nav class="footer-languages" aria-label={t.language}>
+      {
+        locales.map((other) => (
+          <a href={pathFor(other, path)} hreflang={htmlLang[other]} lang={htmlLang[other]} aria-current={other === locale ? "page" : undefined}>
+            {names[other]}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+</footer>

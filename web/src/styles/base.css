@@ -1,0 +1,193 @@
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/fonts/space-grotesk.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --paper: light-dark(var(--sens-paper), var(--sens-carbon-950));
+  --bone: light-dark(var(--sens-bone-100), var(--sens-carbon-800));
+  --ink: light-dark(var(--sens-carbon-950), var(--sens-bone-50));
+  --ink-soft: light-dark(var(--sens-alloy-600), var(--sens-alloy-400));
+  --hairline: light-dark(var(--sens-bone-200), var(--sens-carbon-700));
+  --frame: light-dark(var(--sens-chalk-300), var(--sens-carbon-700));
+  --shade: var(--sens-carbon-950);
+  --lime: var(--sens-signal-500);
+  --lime-ink: var(--sens-carbon-950);
+  --ring: light-dark(var(--sens-signal-800), var(--sens-signal-500));
+  --button: light-dark(var(--sens-carbon-950), var(--sens-bone-50));
+  --button-hover: light-dark(var(--sens-carbon-800), var(--sens-bone-200));
+  --button-press: light-dark(var(--sens-carbon-700), var(--sens-bone-300));
+  --button-ink: light-dark(var(--sens-paper), var(--sens-carbon-950));
+  --mark-body: light-dark(var(--sens-carbon-900), var(--sens-carbon-800));
+  --mark-cut: var(--sens-signal-500);
+  --margin: clamp(16px, 5.5vw, 96px);
+  --gutter: 24px;
+  --nav: 72px;
+  --window-w: 960px;
+  --window-h: 660px;
+  --content: 1440px;
+  color-scheme: light dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+img,
+svg {
+  display: block;
+}
+
+p,
+h1,
+h2,
+h3,
+ol,
+ul,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ol,
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--sens-signal-200);
+  color: var(--lime-ink);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--button);
+  color: var(--button-ink);
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--dur-fast) var(--ease-control);
+}
+
+.skip:focus-visible {
+  transform: none;
+}
+
+.label {
+  font-size: 0.75rem;
+  line-height: 1.33;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+}
+
+:root:lang(ja) {
+  --font-ui: "Space Grotesk", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+}
+
+:root:lang(zh-Hans) {
+  --font-ui: "Space Grotesk", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) body {
+  line-break: strict;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) :is(h1, h2, h3, .lead, .measured dt) {
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) :is(h1, h2, h3) {
+  max-width: none;
+  text-wrap: balance;
+}
+
+:root:lang(ja) :is(h1, h2, h3, .lead) {
+  word-break: auto-phrase;
+}

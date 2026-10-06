@@ -1,0 +1,44 @@
+---
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import wordmark from "../brand/wordmark.svg?raw";
+import { siteIcons } from "../content/icons";
+import { megabytes, type Release } from "../content/release";
+import { links } from "../content/site";
+import data from "../data/release.json";
+import Pieces from "../components/Pieces.astro";
+import { home } from "../i18n/home";
+import type { Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = home(locale);
+const release = data as Release;
+const needs = [
+  release.version && `v${release.version}`,
+  release.installer && megabytes(release.installer.bytes),
+  t.windowsVersions,
+  "x64",
+  "WebView2",
+  t.claudeAccount,
+]
+  .filter(Boolean)
+  .join(" · ");
+---
+
+<section class="closing" aria-labelledby="closing-title" data-closing>
+  <div class="wrap closing-inner">
+    <h2 class="closing-title" id="closing-title">{t.closingTitle}</h2>
+    <div class="actions">
+      <Download label={site(locale).downloadForWindows} locale={locale} />
+      <a class="link" href={links.repo}>{t.exploreOnGithub} <Icon paths={siteIcons.arrow} size={18} /></a>
+    </div>
+    <p class="mono">{needs}</p>
+    <p class="closing-note"><Pieces pieces={t.unsigned} href={links.latest} /></p>
+  </div>
+  <div class="wordmark" aria-hidden="true" set:html={wordmark} />
+</section>

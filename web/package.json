@@ -1,0 +1,37 @@
+{
+  "name": "sens-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "vitest run",
+    "brand": "tsx scripts/brand.ts",
+    "release": "tsx scripts/release.ts",
+    "research": "tsx scripts/research.ts",
+    "og": "tsx scripts/og.ts",
+    "headline": "tsx scripts/headline.ts",
+    "frames": "tsx scripts/frames.ts",
+    "perf": "tsx scripts/perf.ts",
+    "a11y": "tsx scripts/a11y.ts"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@types/node": "^26.6.3",
+    "astro": "^7.3.5",
+    "axe-core": "^4.13.0",
+    "lucide": "^1.49.0",
+    "puppeteer-core": "^25.12.0",
+    "satteri": "^0.10.5",
+    "shiki": "^4.4.3",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

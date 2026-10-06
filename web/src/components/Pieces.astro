@@ -1,0 +1,24 @@
+---
+import type { Piece } from "../i18n/home";
+
+interface Props {
+  pieces: Piece[];
+  href?: string;
+}
+
+const { pieces, href } = Astro.props;
+---
+
+{
+  pieces.map((piece) =>
+    typeof piece === "string" ? (
+      piece
+    ) : "strong" in piece ? (
+      <strong>{piece.strong}</strong>
+    ) : "code" in piece ? (
+      <code>{piece.code}</code>
+    ) : (
+      <a href={href}>{piece.link}</a>
+    ),
+  )
+}
