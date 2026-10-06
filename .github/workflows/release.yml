@@ -30,6 +30,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
@@ -101,3 +102,8 @@ jobs:
           grep -q 'SHA-256: `pending`' notes.md || exit 0
           sed -i "s/SHA-256: \`pending\`/SHA-256: \`$sha\`/" notes.md
           gh release edit "$tag" --notes-file notes.md
+      - name: Publish the website with this release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main

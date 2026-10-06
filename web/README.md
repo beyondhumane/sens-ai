@@ -6,7 +6,8 @@
 
 <p align="center">
   <b>The website of <a href="https://github.com/beyondhumane/sens-ai">Sens</a>, the desktop app that makes Claude Code reuse what you have and write less.</b><br>
-  The app's own window, rebuilt in HTML, replays a real turn as you scroll, and the research behind it has a page of its own.
+  The app's own window, rebuilt in HTML, replays a real turn as you scroll, and the research behind it has a page of its own.<br>
+  Live at <a href="https://sens.beyondhumane.com"><b>sens.beyondhumane.com</b></a>.
 </p>
 
 <p align="center">
@@ -18,6 +19,7 @@
 
 <p align="center">
   <a href="#run-it"><b>Run it</b></a> ·
+  <a href="#publishing">Publishing</a> ·
   <a href="#how-it-moves">How it moves</a> ·
   <a href="#light-and-dark">Light and dark</a> ·
   <a href="#checks">Checks</a> ·
@@ -39,7 +41,9 @@ The window on the page is not a video or a screenshot. It is the app's interface
 
 | | |
 | --- | --- |
+| **Address** | [sens.beyondhumane.com](https://sens.beyondhumane.com), on GitHub Pages |
 | **Pages** | The home page (hero, a demo in six chapters, what Sens checks, the closing), `/research` and `/releases` |
+| **Languages** | English, Spanish, French, German, Japanese and Chinese; English at `/`, the others under `/es/`, `/fr/`, `/de/`, `/ja/` and `/zh/` |
 | **Stack** | Astro 7 with static output, GSAP 3 with ScrollTrigger, and CSS |
 | **Weight** | One deferred script of about 55 KB and 8 KB of CSS, gzipped |
 | **Looks** | Light and dark; it follows the system until you pick one |
@@ -61,7 +65,7 @@ npm run dev
 
 The page opens at `http://localhost:4321`. Add `?motion=reduce` to the address to see it with reduced motion.
 
-Set `SITE_URL` to the site's address when you build, so canonical links and share images get absolute URLs. `npm run build` writes the site to `dist/`: HTML, CSS, fonts, icons and one script, for any static host. `npm run preview` serves that build.
+Set `SITE_URL` to the site's address when you build, so canonical links and share images get absolute URLs, and `BASE_PATH` when it is served from a folder rather than a domain's root. `npm run build` writes the site to `dist/`: HTML, CSS, fonts, icons and one script, for any static host. `npm run preview` serves that build.
 
 | Script | Does |
 | --- | --- |
@@ -82,8 +86,18 @@ Set `SITE_URL` to the site's address when you build, so canonical links and shar
 Both scripts write files that are committed, so the site builds on its own, and neither kind of file is edited by hand.
 
 - **`npm run brand`** reads `src/brand` from the Sens repository this folder lives in — or the path in `SENS_REPO` — and writes `src/styles/tokens.css`, `src/brand/brand.json`, the giant `sens`, the mark and the favicon. It copies Space Grotesk and Geist Mono with their licences.
-- **`npm run release`** asks GitHub for the releases of `beyondhumane/sens-ai` and writes `src/data/release.json` and `src/data/releases.json`. Credits are each release's commit authors and co-authors. If GitHub does not answer, the last good data stays; with none at all, the download buttons go to the releases page. A token in `GITHUB_TOKEN` or `GH_TOKEN` avoids GitHub's limit for anonymous requests.
+- **`npm run release`** asks GitHub for the releases of `beyondhumane/sens-ai` and writes `src/data/release.json` and `src/data/releases.json`. Credits are each release's commit authors and co-authors. If GitHub does not answer, the last good data stays; with none at all, the download buttons go to the releases page. A token in `GITHUB_TOKEN` or `GH_TOKEN` avoids GitHub's limit for anonymous requests. The Pages build runs it too, so the published site never waits for a commit to show a new release.
 - **`npm run research`** reads the confirmation run of Horizonte from `bench/results`, the reference solution's size from the paper's figure 2 and the Canon from `rust/sens-canon`, in the same repository, and writes `src/data/research.json`.
+
+## Publishing
+
+The site lives in `web/` of [the Sens repository](https://github.com/beyondhumane/sens-ai) and is served by GitHub Pages at [sens.beyondhumane.com](https://sens.beyondhumane.com).
+
+- **Every push to `main` that touches `web/`** runs `.github/workflows/pages.yml`: `npm ci`, `npm test`, `npm run release`, `npm run build` and the deploy. It can also be run by hand from the Actions tab.
+- **Every release reaches the page on its own.** Publishing, editing or deleting a release on GitHub runs the same workflow on `main`, and so does the release workflow once it has attached the installer and written its SHA-256. The build asks GitHub for every release, so the version in the navigation, the download button, `/releases` with its notes and credits, and the footer all follow it; if GitHub does not answer, the committed data is used.
+- **The address comes from Pages.** `actions/configure-pages` hands the build its origin and base path as `SITE_URL` and `BASE_PATH`, so the same workflow builds for the custom domain's root, or for `beyondhumane.github.io/sens-ai/` if the domain is ever removed. Change the domain in *Settings › Pages*, then run the workflow again.
+- **The domain.** `sens.beyondhumane.com` is a CNAME to `beyondhumane.github.io` in Cloudflare, set to *DNS only*: proxied, GitHub could not renew its certificate. HTTPS is enforced, and `http://` and the old `github.io` address both redirect to it.
+- **Every branch** gets the `web` job in `.github/workflows/ci.yml`: `npm run check`, `npm test` and `npm run build`.
 
 ## How it moves
 
@@ -167,16 +181,19 @@ Measured on the dev server:
 
 ```text
 src/
-  pages/index.astro     the page
-  layouts/Base.astro    <head>: fonts, and the theme before the first paint
-  sections/             Nav, Hero, Demo, Closing, Footer
+  pages/                the routes: English at the root, the other languages under [lang]/
+  views/                Home, Research, Releases and the 404, each for one language
+  i18n/                 every word on the site, in six languages, and the locale helpers
+  layouts/Base.astro    <head>: fonts, metadata, alternates, and the theme before the first paint
+  sections/             Nav, Hero, Demo, Engine, Closing, Footer
   product/              the app's window, rebuilt: Topbar, Thread, Step, Run, Answer, Composer, Changes, Code
-  content/              the demo session, the chapters, links, icons
-  motion/               boot, scene (hero to stage), stage (chapters), cards (phones), theme, waves, tokens
-  styles/               tokens.css (generated), base, page, product, motion
-  brand/  data/         generated: brand values, the giant sens, the latest release
-public/                 fonts with their licences, the mark, the favicon, file-type icons
-scripts/                brand, release, frames, perf, a11y
+  components/           charts, downloads and the pieces of text the copy is made of
+  content/  lib/        the demo session, links, release and research data, chart maths
+  motion/               boot, scene (hero to stage), stage (chapters), cards (phones), theme, waves, charts
+  styles/               tokens.css (generated), base, page, product, motion, research
+  brand/  data/         generated: brand values, the giant sens, releases, research, headline widths
+public/                 fonts with their licences, the mark, the favicon, file-type icons, share images
+scripts/                brand, release, research, og, headline, frames, perf, a11y
 test/                   Vitest
 docs/specs/             the design, as built
 ```
