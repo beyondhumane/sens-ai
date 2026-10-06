@@ -1,0 +1,692 @@
+[
+  {
+    "version": "0.30.0",
+    "headline": "Sens checks what the AI writes",
+    "published": "2026-10-02",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.30.0",
+    "installer": {
+      "name": "Sens_0.30.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.30.0/Sens_0.30.0_x64-setup.exe",
+      "bytes": 12105728
+    },
+    "notes": "Sens now stands between Claude Code and your project. Every change the AI makes is checked before it reaches the disk, so it reuses what you already have instead of writing it again, and leaves nothing copied, unused or commented behind. It’s on in every session.\n\n### New\n- **Claude learns what you already have.** With every message, Sens shows the AI the code in your project that relates to what you asked, so it reuses it instead of writing it again.\n- **Every change is checked before it lands.** Sens stops copies of code you already have (renamed ones too), code left unused and new comments, and tells Claude what to do instead. It asks you before Claude adds a dependency or removes tests.\n- **A second look at each turn.** When the changes pass the rules, a reviewer reads them for abstractions used once, fixes to the symptom instead of the cause, and rewrites of what the project or a dependency already gives. Its notes reach you and Claude, in your language; they don’t stop anything.\n- **You decide when Sens doesn’t approve.** If Claude can’t get the changes approved in three tries, the turn is held: they stay on disk and the thread offers *Accept*, *Undo* or *Ask Claude to fix them*. Accepting saves them as exceptions of this project; undoing restores your files without touching your git.\n- **You see what Sens did.** The thread shows what Sens found in your project, what it stopped and what it approved.\n- **Thirty languages.** TypeScript and JavaScript (with Vue and Svelte components), Python, Go, Rust, Java, Kotlin, C#, PHP, Ruby, C, C++, Swift, Dart, Scala, F#, Lua, Elixir, Gleam and Zig in full. Bash, PowerShell, Haskell, R, Objective-C, OCaml, Erlang, Julia, Solidity, Elm and Groovy are checked for copies and comments, and unused code there is only a note.\n\n### Measured\nIn our benchmark with Claude Sonnet 5.5, after thirty chained tasks on the same project, the project ended 12% smaller with Sens and the work used 18% fewer tokens, with the same tasks accepted and nothing broken. The method and every result are in the paper, `docs/paper/sens-canon.md`. The languages added in this release are covered by tests, not yet by that benchmark.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.29.0",
+    "headline": "Say “Hey Sens”",
+    "published": "2026-09-29",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.29.0",
+    "installer": {
+      "name": "Sens_0.29.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.29.0/Sens_0.29.0_x64-setup.exe",
+      "bytes": 7836672
+    },
+    "notes": "Say “Hey Sens” from any window and focus mode opens already listening. It’s off until you switch it on, and your voice never leaves your computer.\n\n### New\n- **“Hey Sens” starts dictation.** Switch it on in *Settings → Focus & voice*, then say “Hey Sens” (or “Oye Sens”) from any window: focus mode opens and starts dictating, hands-free. It stops by itself after a few seconds of silence and leaves the text for you to check and send.\n- **Heard on your computer.** Sens listens for it with the same Whisper model that dictates, on your computer. While the switch is on, the microphone stays open and Windows shows it in use. Sens doesn’t listen while you dictate or test the microphone, waits for the voice model if it’s still downloading, and tries again on its own if the microphone is muted or unplugged.\n\n### Changed\n- **One microphone for both.** The microphone you pick in *Settings → Focus & voice* is the one “Hey Sens” listens to, and switching it applies at once.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.28.0",
+    "headline": "Focus mode where you want it",
+    "published": "2026-09-29",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.28.0",
+    "installer": {
+      "name": "Sens_0.28.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.28.0/Sens_0.28.0_x64-setup.exe",
+      "bytes": 7828480
+    },
+    "notes": "Focus mode goes where you put it. Drag it anywhere on the screen and it opens there next time, or pin it so it stays over every window you open.\n\n### New\n- **Move focus mode.** Drag it by the S, or by any empty part of the bar, pinned or not. Sens remembers the spot for each screen and opens it there next time, even after a restart. Double-click the S to put it back in the center.\n- **Pin it where it is.** The pin button now sits next to the microphone, always (Ctrl+P still works). Pinned, focus mode stays visible when you click elsewhere, stays on its screen even if you open it from another one, and comes back on top whenever another window opens. Pinning lasts until you close Sens.\n\n### Changed\n- **Clicks stay clicks.** Focus mode only starts moving once the pointer has moved a few pixels, so a click or a double click on the bar never drags it by accident.\n- **Never half off the screen.** If a screen is smaller than when you left focus mode there, it opens fully inside it.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.27.0",
+    "headline": "Dictation that understands you, and focus mode",
+    "published": "2026-09-29",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.27.0",
+    "installer": {
+      "name": "Sens_0.27.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.27.0/Sens_0.27.0_x64-setup.exe",
+      "bytes": 7824896
+    },
+    "notes": "Dictation now understands what you say, and the floating bar becomes focus mode: Alt+Space over any window, a button at the top of Sens, and the session you want to ask in.\n\n### New\n- **Dictation that understands Spanish.** Sens now transcribes with Whisper small instead of base: whole sentences come out right where base garbled them, still on your computer, and each phrase is written about half a second after you pause. Sens downloads the new model once (181 MB) and deletes the old one.\n- **A muted microphone says so.** If Windows has the microphone muted, or it sends only silence, dictation stops and tells you how to turn it on instead of listening to nothing.\n- **Focus mode opens with Alt+Space.** The floating bar is now called focus mode, and its shortcut is Alt+Space. Change it in Settings → Focus & voice: press *Change*, then the keys you want. If another app already uses them, Sens keeps the one it had and tells you.\n- **A button for focus mode.** The icon at the top of Sens hides the window and opens focus mode on the session you had open. Ctrl+Enter, or the tray, brings Sens back.\n- **Choose the session, not only the project.** The chip in focus mode reads project and session. Open it to start a new session, go back to one of the project's latest, or type to find any session by its title; the arrows and Enter choose, and what you had written stays.\n- **You see it listening.** While you dictate, the microphone keeps a ring and focus mode's line follows your voice.\n\n### Changed\n- **Focus mode moves gently.** It fades in and out, and the answer grows into the window instead of making it jump. With reduced motion turned on in Windows, every state still shows, without the movement.\n- **Settings → General is in order.** Name, Startup and tray, Notifications, Updates, Welcome. The shortcut and the voice moved to the new Focus & voice tab.\n\n### Fixed\n- **The words shown while you speak make sense.** They no longer come out garbled or repeat themselves in circles.\n- **Less noise in what Sens hears.** The microphone is filtered before it is transcribed, and quiet voices are raised without blowing up the background.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.26.0",
+    "headline": "Sens from any window, with a floating bar",
+    "published": "2026-09-28",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.26.0",
+    "installer": {
+      "name": "Sens_0.26.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.26.0/Sens_0.26.0_x64-setup.exe",
+      "bytes": 7809024
+    },
+    "notes": "Sens now opens from anywhere. Press Ctrl+Alt+Space over any window, ask, and read the answer without leaving what you were doing. Sens can also stay in the tray and start with Windows.\n\n### New\n- **A floating bar, from any window.** Ctrl+Alt+Space opens a single line over whatever is in front. Ask, choose the project with Tab, and the answer appears right below, with the files it read and how long it took. Esc hides it; Ctrl+P pins it so it stays while you work; ↑ on an empty bar brings back your last question.\n- **What you are looking at, one click away.** The bar offers a capture of the window in front and, if you copied something in the last 30 seconds, what you copied. Neither is attached until you choose it.\n- **Take it to Sens.** Ctrl+Enter opens the same conversation in the main window, with the session, the project and everything you attached, to go on from there.\n- **Sens stays in the tray.** Closing the window can leave Sens in the tray, so the bar keeps working; quit from the tray menu. Sens can also start with Windows. Both are in Settings → General, next to the shortcut; if another app already uses it, Settings says so and the bar still opens from the tray.\n- **One notice, not two.** While the bar is showing a session, the main window does not notify you about it again.\n\n### Fixed\n- **The message box keeps its height when the chat shows again.** Coming back to a chat that was hidden, or resizing the window, measures the message again instead of leaving it cut.\n- **Uninstalling removes the start-with-Windows entry.**",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.25.0",
+    "headline": "Dictation writes as you speak, and ten times faster",
+    "published": "2026-09-28",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.25.0",
+    "installer": {
+      "name": "Sens_0.25.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.25.0/Sens_0.25.0_x64-setup.exe",
+      "bytes": 7729152
+    },
+    "notes": "Dictation now writes as you speak, and it is ten times faster. Sens also tells you when Claude needs you to sign in again, and before a change in the middle of a session costs more.\n\n### New\n- **Words as you say them.** While you speak, the phrase appears in the message and grows every moment; when you pause, Sens corrects it with a full pass and moves on to the next one. No more waiting for the end of each phrase to see anything.\n- **Sign in again from the chat.** When Claude Code's sign-in ends or is revoked, or your subscription can't be used, a notice above the message says so, with a button that opens Claude's own sign-in. With an API key, it takes you to Settings → Providers instead.\n- **A warning before a change that uses more of your plan.** Switching the model, turning thinking on or off, or changing the effort in the middle of a session makes the next message read the whole conversation again without the cache. A notice above the message says so, with how many tokens that is, and offers a new session or to undo the change.\n\n### Fixed\n- **Transcription is ten times faster.** In 0.24.0 the speech engine was built without optimizations, so each phrase took seconds. A phrase now takes about half a second, and a draft of what you are saying about a tenth of that.\n- **A phrase is no longer written several times.** Silence after a phrase could make the transcription repeat it; that silence is now trimmed and a repeated sentence is written once.\n- **\"sens AI\" is no longer red in the light theme.** In the installed app the empty chat's word turned red with any accent; it takes your accent again.\n- **An account error shows once.** \"Not logged in\" no longer appears both as Claude's answer and as the error of the turn.",
+    "credits": []
+  },
+  {
+    "version": "whisper-small-q5_1",
+    "headline": "Voice model · Whisper small (q5_1)",
+    "published": "2026-09-29",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/whisper-small-q5_1",
+    "installer": null,
+    "notes": "The voice model Sens downloads once, the first time it opens after installing or updating, for dictation that runs on your computer.\n\n- **Model:** Whisper small, multilingual, quantized to q5_1 (`ggml-small-q5_1.bin`, 190,085,487 bytes), from [whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp). MIT licence.\n- **SHA-256:** `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb`. Sens checks it before using the file.\n\nIt replaces [Whisper base](https://github.com/iiTzSenn/Sens/releases/tag/whisper-base-q5_1), which Sens deletes once this one is on the computer.\n\nThis is not a version of Sens: it is marked as a pre-release so the updater and *What's new* leave it alone.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.24.0",
+    "headline": "Sens listens and writes what you say, on your computer",
+    "published": "2026-09-28",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.24.0",
+    "installer": {
+      "name": "Sens_0.24.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.24.0/Sens_0.24.0_x64-setup.exe",
+      "bytes": 7747072
+    },
+    "notes": "Sens now listens by itself: its microphone records what you say and writes it into the message, transcribed on your computer.\n\n### New\n- **Dictation of its own.** Press the microphone and speak: each phrase appears in the message when you pause, and the last one right after you press it again. A ring follows your voice while Sens listens. Transcription runs on your computer with Whisper, so your voice never leaves it, and it understands the six languages Sens speaks.\n- **The voice model comes once.** The first time Sens opens on 0.24.0 it downloads its 57 MB voice model in the background, checks it, and keeps it: updates stay as small as before. Until it is there, the microphone says how far along it is.\n- **Choose the microphone.** *Settings › General › Voice* lists every microphone Windows has, lets you test each one with a level bar, and remembers the one you choose. Useful with interfaces and mixers like Voicemeeter, where the Windows default is not always the one that hears you.\n- **Quiet microphones are heard.** Sens raises a low voice before transcribing it.\n\n### Changed\n- **\"Hey Sens\" is gone.** Windows' speech recognition does not return text to apps like Sens, so the setting could not work.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.23.0",
+    "headline": "Dictation that works, and “Hey Sens” to start it",
+    "published": "2026-09-27",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.23.0",
+    "installer": {
+      "name": "Sens_0.23.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.23.0/Sens_0.23.0_x64-setup.exe",
+      "bytes": 7338496
+    },
+    "notes": "Dictation works again, through Windows' own speech recognition, and saying \"Hey Sens\" starts it without touching the keyboard.\n\n### New\n- **\"Hey Sens.\"** Turn on *Settings › General › Voice* and say \"Hey Sens\" (or \"Oye Sens\"): Sens comes to the front and starts dictating into the session in front of you. The phrase is recognized on your computer, with no connection and nothing to download. Dictation stops after a few seconds of silence and leaves the text in the message for you to review; nothing is sent on its own. While it's on, Windows shows the microphone in use.\n\n### Fixed\n- **Dictation works.** The microphone writes what you say into the message as you speak, through Windows speech recognition, in the language Sens speaks when Windows has it. It had stopped working with the last update of WebView2, the part of Windows that draws Sens's window.\n- **When Windows says no, Sens says why.** If *Online speech recognition* or the microphone is off in Windows, a note in the chat says so, and pressing the microphone again opens that very setting.\n- **Sending stops dictation**, and nothing more is written into the next message.",
+    "credits": []
+  },
+  {
+    "version": "whisper-base-q5_1",
+    "headline": "Voice model · Whisper base (q5_1)",
+    "published": "2026-09-27",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/whisper-base-q5_1",
+    "installer": null,
+    "notes": "The voice model Sens downloads once, the first time it opens after installing or updating, for dictation that runs on your computer.\n\n- **Model:** Whisper base, multilingual, quantized to q5_1 (`ggml-base-q5_1.bin`, 59,707,625 bytes), from [whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp). MIT licence.\n- **SHA-256:** `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898`. Sens checks it before using the file.\n\nThis is not a version of Sens: it is marked as a pre-release so the updater and *What's new* leave it alone.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.22.0",
+    "headline": "Six languages, a white light theme, and a chat that says more with less",
+    "published": "2026-09-25",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.22.0",
+    "installer": {
+      "name": "Sens_0.22.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.22.0/Sens_0.22.0_x64-setup.exe",
+      "bytes": 7317504
+    },
+    "notes": "Sens now speaks six languages, its light theme is white, and the chat says more with less: every thought names what it is about, commands read in their own colours, and your plan's limits are one click away.\n\n### New\n- **Six languages.** English, Español, Français, Deutsch, 日本語 and 简体中文. The installer asks first, preselecting the one Windows uses, and every screen changes as you choose. *Settings › Language* switches it later, without a restart. Sens's own messages follow too, and a session names itself in your language.\n- **Plan usage limits.** The context ring under the message now opens one panel with the context, what this session used (tokens in and out, replies, time), and your plan's limits: the five-hour window, the weekly one for all models, and the weekly one per model when Claude Code reports it, each with how much is gone and when it resets. The same limits sit in the account menu. A small dot on the ring warns when a window runs high.\n- **Capabilities by purpose.** *Explore* opens on a home with what to start with and your tools to connect, and a sidebar of sections — code, agents and AI, data, cloud and DevOps, security, design, productivity, business, finance, science, learning, travel. Cards show the site's own icon, who made it and what it needs, and *Add* installs and enables it in this project in one click. *Installed* groups what is enabled here and what is not, and says when an update is out.\n- **Attachments that look the part.** Pictures as thumbnails, files as cards with their real icon, in the message and once sent. BMP, SVG, ICO, AVIF and other pictures are converted, and big ones are resized to what Claude takes instead of refused. A PDF copied in Explorer pastes straight in, a long paste becomes an attachment of its own, and a dropped folder goes as a folder Claude can explore.\n- **↑ and ↓ bring back what you sent** in this session, and return to what you were writing.\n- **Commands in colour.** Bash, PowerShell and cmd read in their own grammar, with the code inside a command coloured as its language; output keeps its program's colours; JSON and diffs are coloured; `file:line` opens the file. A code block that starts with a prompt reads as a console session. The terminal has a full colour theme in both modes, and its links open.\n- **Thinking that says what it is about.** Each thought is a row titled by its own text, with how long it took. Once a reply is done, a long stretch of work folds into one line — \"Worked · 3 commands · 5 files read · 2 edits\" — that opens to all of it, and a failure is never hidden.\n\n### Changed\n- **The light theme is white.** A neutral scale replaces the warm bone surfaces, every accent has a featured surface that shows on white, and every text colour keeps at least 4.5:1.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.21.0",
+    "headline": "A terminal Claude can read, and sessions that work apart",
+    "published": "2026-09-25",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.21.0",
+    "installer": {
+      "name": "Sens_0.21.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.21.0/Sens_0.21.0_x64-setup.exe",
+      "bytes": 7154176
+    },
+    "notes": "Sens now has a terminal beside the chat that Claude can read, `@` and `/` in the message, and sessions that can work in a git worktree of their own.\n\n### New\n- **A terminal beside the chat.** *Terminal* joins the tool panel: a real PowerShell (`pwsh` when you have it) in the project's folder, in tabs, with the look you chose. `Ctrl+Ñ` opens and closes it. Closing a tab ends everything it started, and switching projects leaves a running dev server alone.\n- **Claude reads it.** Ask about \"the error in my terminal\" and Claude reads its last lines on its own. It only reads, so it doesn't ask for permission, and it only sees terminals opened in that session's own folders.\n- **Put it in the message.** One button adds the selection, or what's on screen, to the message as a code block.\n- **`@` and `/` in the message.** `@` suggests the project's files and mentions the one you pick; `/` offers Claude Code's commands, your skills and your plugins' commands. Arrows to move, Enter or Tab to pick, Escape to close.\n- **How full the context is.** A ring under the message shows how much of the context the conversation uses, amber from 70 % and red from 90 %. *Compactar ahora* summarizes the conversation to make room, and the reply says when it was compacted.\n- **A worktree per session.** Turn on *Worktree* before the first message and the session works in a copy of the repository, on a new `sens/…` branch, so your folder stays as it is until you merge. Files, changes, the branch and new terminals follow the session's folder. Deleting the session removes its worktree only if nothing is left uncommitted; the branch stays.\n- **Notices.** When a session finishes, fails or needs you while Sens is in the background, Windows tells you. *Ajustes › General › Avisos* turns them off.\n\n### Changed\n- **A lighter start.** The terminal is only loaded the first time you open one.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.20.0",
+    "headline": "Sens tells you what changed after it updates",
+    "published": "2026-09-25",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.20.0",
+    "installer": {
+      "name": "Sens_0.20.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.20.0/Sens_0.20.0_x64-setup.exe",
+      "bytes": 6998016
+    },
+    "notes": "Sens now tells you what changed after it updates: the first time it opens on a new version, *Novedades* shows what that version brings, and once you close it, it stays closed.\n\n### New\n- **What changed, right after updating.** The first time Sens opens after an update, *Novedades* opens over the chat with the notes of the version you just installed, and of any version you skipped on the way, newest first. Each one has its date and a link to its page on GitHub.\n- **It shows up once.** Close it with the ✕ or *Continuar* and it stays closed until the next version. If the notes can't be read because you're offline, it says so, and it tries again the next time Sens opens unless you close it.\n- **Read them again whenever you like** from *Ajustes › General › Ver novedades*.\n- **A new install goes straight to the welcome.** The version you installed counts as seen, so *Novedades* waits for your first update.\n\nThis is the first version that does it: when you update to 0.20.0, these notes are the first *Novedades* you'll see.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.19.2",
+    "headline": "Sens keeps answering, and stopping a session stops what it started",
+    "published": "2026-09-25",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.19.2",
+    "installer": {
+      "name": "Sens_0.19.2_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.19.2/Sens_0.19.2_x64-setup.exe",
+      "bytes": 6993408
+    },
+    "notes": "Sens keeps answering at the end of each turn, long chats stay fast, and stopping a session stops everything it started.\n\n### Fixed\n- **Stopping Claude Code stops what it started.** Changing a session's settings or closing Sens used to end Claude Code alone: the MCP servers, dev servers and background tasks it had launched kept running and held on to their ports. Now they end with it, also if Sens itself goes down.\n- **No freeze at the end of a turn.** Reading the branch, listing your sessions and reading a session back no longer run on the window's own thread, so the window keeps answering however long your history or large your repository.\n- **Long chats stay fast.** Each piece of a reply as it streams in redraws only that reply, instead of the whole conversation and every diff in it.\n- **A session opened while it works picks up where it is.** Going back to a session that was still working no longer leaves an empty reply writing forever above its history, and opening two sessions quickly no longer mixes their histories.\n- **Enter while Claude works keeps your message.** It stays in the box until the turn ends, instead of vanishing.\n- **Your conversations stay out of your project's git.** The `.sens` folder Sens keeps in each project now ignores itself, so `git add -A` no longer commits your sessions and whatever you pasted in them.\n- **Sens's own settings survive a crash.** Projects, trusted folders, capabilities and your profile are saved safely: closing Sens mid-save no longer forgets them, and two changes at once no longer lose one.\n- **A downloaded plugin stays in its folder.** It can no longer write files outside it.\n- **The page preview no longer takes Sens down** when it is sent a malformed address.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.19.1",
+    "headline": "Settings looks like Sens, and the first run goes straight to the welcome",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.19.1",
+    "installer": {
+      "name": "Sens_0.19.1_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.19.1/Sens_0.19.1_x64-setup.exe",
+      "bytes": 6985216
+    },
+    "notes": "Settings looks like Sens again, and the first time Sens opens after installing, it goes straight to the welcome.\n\n### Changed\n- **Ajustes is built from Sens's own parts.** It is still a sheet over the window, but inside it is a Sens view instead of a copy of another app's settings: the heading with its label and one line, tabs along the rule — *General*, *Apariencia*, *Proveedores* — and `Esc` next to a close button. In *Apariencia*, the featured surface says what you have now (*Claro · Iris*) and carries the Sens mark, whose cut is drawn again in the color you pick. Mode and color use the same controls as the installer.\n\n### Fixed\n- **No jump into the welcome.** After a new install, Sens showed itself first and then jumped to the welcome a moment later. The welcome is now there from the very first frame.\n- **No gap between the installer and Sens.** *Abrir Sens* now says *Abriendo Sens…* and the installer stays until Sens is on screen, instead of vanishing and leaving nothing for a second. If Sens cannot be opened, it says why. The same happens after an update.\n- **Sens opens painted and centered**, instead of showing an empty window first.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.19.0",
+    "headline": "Sens looks the way you choose",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.19.0",
+    "installer": {
+      "name": "Sens_0.19.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.19.0/Sens_0.19.0_x64-setup.exe",
+      "bytes": 6982144
+    },
+    "notes": "Sens now looks the way you choose: dark, light or as Windows, in one of five accents. A new install asks before it installs, and Settings is now a sheet over the window where you can change it whenever you like.\n\n### New\n- **Dark, light or as Windows.** *Claro* is a whole light theme in Bone and Paper, with text and states tuned to stay readable on it. *Sistema* follows Windows and changes when Windows does. *Oscuro* is still the default.\n- **Five accents.** *Señal* (the lime you know), *Hielo*, *Iris*, *Rosa* or *Neutro*. The accent is the color of what Sens is doing: the lit cut of the stone, the grain inside \"sens AI\" on an empty chat, the pixels of maximum effort, the orbit around a composer that is working, the shimmer of a step in progress, the send button. Code keeps VS Code's colors — Light+ in light, Dark+ in dark.\n- **Choose it while installing.** A new install shows *Elige cómo se ve.* before it installs, and the whole window, the stone included, changes as you pick. Sens then opens already looking that way. Updates and reinstalls don't ask: they keep what you chose, and their progress window already wears it.\n- **Settings is a sheet, not a page.** *Ajustes* opens over the window, like Claude Desktop, with *General*, *Apariencia* and *Proveedores* on the left. Esc, the ✕ or a click outside closes it, and `Ctrl+,` opens it.\n\n### Changed\n- Sens opens painted in the mode you chose, without a dark frame first.\n- The first screen of a new install says *Empezar*; *Instalar Sens* is on the step that follows.\n\nIf you update from an earlier version, Sens stays dark with Señal: choose yours in *Ajustes › Apariencia*.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.18.2",
+    "headline": "Installing no longer opens a console",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.18.2",
+    "installer": {
+      "name": "Sens_0.18.2_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.18.2/Sens_0.18.2_x64-setup.exe",
+      "bytes": 6963712
+    },
+    "notes": "Installing or updating Sens no longer flashes a console window.\n\n### Fixed\n- **No console window after installing.** When the installer closed, a terminal window titled `ping -n 3 127.0.0.1` opened for a couple of seconds. It was the installer waiting a moment before tidying up its temporary files, and Windows was giving that wait a window of its own. The tidying up now happens out of sight.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.18.1",
+    "headline": "Updating no longer waits for a Sens you cannot see",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.18.1",
+    "installer": {
+      "name": "Sens_0.18.1_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.18.1/Sens_0.18.1_x64-setup.exe",
+      "bytes": 6962688
+    },
+    "notes": "Updating from inside Sens no longer gets stuck waiting for a Sens you cannot see.\n\n### Fixed\n- **An update no longer waits forever for Sens to close.** After *Actualizar y reiniciar*, Sens could lose its window but stay running in the background. The installer kept waiting, then asked you to close a Sens that was nowhere on screen, and *Forzar el cierre* could not reach it either. The installer now finds Sens by its process and closes one that has no window left on its own, so the update goes on.\n- **Sens leaves as soon as the installer starts.** It stops its sessions and exits right away, instead of waiting for the window to wind down.\n\nIf you update from 0.18.0, Sens may still stay behind for a moment: the new installer closes it after about ten seconds and carries on.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.18.0",
+    "headline": "Sens is only the desktop app",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.18.0",
+    "installer": {
+      "name": "Sens_0.18.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.18.0/Sens_0.18.0_x64-setup.exe",
+      "bytes": 6962688
+    },
+    "notes": "Sens is now only the desktop app: the MCP server it started as, `sens-mcp`, is gone.\n\n### Changed\n- **`sens-mcp` no longer exists.** The MCP server, its command line and the code index behind them are no longer part of Sens, and the npm package has been removed. Sens is the desktop app: an AI agent on top of Claude Code.\n- **The file tree no longer shows how many symbols each file has.** That number came from the index `sens-mcp` used. Everything else in the tree works as before.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.17.0",
+    "headline": "Sens installs itself and welcomes you",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.17.0",
+    "installer": {
+      "name": "Sens_0.17.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.17.0/Sens_0.17.0_x64-setup.exe",
+      "bytes": 6981632
+    },
+    "notes": "Sens now installs itself with its own installer, and the first time it opens it gets itself ready in a minute: your name, Claude Code, and what you already had in Claude Code.\n\n### New\n- **Sens's own installer.** The setup window is Sens itself: its type, its voice, and the stone of its icon, rendered live with its cut lit. *Instalar Sens* installs it in one click, or *Personalizar instalación* lets you pick the folder and the shortcuts. If Sens is open, it asks you to close it (and offers to force it after 10 seconds). The log says what it does as it does it, and on the last screen *Abrir Sens* opens it.\n  It installs exactly where the previous installer did, with the same entries in Windows, so an existing Sens updates in place and Windows keeps seeing a single *Sens*. Uninstalling leaves your projects and their sessions alone, and only removes your Sens settings, skills and plugins if you tick that box.\n- **A welcome that gets Sens ready.** The first time Sens opens, it walks you through:\n  - your name, shown in the rail;\n  - Claude Code: install it, sign in, or see that it is already connected;\n  - **the Claude Code sessions already on your computer**, grouped by project: pick the projects and they appear in Sens, and continuing one resumes it in Claude Code with all its context. Nothing in `~/.claude` is copied or changed;\n  - the MCP servers you set up in Claude Desktop, Cursor, Windsurf or VS Code, added to *Capacidades* and turned on in the projects you bring. Your Claude Code skills, plugins and MCP servers already work in Sens, so they are listed, not copied;\n  - the project to start with.\n  It shows once, *Saltar la bienvenida* skips it, and Settings › General opens it again. People who already use Sens will see it once after updating, since it brings the import.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.16.0",
+    "headline": "two sessions side by side",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.16.0",
+    "installer": {
+      "name": "Sens_0.16.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.16.0/Sens_0.16.0_x64-setup.exe",
+      "bytes": 3717375
+    },
+    "notes": "Sens now shows two sessions side by side, lists every model your account can use, and asks before it runs without control in a folder.\n\n### New\n- **Two sessions side by side.** Drag a session from the rail onto the chat. While you drag, the half it would take lights up and the session on screen shows where it will move; nothing opens until you let go, and Escape or a drop outside the chat leaves everything as it was. With two open, dropping on one puts the new session in its place. *Abrir al lado*, in a session's menu, does the same without dragging.\n  Each pane has its own conversation, message, model, effort and thinking, and both can work at once. The rail, the title bar and the tools panel follow the pane you are using. Drag the divider to share the width (it snaps to half, and a double click evens it), close a pane from its ✕, and the layout, with each pane's model, comes back the next time Sens opens.\n- **Every model your account can use.** After the models Claude Code offers, the picker lists, under *Anteriores*, every model Anthropic serves to your account: Opus 5, Fable 5, Opus 4.8, Sonnet 4.6 and the rest. They come from Anthropic's Models API, so new models appear without an update to Sens. Claude Code's own entries are named by the model they run: *Opus 5.5 (1M)* instead of *Opus (1M context)*.\n  To ask the Models API, Sens uses your API key if you set one, or else the sign-in Claude Code keeps in `~/.claude/.credentials.json`, and sends it only to `api.anthropic.com`.\n- **Sin control asks first, once per folder.** Choosing it in a folder you have not trusted asks you to confirm. Sens remembers the answer for that folder and does not ask there again. Sin control only acts in trusted folders: elsewhere Claude asks as usual, and Sens refuses to start it there. A trusted folder's *…* menu in the rail has *Dejar de confiar*.\n- Model descriptions show when you hover a model, the chosen option in the model and permission menus is highlighted, and *Actualizar modelos* turns in green while it asks.\n- Step icons show their state: green while a step runs, with its verb glinting like the reasoning, red when it failed, and a finished edit keeps a green pencil. The top effort level glints too.\n\n### Fixed\n- The line under a reply no longer repeats \"Razonando…\" while the reasoning above already says it; it says \"Trabajando…\" with the time.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.15.0",
+    "headline": "Sens keeps Claude Code up to date",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.15.0",
+    "installer": {
+      "name": "Sens_0.15.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.15.0/Sens_0.15.0_x64-setup.exe",
+      "bytes": 3706857
+    },
+    "notes": "Sens now keeps Claude Code up to date, and shows at a glance which sessions are working, waiting for you or done.\n\n### New\n- **Sens offers to update an outdated Claude Code.** When Sens opens, and whenever you change provider, it compares the Claude Code it runs with the latest version Anthropic publishes. If yours is behind, Settings › Providers says which version is out and updates it for you, and the model picker points there. Newer models only show once Claude Code is new enough for them. The update runs `claude update`, so it works whether Claude Code came from npm or from the native installer.\n- **The rail shows who is working.** Each session is marked while its agent works (a turning ring), when it waits for your answer (amber) and when it finished while you were elsewhere (a dot, gone once you open it). A folded project shows the most urgent mark of its sessions. This works for every session, not only the one on screen.\n- **The title bar names the project** you are in, and follows the session you open.\n- Green now marks where Claude is working: its reasoning glints while it runs, a running step pulses, the tokens a turn wrote stand out under the reply, and links are underlined in green. The update pill is green, says *Actualizar* with the version, and pings.\n\n### Fixed\n- **Opus was unreachable with an older Claude Code.** Older versions list only *default*, *sonnet* and *haiku*, and *default* is how they reach Opus. Sens dropped that entry. It now keeps it unless another entry leads to the same model.\n- The welcome's grain no longer turns darker than the background, which showed dark patches around the letters. The welcome now reads \"sens AI\".",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.14.0",
+    "headline": "the interface in React, code colored as in VS Code",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.14.0",
+    "installer": {
+      "name": "Sens_0.14.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.14.0/Sens_0.14.0_x64-setup.exe",
+      "bytes": 3704698
+    },
+    "notes": "Sens's interface is rebuilt in React and built with Vite. It looks and reads as before, and it now fits narrow windows, colors code as VS Code does and shows each file's own icon.\n\n### New\n- **Code colored as in VS Code.** The file viewer, the chat's code blocks and every diff use VS Code's Dark+ colors, from the same TextMate grammars. The coloring runs off the main thread, and long files open much faster: 10 000 lines in about 50 ms instead of 750 ms.\n- **Files show the icon of their type**, from Material Icon Theme as in VS Code, in the file tree and the Changes panel. Actions and folders keep their Lucide icons.\n- **The viewer shows pictures.** Opening an image from Ficheros shows it fitted to the panel, with its size, and a click opens it larger. Other binary files and files over 8 MB show a notice saying why they are not shown. Before, a binary file showed a raw Rust error as its first line.\n\n### Fixed\n- **Nothing squeezes or overlaps in a narrow window.** The chat always keeps at least 360 px. The sessions rail yields first and folds while a tool is open in a narrow window. Tool panels stay inside their pane, the web bar and the composer's controls wrap, and tabs that do not fit scroll.\n- **The chat no longer runs under the side panels** when the tools panel is open at its widest.\n- **Every call to the app went through a fallback.** The content security policy blocked Sens's own IPC, so each call was logged as a violation and retried another way. It is now allowed directly.\n\n### Under the hood\nThe whole shell is React (settings, capabilities and the market, artifacts, changes, background tasks, the file tree and viewer, the sessions rail, the web panel, the chat and the composer), and the 7,700-line `index.html` with its inline script is gone. The chat is now built from Claude Code's events as data, with one Markdown renderer shared by the chat, the viewer, skills, tasks and the update notes. The lockfile was refreshed and `npm audit` went from 11 advisories to one low one in a development dependency.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.13.0",
+    "headline": "Sens installs Claude Code itself",
+    "published": "2026-09-24",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.13.0",
+    "installer": {
+      "name": "Sens_0.13.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.13.0/Sens_0.13.0_x64-setup.exe",
+      "bytes": 2110091
+    },
+    "notes": "Sens no longer needs you to install Claude Code by hand, and it finds the copy you already have.\n\n### Fixed\n- **\"no encuentro claude\" when Claude Code was installed.** Sens only looked in the `PATH` it started with. Claude Code's official Windows installer puts it in `~/.local/bin` and asks you to add that folder to `PATH` yourself; npm leaves a `claude.cmd` Sens could not run; and installing it with Sens open never helped. Sens now looks on the `PATH`, in `.local\\bin` (under `HOME` or your user folder, the same rule the installer uses), in npm's folder and in WinGet's, every time it launches Claude Code.\n- **The Providers card hid the ways to connect.** Without Claude Code it showed only an error and a link. The card now always shows Claude subscription, Anthropic Console and API key.\n\n### New\n- **Sens installs Claude Code for you.** If it is missing, connecting installs it first: *Iniciar sesión con Claude* installs it and then opens Claude Code's own sign-in, and *Guardar clave* saves the key and installs it. *Instalar ahora* does it on its own. Sens downloads the official build from Anthropic (about 230 MB), checks its SHA-256 against Anthropic's manifest, and runs Claude Code's own `claude install`. It installs for your user only, with no admin rights, and shows its progress in the card.\n- The model picker offers *Conectar Claude Code…* whenever it cannot read your account, and says *Falta Claude Code* instead of a raw error.\n\nSens still talks to Claude only through Claude Code, and you still sign in through Claude Code's own window. Sens never sees your credentials.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.12.3",
+    "headline": "the updater, checked end to end",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.12.3",
+    "installer": {
+      "name": "Sens_0.12.3_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.12.3/Sens_0.12.3_x64-setup.exe",
+      "bytes": 2099051
+    },
+    "notes": "No changes to the app. This release checks the updater end to end: a copy at 0.12.2 finds it, downloads it, verifies its signature and installs it.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.12.2",
+    "headline": "a clearer error when Claude Code will not start",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.12.2",
+    "installer": {
+      "name": "Sens_0.12.2_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.12.2/Sens_0.12.2_x64-setup.exe",
+      "bytes": 2100041
+    },
+    "notes": "Sens now says why it could not start Claude Code, instead of always telling you to install it.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.12.1",
+    "headline": "a release to try the updater",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.12.1",
+    "installer": {
+      "name": "Sens_0.12.1_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.12.1/Sens_0.12.1_x64-setup.exe",
+      "bytes": 2099039
+    },
+    "notes": "No changes to the app. This release exists so copies at 0.12.0 can try the updater: Sens shows it in the top bar and installs it with one click.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.12.0",
+    "headline": "updates from inside Sens, and a clearer sign-in",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.12.0",
+    "installer": {
+      "name": "Sens_0.12.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.12.0/Sens_0.12.0_x64-setup.exe",
+      "bytes": 2099097
+    },
+    "notes": "Sens now keeps itself up to date: it tells you when a new version is out and installs it with one click.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.11.0",
+    "headline": "settings, and providers to connect Claude Code",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.11.0",
+    "installer": {
+      "name": "Sens_0.11.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.11.0/Sens_0.11.0_x64-setup.exe",
+      "bytes": 2078682
+    },
+    "notes": "Settings becomes a real view, with a place to connect Claude Code by hand.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.10.0",
+    "headline": "a coding agent over Claude Code, and a capabilities market",
+    "published": "2026-09-23",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.10.0",
+    "installer": {
+      "name": "Sens_0.10.0_x64-setup.exe",
+      "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.10.0/Sens_0.10.0_x64-setup.exe",
+      "bytes": 2069288
+    },
+    "notes": "The desktop app becomes a coding agent over Claude Code, with a market of plugins, skills and MCP connectors.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      },
+      {
+        "name": "Claude Opus 5",
+        "profile": null
+      },
+      {
+        "name": "Claude Opus 5.5",
+        "profile": null
+      }
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "headline": "dynamic CLI command suggestions",
+    "published": "2026-07-09",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.8.0",
+    "installer": null,
+    "notes": "### Added\n- **Dynamic command suggestions** — every query command now ends with context-aware\n  next steps, with your own argument spliced in: after `find login` it suggests\n  `sens who login` / `sens explain login`; after `dead-code` it points at\n  `sens who <candidate>` to confirm before deleting. When a query finds nothing, the\n  suggestions turn into help instead of a dead end (e.g. `find` with no match nudges you\n  to `sens exists <keywords>` or to reindex). Terminal-only — nothing here reaches the\n  model over MCP or the hook.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "headline": "redesigned CLI, agent logos, shareable dashboard",
+    "published": "2026-07-09",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.7.0",
+    "installer": null,
+    "notes": "### Added\n- **Shareable dashboard** — `sens dashboard` now prints Local / Network / Public URLs\n  (Vite-style) with a scannable **QR code**. `--host` exposes it on your LAN; `--tunnel`\n  creates a public URL via cloudflared or ngrok if either is installed — and when\n  neither is found, prints a \"How to install\" line with clickable links to their\n  official pages. Both are opt-in and guarded by an access token in the link, since the\n  dashboard can write your config; by default it stays bound to `localhost`.\n\n### Changed\n- **Redesigned terminal UI** — every command now shares one modern look, modeled on\n  Claude Code / gh / Vercel CLIs: a consistent `sens › <command>` header, a braille\n  spinner with live status while indexing (resolving to `✓`/`✗` in place), 2-space\n  hierarchy with meaningful glyphs (`● ○ › → ⎿`), thin `─` separators, rounded summary\n  boxes, and color that carries meaning (green ok, red error, yellow warning, gray for\n  paths/counts/timings) around a single brand accent. Errors are now a single clear line\n  with an optional hint — no raw stack traces unless you pass `--verbose`. All output is\n  centralized in one module (`src/cli/ui.ts`) so the commands stay visually identical.\n  Crucially, this styling is **terminal-only**: the MCP server and the answering hook\n  still return plain text, so nothing here changes (or bloats) what the model reads.\n  Internally, `picocolors` was replaced by `chalk` + `ora` + `boxen`.",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "headline": "modular rules at session start, multi-agent init, dashboard rules manager",
+    "published": "2026-07-09",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.6.0",
+    "installer": null,
+    "notes": "### Added\n- **Modular working rules** — the rules are now composable modules (search-first, minimal, no-orphans, optimization, plus opt-in error-handling and testing). A project enables/disables modules or adds its own in `sens.config.json`; `sens rules --list` shows the state of each.\n- **Rules applied automatically at session start** — `sens init` now also wires a `SessionStart` hook that injects the active rules at the start of every Claude Code session, so they are in force without the model having to load anything.\n- **Multi-agent setup** — `sens init --agent codex|copilot|cursor|all` writes the sens usage guide + active rules into that agent's instructions file (`AGENTS.md`, `.github/copilot-instructions.md`, `.cursorrules`), between markers so re-running just refreshes the block. `--agent claude` (default) still installs the skill + hooks.\n- **Dashboard rules manager** — a \"Working rules\" panel to view every module, toggle it on or off, and add or remove your own rules, persisted to `sens.config.json`.\n\n**npm:** `npm i -g sens-mcp@0.6.0` · Full changelog in [CHANGELOG.md](https://github.com/iiTzSenn/Sens/blob/main/CHANGELOG.md)",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "headline": "sens init, an answering hook, and a skill",
+    "published": "2026-07-08",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.5.0",
+    "installer": null,
+    "notes": "### Added\n- **`sens init`** — one command to set sens up in a project: builds the index, installs the skill into `.claude/skills/sens/`, and wires the `PreToolUse` hook into `.claude/settings.json` (merging, never clobbering existing settings). This is the recommended setup path; the MCP server stays available for hosts that only speak MCP.\n- **Skill** — sens now ships as a Claude Code skill (`sens skill` prints it, or `--write` installs it). Unlike the always-loaded MCP tool schemas, a skill's guidance only enters context when relevant, so it costs no tokens on turns that don't touch code. It is composed from the same working rules as `sens rules`.\n\n### Improved\n- **The hook now answers, not just nudges.** When the model is about to grep for a symbol sens knows, the hook substitutes the grep and returns the full `who_uses` result; a Read of an indexed file gets that file's outline injected; anything sens can't answer falls back to a one-line reminder.\n- **One shared query path** (`runQuery`) now backs the CLI, the MCP server and the hook, so usage logging and output formatting are identical across all three — and `sens usage` records CLI- and hook-driven calls too, not only MCP.\n\n### Fixed\n- `sens --version` reported a hard-coded `0.0.1` regardless of the real version; it now derives from `package.json` at build time and tracks `npm version`.\n\n**npm:** `npm i -g sens-mcp@0.5.0` · Full changelog in [CHANGELOG.md](https://github.com/iiTzSenn/Sens/blob/main/CHANGELOG.md)",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.4.0",
+    "headline": "symbol call graph (explain/path), nudge hook, graph export",
+    "published": "2026-07-08",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.4.0",
+    "installer": null,
+    "notes": "### Added\n- **Symbol-level call graph** — references now record their *caller* (the symbol whose body contains each use), turning the flat usage list into a real call/reference graph. Two new queries expose it: `explain` (a symbol's callers and callees in one call) and `path` (the shortest chain of calls connecting two symbols). Available as CLI commands (`sens explain`, `sens path`) and MCP tools (`explain_symbol`, `symbol_path`); `who_uses` now also shows which symbol each use sits in.\n- **Nudge hook** — `sens hook` is a `PreToolUse` hook that gently reminds the model to reach for sens (`find_symbol`, `file_outline`, `explain_symbol`, …) before it greps or reads whole files. Fires at most once per session per tool and stays silent on non-source files.\n- **Graph export** — the dashboard can export the dependency graph to GEXF, GraphML, DOT, JSON and a CSV edge list via `/api/export`, so it opens in Gephi, yEd, Cytoscape or Graphviz.\n\n### Improved\n- **Faster queries** — the query engine builds its name/file/id lookups, the import adjacency and the call graph once up front (O(1) lookups), and the engine is memoized per project so repeated MCP calls skip re-reading and re-parsing the index from disk.\n\n**npm:** `npm i -g sens-mcp@0.4.0` · Full changelog in [CHANGELOG.md](https://github.com/iiTzSenn/Sens/blob/main/CHANGELOG.md)",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "headline": "10 languages, working rules, usage log, smarter dead code",
+    "published": "2026-07-07",
+    "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.2.0",
+    "installer": null,
+    "notes": "## ✨ Highlights\n\n### 10 more languages\nBeyond JavaScript/TypeScript, Sens now indexes **Python, Go, Rust, Java, C#, C, C++, PHP, Ruby and Kotlin** via tree-sitter. A mixed repo (e.g. a TS frontend + a Python or Go backend) is indexed as a single project. Adding a language is now a small self-contained parser under `src/indexer/languages/`.\n\n### Working rules the model follows\nThe MCP server now hands the model a concrete set of **coding rules** — reuse what exists instead of duplicating, leave no orphan code, keep it minimal but maintainable — each tied to the Sens tool that lets it *verify* the rule. They load automatically over MCP; you can also print them with `sens rules` or inject them with the `/sens rules` prompt.\n\n### Know it's actually being used\nEvery MCP tool call is now recorded to `.sens/usage.jsonl`. Run **`sens usage`** to see exactly which tools the model called, when, and with what arguments — proof, not faith.\n\n### Smarter `dead_code`\n`dead_code` no longer flags code that *is* used but was invisible to static analysis:\n- dynamic `import(\"./x\")`\n- `export * from \"./y\"` barrels and named re-exports\n- names referenced via string / reflective access (`obj[\"name\"]`, registries)\n- the same, for quoted names in the tree-sitter languages\n\n## 📦 Install\n\n```bash\nnpx sens-mcp@0.2.0 mcp          # run the MCP server\n# or add to .mcp.json:  { \"command\": \"npx\", \"args\": [\"-y\", \"sens-mcp\", \"mcp\"] }\n```\n\n## ⚠️ Notes\n- **Swift** is intentionally not included: its tree-sitter grammar crashes Node's WASM teardown. Every other listed language is fully supported.\n- The on-disk index schema was bumped — caches rebuild automatically on first run after upgrading.\n\n**Full changelog:** https://github.com/iiTzSenn/Sens/compare/0.1.0...v0.2.0",
+    "credits": [
+      {
+        "name": "iiTzSenn",
+        "profile": "https://github.com/iiTzSenn"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "version": "0.30.0",
+  "published": "2026-10-02",
+  "installer": {
+    "name": "Sens_0.30.0_x64-setup.exe",
+    "url": "https://github.com/beyondhumane/sens-ai/releases/download/v0.30.0/Sens_0.30.0_x64-setup.exe",
+    "bytes": 12105728
+  },
+  "page": "https://github.com/beyondhumane/sens-ai/releases/tag/v0.30.0"
+}

@@ -1,0 +1,56 @@
+---
+import "../styles/page.css";
+import "../styles/motion.css";
+import Icon from "../components/Icon.astro";
+import wordmark from "../brand/wordmark.svg?raw";
+import { siteIcons } from "../content/icons";
+import Base from "../layouts/Base.astro";
+import Footer from "../sections/Footer.astro";
+import Nav from "../sections/Nav.astro";
+import { pathFor, type Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = site(locale);
+const ways = [
+  { label: t.homePage, href: pathFor(locale, "/") },
+  { label: t.whatSensChecks, href: pathFor(locale, "/#engine") },
+  { label: t.research, href: pathFor(locale, "/research") },
+  { label: t.releases, href: pathFor(locale, "/releases") },
+];
+---
+
+<Base title={t.missingTitle} description={t.missingDescription} image="home" locale={locale} path="/">
+  <a class="skip" href="#main">{t.skip}</a>
+  <Nav locale={locale} path="/" />
+  <main id="main" class="missing">
+    <div class="wrap missing-inner">
+      <p class="label mono">404</p>
+      <h1 class="missing-title">{t.missingHeading}</h1>
+      <p class="missing-lead">{t.missingLead}</p>
+      <ul class="missing-ways">
+        {
+          ways.map((way) => (
+            <li>
+              <a class="link" href={way.href}>
+                {way.label} <Icon paths={siteIcons.arrow} size={18} />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <div class="wordmark" aria-hidden="true" set:html={wordmark} />
+  </main>
+  <Footer locale={locale} path="/" />
+</Base>
+
+<script>
+  import { boot } from "../motion/boot";
+
+  boot();
+</script>

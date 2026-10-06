@@ -1,0 +1,25 @@
+---
+import Icon from "../components/Icon.astro";
+import Mark from "../components/Mark.astro";
+import { appIcons } from "../content/icons";
+import { session } from "../content/session";
+
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+---
+
+<header class="topbar">
+  <span class="icon-btn rail-toggle"><Icon paths={appIcons.railToggle} size={16} /></span>
+  <span class="brand"><Mark id={id} size={22} micro /><b>sens</b></span>
+  <span class="topbar-title">{session.project}</span>
+  <span class="win">
+    <span><Icon paths={appIcons.focusMode} size={16} /></span>
+    <span><Icon paths={appIcons.tools} size={15} stroke={1.8} /></span>
+    <span><Icon paths={appIcons.minimize} size={15} stroke={1.8} /></span>
+    <span><Icon paths={appIcons.maximize} size={15} stroke={1.7} /></span>
+    <span><Icon paths={appIcons.close} size={15} stroke={1.8} /></span>
+  </span>
+</header>

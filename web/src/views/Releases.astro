@@ -1,0 +1,83 @@
+---
+import "../styles/page.css";
+import "../styles/motion.css";
+import { markdownToHtml } from "satteri";
+import Icon from "../components/Icon.astro";
+import { siteIcons } from "../content/icons";
+import { megabytes, type Notes } from "../content/release";
+import { links } from "../content/site";
+import data from "../data/releases.json";
+import Base from "../layouts/Base.astro";
+import Footer from "../sections/Footer.astro";
+import Nav from "../sections/Nav.astro";
+import { dayIn, type Locale } from "../i18n/locales";
+import { releasesCopy } from "../i18n/releases";
+import { site } from "../i18n/site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = releasesCopy(locale);
+const releases = data as Notes[];
+---
+
+<Base title={t.title} description={t.description} image="releases" locale={locale} path="/releases">
+  <a class="skip" href="#main">{site(locale).skip}</a>
+  <Nav locale={locale} path="/releases" />
+  <main id="main" class="releases">
+    <div class="wrap">
+      <header class="releases-head">
+        <p class="label">{t.label}</p>
+        <h1 class="releases-title">{t.heading}</h1>
+        <p class="releases-lead">{t.lead}</p>
+        {t.inEnglish && <p class="releases-note">{t.inEnglish}</p>}
+        <a class="link" href={links.releases}>{t.allOnGithub} <Icon paths={siteIcons.external} size={18} /></a>
+      </header>
+      <ol class="release-list">
+        {
+          releases.map((release, at) => (
+            <li class="release" id={`v${release.version}`}>
+              <div class="release-meta">
+                <a class="release-version" href={`#v${release.version}`}>
+                  v{release.version}
+                </a>
+                {release.published && <time datetime={release.published}>{dayIn(locale, release.published)}</time>}
+                {at === 0 && <span class="release-latest">{t.latest}</span>}
+              </div>
+              <div class="release-body" lang="en">
+                <h2 class="release-headline">{release.headline ?? `Sens ${release.version}`}</h2>
+                {release.notes && <div class="release-notes" set:html={markdownToHtml(release.notes).html} />}
+                {release.credits.length > 0 && (
+                  <p class="release-credits">
+                    <span class="label" lang={locale}>{t.madeBy}</span>
+                    {release.credits.map((credit, index) => (
+                      <Fragment>
+                        {index > 0 && <span aria-hidden="true"> · </span>}
+                        {credit.profile ? <a href={credit.profile}>{credit.name}</a> : <span>{credit.name}</span>}
+                      </Fragment>
+                    ))}
+                  </p>
+                )}
+                <p class="release-links">
+                  <a class="link" href={release.page} lang={locale}>
+                    {t.onGithub} <Icon paths={siteIcons.external} size={16} />
+                  </a>
+                  {release.installer && <span class="mono">{release.installer.name} · {megabytes(release.installer.bytes)}</span>}
+                </p>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </main>
+  <Footer locale={locale} path="/releases" />
+</Base>
+
+<script>
+  import { boot } from "../motion/boot";
+
+  boot();
+</script>

@@ -1,0 +1,134 @@
+---
+import { niceScale, pathOf, spread } from "../lib/chart";
+
+type Tone = "with" | "without" | "reference";
+
+interface Drawn {
+  tone: Tone;
+  values: number[];
+  main?: boolean;
+}
+
+interface Row {
+  label: string;
+  tone: Tone;
+  values: number[];
+}
+
+interface Props {
+  id: string;
+  title: string;
+  caption: string;
+  axis: string;
+  drawn: Drawn[];
+  rows: Row[];
+  steps: string[];
+  format?: "count" | "millions";
+  showData: string;
+  afterTask: string;
+  hint: string;
+  locale: string;
+}
+
+const { id, title, caption, axis, drawn, rows, steps, format = "count", showData, afterTask, hint, locale } = Astro.props;
+
+const WIDTH = 760;
+const HEIGHT = 380;
+const LEFT = 56;
+const RIGHT = 168;
+const TOP = 16;
+const BOTTOM = 44;
+const LABEL_GAP = 18;
+
+const decimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const show = (value: number) => (format === "millions" ? `${decimal.format(value / 1_000_000)}M` : String(Math.round(value)));
+const scale = niceScale(Math.max(...drawn.flatMap((line) => line.values)));
+const last = steps.length - 1;
+const xOf = (at: number) => LEFT + (at / last) * (WIDTH - LEFT - RIGHT);
+const yOf = (value: number) => TOP + (1 - value / scale.max) * (HEIGHT - TOP - BOTTOM);
+const pointsOf = (values: number[]): [number, number][] => values.map((value, at) => [xOf(at), yOf(value)]);
+const ends = spread(
+  rows.map((row) => yOf(row.values[last])),
+  LABEL_GAP,
+);
+const everyFifth = steps.map((_, at) => at).filter((at) => at % 5 === 0);
+const points = steps.map((step, at) => ({
+  x: xOf(at),
+  title: step,
+  rows: rows.map((row) => ({ label: row.label, tone: row.tone, value: show(row.values[at]) })),
+}));
+---
+
+<figure class="chart" data-chart={JSON.stringify(points)} aria-labelledby={`${id}-title`}>
+  <figcaption class="chart-head">
+    <p class="chart-title" id={`${id}-title`}>{title}</p>
+    <ul class="chart-legend">
+      {
+        rows.map((row) => (
+          <li data-tone={row.tone}>
+            <span class="chart-key" />
+            {row.label}
+          </li>
+        ))
+      }
+    </ul>
+  </figcaption>
+  <div class="chart-plot" tabindex="0" aria-label={hint}>
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`${title}. ${caption}`}>
+      {
+        scale.ticks.map((tick) => (
+          <g class="chart-grid">
+            <line x1={LEFT} x2={WIDTH - RIGHT} y1={yOf(tick)} y2={yOf(tick)} />
+            <text x={LEFT - 10} y={yOf(tick) + 4} text-anchor="end">
+              {show(tick)}
+            </text>
+          </g>
+        ))
+      }
+      {
+        everyFifth.map((at) => (
+          <text class="chart-tick" x={xOf(at)} y={HEIGHT - BOTTOM + 20} text-anchor="middle">
+            {at}
+          </text>
+        ))
+      }
+      <text class="chart-axis" x={LEFT} y={HEIGHT - 6}>{axis}</text>
+      {drawn.map((line) => <path class:list={["chart-line", line.main && "main"]} data-tone={line.tone} d={pathOf(pointsOf(line.values))} />)}
+      {
+        rows.map((row, at) => (
+          <text class="chart-end" data-tone={row.tone} x={WIDTH - RIGHT + 10} y={ends[at] + 4}>
+            {row.label} · {show(row.values[last])}
+          </text>
+        ))
+      }
+      <line class="chart-cross" x1="0" x2="0" y1={TOP} y2={HEIGHT - BOTTOM} />
+    </svg>
+    <div class="chart-tip" hidden></div>
+  </div>
+  <p class="chart-caption">{caption}</p>
+  <details class="chart-data">
+    <summary>{showData}</summary>
+    <div class="chart-table">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{afterTask}</th>
+            {rows.map((row) => <th scope="col">{row.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {
+            steps.map((_, at) => (
+              <tr>
+                <th scope="row">{at}</th>
+                {rows.map((row) => (
+                  <td>{show(row.values[at])}</td>
+                ))}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</figure>

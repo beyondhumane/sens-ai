@@ -1,0 +1,10 @@
+---
+import Home from "../../views/Home.astro";
+import { routes, type Translated } from "../../i18n/locales";
+
+export const getStaticPaths = routes;
+
+const { lang } = Astro.params as { lang: Translated };
+---
+
+<Home locale={lang} />

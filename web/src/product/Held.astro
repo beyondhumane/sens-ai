@@ -1,0 +1,25 @@
+---
+import Icon from "../components/Icon.astro";
+import { appIcons } from "../content/icons";
+---
+
+<div class="ask held">
+  <div class="ask-head">
+    <span class="ask-icon"><Icon paths={appIcons.shieldAlert} size={16} /></span>
+    <span class="ask-title">Sens does not approve these changes</span>
+  </div>
+  <div class="ask-body">
+    <p class="ask-note">Claude tried three times. The changes stay on disk until you decide.</p>
+    <div class="sens-finding">
+      <p class="sens-rule">
+        <span>Leaves code unused</span>
+        <span class="sens-place">src/format.ts:12</span>
+      </p>
+    </div>
+  </div>
+  <div class="ask-actions">
+    <span class="primary">Ask Claude to fix them</span>
+    <span class="quiet">Undo</span>
+    <span class="quiet">Accept</span>
+  </div>
+</div>

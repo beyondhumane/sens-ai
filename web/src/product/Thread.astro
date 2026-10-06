@@ -1,0 +1,19 @@
+---
+import Answer from "./Answer.astro";
+import Request from "./Request.astro";
+import Run from "./Run.astro";
+---
+
+<div class="thread" data-part="thread">
+  <span class="fade top" data-part="fade-top"></span>
+  <span class="fade bottom"></span>
+  <div class="thread-inner" data-part="thread-inner">
+    <Request />
+    <div class="turn reply">
+      <div class="flow">
+        <Run />
+        <Answer />
+      </div>
+    </div>
+  </div>
+</div>
