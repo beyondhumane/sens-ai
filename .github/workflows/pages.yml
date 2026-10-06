@@ -6,6 +6,8 @@ on:
     paths:
       - "web/**"
       - ".github/workflows/pages.yml"
+  release:
+    types: [published, edited, deleted]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +20,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  relaunch:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"
+
   build:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,6 +47,9 @@ jobs:
         uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm test
+      - run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: npm run build
         env:
           SITE_URL: ${{ steps.pages.outputs.origin }}

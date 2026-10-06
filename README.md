@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="https://sens.beyondhumane.com"><b>Website</b></a> ·
   <a href="#download"><b>Download</b></a> ·
   <a href="#a-tour">Tour</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -265,11 +266,16 @@ rust/
 src/brand/        design tokens, and the mark's and wordmark's geometry
 scripts/          brand assets, the installer build, the version check
 docs/             the visual identity, the language guide, design specs
+web/              the website: Astro, GSAP and CSS, in six languages
 ```
+
+### The website
+
+[sens.beyondhumane.com](https://sens.beyondhumane.com) is built from `web/`, a standalone Astro site with its own `package-lock.json`, outside the npm workspaces. Every push to `main` that touches `web/`, and every release, runs the `web` workflow, which tests the site, reads the releases from GitHub, builds it and publishes it to GitHub Pages; CI checks, tests and builds it on every branch. [Its README](web/README.md) says how to run it and how it is put together.
 
 ### Releasing
 
-The version is written in several places and must agree everywhere; `npm run version:check` says where it does not. Pushing a `v*` tag runs the release workflow: it checks that the tag names that version, type-checks and tests, builds the installer, signs the update with the key whose public half is compiled into the app, and attaches the `.exe` and its `.sig` to the release. The release notes are what Sens shows under *What's new*, up to the first alert or `### Install` heading.
+The version is written in several places and must agree everywhere; `npm run version:check` says where it does not. Pushing a `v*` tag runs the release workflow: it checks that the tag names that version, type-checks and tests, builds the installer, signs the update with the key whose public half is compiled into the app, and attaches the `.exe` and its `.sig` to the release. The release notes are what Sens shows under *What's new*, up to the first alert or `### Install` heading. Once the installer is attached, the workflow publishes the website again, so its version, download and notes follow the release.
 
 ## Contributing
 

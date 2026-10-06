@@ -1,7 +1,8 @@
 # La web de Sens
 
 Fecha: 2026-09-30 · Estado: construida, en la carpeta `web/` del repositorio de Sens y publicada
-en GitHub Pages desde `main`; la etapa 2 está pendiente (ver *Etapas*).
+en `https://sens.beyondhumane.com` con GitHub Pages desde `main` (ver *Publicación*); la etapa 2
+está pendiente (ver *Etapas*).
 Ámbito: `web/`. Lee del mismo repositorio: `src/brand/{tokens,mark}.ts`,
 `rust/sens-app/ui/public/fonts/` y `rust/sens-app/ui/src` como referencia de la interfaz.
 
@@ -17,7 +18,9 @@ Tomadas el 2026-09-30 en la sesión de diseño.
   extraordinaria.
 - **El lima es una excepción con significado** (ver *Excepciones a la identidad*): grande solo en
   la portada y en el cierre, y siempre significa foco.
-- **Idioma**: inglés, el de origen de Sens (`docs/i18n.md`), el del README y el de GitHub.
+- **Idioma**: inglés, el de origen de Sens (`docs/i18n.md`), el del README y el de GitHub, y los
+  mismos seis idiomas que la app: inglés en `/`, y español, francés, alemán, japonés y chino bajo
+  `/es/`, `/fr/`, `/de/`, `/ja/` y `/zh/`.
 - **Base**: Astro con salida estática, GSAP (ScrollTrigger y CustomEase) y CSS.
 - **Titular a peso 650**, el máximo de `identity.md` §5.2. La contundencia sale del tamaño y del
   espaciado, no de un peso ultranegro.
@@ -715,7 +718,26 @@ Presupuestos que se miden, no que se prometen:
      las siete medidas, carga lenta, movimiento reducido, enlaces reales, Lighthouse y rendimiento
      observado.
 
+## Publicación
+
+- **Dónde**: la carpeta `web/` de `github.com/beyondhumane/sens-ai`, con su propio
+  `package-lock.json` y fuera de los workspaces de npm, de modo que el `tsc` y el `vitest` de la
+  raíz no la alcanzan.
+- **Cómo**: `.github/workflows/pages.yml` instala, prueba, lee las releases, construye y despliega
+  en GitHub Pages en cada push a `main` que toque `web/`, y también a mano. El job `web` de
+  `ci.yml` comprueba tipos, prueba y construye en todas las ramas.
+- **Releases**: publicar, editar o borrar una release relanza el workflow sobre `main` (el entorno
+  `github-pages` solo despliega desde `main`), y el workflow de release lo relanza también cuando
+  ya ha adjuntado el instalador y escrito su SHA-256. `npm run release` corre en cada build, así
+  que la versión de la navegación, la descarga, `/releases` con sus notas y créditos, y el pie
+  siguen a la última release; si GitHub no responde, se usan los datos del repositorio.
+- **Dirección**: `https://sens.beyondhumane.com`. `actions/configure-pages` entrega el origen y la
+  ruta base como `SITE_URL` y `BASE_PATH`, y `withBase()` antepone esa ruta a cada enlace; sin
+  dominio propio, la misma build sirve en `beyondhumane.github.io/sens-ai/`.
+- **Dominio**: CNAME a `beyondhumane.github.io` en Cloudflare, en *DNS only*, porque con el proxy
+  GitHub no puede renovar el certificado. HTTPS obligatorio; `http://` y la dirección de
+  `github.io` redirigen con 301.
+
 ## Fuera de alcance
 
-Alojamiento y dominio (la salida es estática y sirve para cualquier hosting), analítica, otros
-idiomas, el Canon, un blog o documentación.
+Analítica, y un blog o documentación más allá de `/research`.
