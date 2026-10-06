@@ -81,6 +81,17 @@ describe("file viewer", () => {
     expect(lines()[1]).toBe("export const app = a + 1;");
   });
 
+  it("marks the line it was asked to show, and Markdown opens as code to show it", async () => {
+    show();
+    await act(async () => openFile("src/app.ts", 2));
+    const focused = [...document.querySelectorAll(".source .line[data-focused]")].map((line) => line.querySelector(".num")?.textContent);
+    expect(focused).toEqual(["2"]);
+    await act(async () => openFile("README.md", 4));
+    expect(viewer.getState().mode).toBe("source");
+    await act(async () => openFile("src/app.ts"));
+    expect(document.querySelector(".source .line[data-focused]")).toBeNull();
+  });
+
   it("marks the lines the agent added, with its counts, and opens there", async () => {
     show();
     act(() => noteEdit({ path: "src/app.ts", lines: [2], plus: 1, minus: 3 }));

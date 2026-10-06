@@ -345,10 +345,23 @@ export interface TerminalOpened {
 }
 
 export interface TerminalReading {
-  ask: number;
   terminal: number | null;
   lines: number;
   within: string[];
+}
+
+export interface TerminalAdopted {
+  id: number;
+  root: string;
+  shell: string;
+  title: string;
+  backlog: string;
+}
+
+export interface Acting {
+  ask: number;
+  act: string;
+  input: unknown;
 }
 
 export type TerminalHeard = { kind: "out"; id: number; data: string } | { kind: "ended"; id: number; code: number | null };

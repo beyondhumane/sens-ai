@@ -23,6 +23,7 @@ minisign-verify = "0.2.5"
 sha2 = "0.10"
 toml = "1"
 portable-pty = "0.9"
+vt100 = "0.16"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

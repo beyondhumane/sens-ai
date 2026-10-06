@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createStore } from "zustand/vanilla";
 import { commands } from "../../ipc/commands";
-import type { AttachedFile, Card, Refused, Settings } from "../../ipc/types";
+import type { AttachedFile, Card, Refused, Repo, Settings } from "../../ipc/types";
 import { store, stored } from "../../shared/storage.js";
 import { forgetChanges } from "../changes/store";
 import { notice, send as sendChat, warm as warmChat, warn, whenTurnEnds } from "../chat/store";
@@ -316,6 +316,10 @@ export async function switchTo(name: string, pane: Pane = focused()) {
   } catch (reason) {
     return warn(String(reason), pane);
   }
+  await switched(root, repo, pane);
+}
+
+export async function switched(root: string, repo: Repo, pane: Pane) {
   for (const one of workingIn(root)) {
     nextRepoLap(one);
     one.desk.setState({ repo });

@@ -16,8 +16,6 @@ import { failRail, fold, loadRail, oweRail, rail } from "../features/rail/store"
 import { forgetSite } from "../features/web/store";
 import { t } from "./copy";
 
-// Where the main area goes: a session of a project, a new one, a view over
-// the chat. Opening a project other than the one open resets what shows it.
 
 const LOADS: Record<Exclude<View, "">, () => unknown> = {
   capabilities: enterCapabilities,
@@ -81,7 +79,6 @@ const blankIn = (home: string) => async (pane: Pane) => {
   await loadRail();
 };
 
-// A new session in `home`: the empty chat, the message ready to write.
 export function draft(home: string, pane: Pane = focused()) {
   toChat();
   return visit(home, blankIn(home), pane);
@@ -141,6 +138,23 @@ export async function closePane(pane: Pane) {
   await arrive();
 }
 
+export async function draftBeside(home: string) {
+  toChat();
+  const before = project.getState().root;
+  const pane = newPane(home);
+  settle(pane);
+  place(pane, besideSide());
+  await commands.remember(home).catch(oweRail);
+  await readTrust(pane);
+  await readRepo(pane);
+  if (home !== before) {
+    leave();
+    await arrive();
+  }
+  await blankIn(home)(pane);
+  return pane;
+}
+
 export const dropShown = (pane: Pane, home: string) => (split() ? closePane(pane) : draft(home, pane));
 
 export async function chooseFolder() {
@@ -148,7 +162,6 @@ export async function chooseFolder() {
   if (typeof picked === "string") await draft(picked);
 }
 
-// Ctrl+N: a new session where you are, or a folder first.
 export function fresh() {
   toChat();
   const { root } = project.getState();
@@ -173,7 +186,6 @@ async function restore(kept: Kept) {
   return true;
 }
 
-// The last project opens where it was left, in a new session.
 export async function boot() {
   hello();
   const kept = keptLayout();

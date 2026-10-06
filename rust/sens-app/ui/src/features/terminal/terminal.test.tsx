@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ILink, ILinkProvider } from "@xterm/xterm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TerminalHeard, TerminalReading } from "../../ipc/types";
+import type { TerminalAdopted, TerminalHeard } from "../../ipc/types";
+import { perform } from "../../app/acts";
 import { shell } from "../../app/shell";
 import { look } from "../../shared/look";
 import { focused } from "../panes/store";
@@ -36,12 +37,12 @@ const ipc = vi.hoisted(() => ({
     terminalWrite: vi.fn(),
     terminalResize: vi.fn(),
     terminalClose: vi.fn(),
-    terminalScreen: vi.fn(),
+    actAnswer: vi.fn(),
     openExternal: vi.fn(),
     openFile: vi.fn(),
   },
   heard: null as ((what: TerminalHeard) => void) | null,
-  read: null as ((reading: TerminalReading) => void) | null,
+  adopted: null as ((adopted: TerminalAdopted) => void | Promise<void>) | null,
   xterms: [] as Fake[],
 }));
 
@@ -49,7 +50,7 @@ vi.mock("../../ipc/commands", () => ({
   commands: ipc.commands,
   events: {
     terminal: (heard: (what: TerminalHeard) => void) => ((ipc.heard = heard), Promise.resolve(() => {})),
-    terminalRead: (read: (reading: TerminalReading) => void) => ((ipc.read = read), Promise.resolve(() => {})),
+    terminalAdopted: (adopted: (adopted: TerminalAdopted) => void) => ((ipc.adopted = adopted), Promise.resolve(() => {})),
   },
 }));
 
@@ -311,8 +312,38 @@ describe("Claude reading the terminal", () => {
     opened(95);
     await act(async () => openConsole());
     last().lines = [{ text: "hola" }];
-    ipc.read!({ ask: 7, terminal: null, lines: 10, within: ["C:/Proyectos/demo"] });
-    expect(ipc.commands.terminalScreen).toHaveBeenCalledWith(7, "Terminal 95 · pwsh en C:/Proyectos/demo\n\nhola");
+    await perform({ ask: 7, act: "read_terminal", input: { terminal: null, lines: 10, within: ["C:/Proyectos/demo"] } });
+    expect(ipc.commands.actAnswer).toHaveBeenCalledWith(7, true, "Terminal 95 · pwsh en C:/Proyectos/demo\n\nhola");
+  });
+
+  it("tells the bridge it cannot do what it was never taught", async () => {
+    await perform({ ask: 8, act: "fly", input: {} });
+    expect(ipc.commands.actAnswer).toHaveBeenCalledWith(8, false, 'Sens has no "fly" in this window.');
+  });
+});
+
+describe("a terminal Claude leaves running", () => {
+  const adopted = { id: 140, root: "C:/Proyectos/demo", shell: "powershell", title: "servidor de desarrollo", backlog: "\x1b[6nVITE listo en el puerto 5173\r\n" };
+
+  it("becomes a tab of its own with what it printed so far and what it prints next", async () => {
+    hear({ kind: "out", id: 140, data: "cambio detectado\r\n" });
+    await act(async () => ipc.adopted!(adopted));
+    render(<ConsoleTabs />);
+
+    const tab = screen.getByRole("tab", { name: "servidor de desarrollo" });
+    expect(tab.closest(".console-tab")?.getAttribute("data-claude")).toBe("true");
+    expect(tab.closest(".console-tab")?.getAttribute("title")).toBe("La lanzó Claude · servidor de desarrollo");
+    expect(last().written).toBe("\x1b[6nVITE listo en el puerto 5173\r\ncambio detectado\r\n");
+    expect(consoles.getState().shown).toBe(140);
+  });
+
+  it("does not answer the cursor question twice, but takes what the person types", async () => {
+    await act(async () => ipc.adopted!({ ...adopted, id: 141 }));
+    last().typed("\x1b[2;1R");
+    last().typed("y");
+    await settleDown();
+    expect(ipc.commands.terminalWrite).toHaveBeenCalledTimes(1);
+    expect(ipc.commands.terminalWrite).toHaveBeenCalledWith(141, "y");
   });
 });
 

@@ -16,7 +16,13 @@ export function ConsoleTabs() {
   return (
     <div className="console-tabs" role="tablist" aria-label={t.terminals}>
       {open.map((one) => (
-        <div key={one.id} className="console-tab" data-ended={one.ended ? "true" : undefined} title={`${one.shell} · ${one.root || "~"}`}>
+        <div
+          key={one.id}
+          className="console-tab"
+          data-ended={one.ended ? "true" : undefined}
+          data-claude={one.title ? "true" : undefined}
+          title={one.title ? t.byClaude(one.title) : `${one.shell} · ${one.root || "~"}`}
+        >
           <button
             type="button"
             role="tab"
@@ -26,7 +32,7 @@ export function ConsoleTabs() {
             aria-controls={`console-${one.id}`}
             onClick={() => showConsole(one.id)}
           >
-            <Icon svg={ICONS.terminal} />
+            <Icon svg={one.title ? ICONS.brain : ICONS.terminal} />
             <span>{nameOf(one)}</span>
           </button>
           <button type="button" className="console-shut" title={t.closeThis} aria-label={t.closeNamed(nameOf(one))} onClick={() => closeConsole(one.id)}>

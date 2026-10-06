@@ -30,6 +30,7 @@ pub const LANDED: &str = "sens-landed";
 pub const CLOSE: &str = "sens-close";
 pub const MAX_ROUNDS: u32 = 3;
 pub const BARRED_TOOLS: &str = "EnterWorktree,ExitWorktree";
+const SHELL_TOOLS: &str = "Bash|PowerShell|mcp__sens__run_in_terminal|mcp__sens__write_terminal";
 
 const WAIT: u64 = 3600;
 const INDEX_PATIENCE: Duration = Duration::from_secs(30);
@@ -60,7 +61,7 @@ pub fn hooks() -> Value {
     };
     json!({
         "UserPromptSubmit": [entry(None, PROMPT)],
-        "PreToolUse": [entry(Some("Write|Edit|NotebookEdit"), WRITE), entry(Some("Bash|PowerShell"), SHELL)],
+        "PreToolUse": [entry(Some("Write|Edit|NotebookEdit"), WRITE), entry(Some(SHELL_TOOLS), SHELL)],
         "PostToolUse": [entry(None, LANDED)],
         "Stop": [entry(None, CLOSE)],
         "SubagentStop": [entry(None, CLOSE)]
@@ -352,7 +353,8 @@ impl Circuit {
     }
 
     fn shell(&self, voice: &dyn Voice, input: &Value) -> Value {
-        let command = input["tool_input"]["command"].as_str().unwrap_or_default();
+        let typed = &input["tool_input"];
+        let command = typed["command"].as_str().or(typed["text"].as_str()).unwrap_or_default();
         let judged = self.weigh(voice, "shell", judge_command(command), |_| false);
         if !judged.blocks.is_empty() {
             return self.reply(voice, "shell", &judged, "PreToolUse");
@@ -889,6 +891,11 @@ test('plain again', () => {{
         assert_eq!(decision(&circuit.answer(&ear, SHELL, &shell("rm -rf .sens"))), "deny");
         assert_eq!(decision(&circuit.answer(&ear, SHELL, &shell("git worktree add ../x"))), "deny");
         assert_eq!(circuit.answer(&ear, SHELL, &shell("npm test")), json!({}));
+        let typed = json!({ "hook_event_name": "PreToolUse", "tool_name": "mcp__sens__write_terminal", "tool_input": { "terminal": 1, "text": "rm -rf .sens" } });
+        assert_eq!(decision(&circuit.answer(&ear, SHELL, &typed)), "deny");
+        let hooks = hooks();
+        let watched = hooks["PreToolUse"][1]["matcher"].as_str().unwrap().split('|').collect::<Vec<_>>();
+        assert!(["Bash", "PowerShell", "mcp__sens__run_in_terminal", "mcp__sens__write_terminal"].iter().all(|tool| watched.contains(tool)));
     }
 
     #[test]
