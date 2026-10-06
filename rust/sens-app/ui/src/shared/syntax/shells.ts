@@ -22,8 +22,12 @@ const POWERSHELLISH = /^\s*(?:&\s*)?[A-Z][a-z]+-[A-Z][A-Za-z]+\b|\$env:\w|\|\s*(
 export const grammarOf = (shell: Shell) => GRAMMARS[shell];
 export const promptOf = (shell: Shell) => PROMPTS[shell];
 
+export const RUN_IN_TERMINAL = "mcp__sens__run_in_terminal";
+
+const onWindows = () => typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+
 export function shellOf(tool: string, command = ""): Shell {
-  if (tool === "PowerShell") return "powershell";
+  if (tool === "PowerShell" || (tool === RUN_IN_TERMINAL && onWindows())) return "powershell";
   if (tool === "Bash") return "bash";
   return POWERSHELLISH.test(command) ? "powershell" : "bash";
 }

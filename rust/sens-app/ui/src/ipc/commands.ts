@@ -4,6 +4,7 @@ import type { Language } from "../shared/i18n";
 import type { Look } from "../shared/look";
 import type {
   Account,
+  Acting,
   Adopted,
   Artifact,
   AttachedFile,
@@ -50,7 +51,7 @@ import type {
   Slash,
   TerminalHeard,
   TerminalOpened,
-  TerminalReading,
+  TerminalAdopted,
   UpdateCheck,
   UpdateStage,
   VoiceHeard,
@@ -159,7 +160,7 @@ export const commands = {
   terminalWrite: (id: number, data: string) => invoke<void>("terminal_write", { id, data }),
   terminalResize: (id: number, cols: number, rows: number) => invoke<void>("terminal_resize", { id, cols, rows }),
   terminalClose: (id: number) => invoke<void>("terminal_close", { id }),
-  terminalScreen: (ask: number, text: string) => invoke<void>("terminal_screen", { ask, text }),
+  actAnswer: (ask: number, ok: boolean, text: string) => invoke<void>("act_answer", { ask, ok, text }),
   voiceStart: (language: string, handsFree = false) => invoke<number>("voice_start", { language, handsFree }),
   voiceTest: () => invoke<number>("voice_test"),
   voiceStop: () => invoke<void>("voice_stop"),
@@ -206,8 +207,9 @@ export const events = {
   browser: (heard: (what: Heard) => void): Promise<UnlistenFn> => listen<Heard>("browser", ({ payload }) => heard(payload)),
   terminal: (heard: (what: TerminalHeard) => void): Promise<UnlistenFn> =>
     listen<TerminalHeard>("terminal", ({ payload }) => heard(payload)),
-  terminalRead: (heard: (reading: TerminalReading) => void): Promise<UnlistenFn> =>
-    listen<TerminalReading>("terminal-read", ({ payload }) => heard(payload)),
+  terminalAdopted: (heard: (adopted: TerminalAdopted) => void): Promise<UnlistenFn> =>
+    listen<TerminalAdopted>("terminal-adopted", ({ payload }) => heard(payload)),
+  act: (heard: (acting: Acting) => void): Promise<UnlistenFn> => listen<Acting>("sens-act", ({ payload }) => heard(payload)),
   voice: (heard: (what: VoiceHeard) => void): Promise<UnlistenFn> => listen<VoiceHeard>("voice", ({ payload }) => heard(payload)),
   welcome: (heard: (done: number, total: number) => void): Promise<UnlistenFn> =>
     listen<{ done: number; total: number }>("welcome", ({ payload }) => heard(payload.done, payload.total)),

@@ -22,6 +22,7 @@ export const t = copy({
     open: (listed: string) => `Open: ${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name} (${shell}${ended ? ", ended" : ""})`,
     empty: "(nothing on screen)",
+    byClaude: (title: string) => `Started by Claude · ${title}`,
   },
   es: {
     terminal: "Terminal",
@@ -44,6 +45,7 @@ export const t = copy({
     open: (listed: string) => `Abiertas: ${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name} (${shell}${ended ? ", terminada" : ""})`,
     empty: "(no hay nada en pantalla)",
+    byClaude: (title: string) => `La lanzó Claude · ${title}`,
   },
   fr: {
     terminal: "Terminal",
@@ -66,6 +68,7 @@ export const t = copy({
     open: (listed: string) => `Ouverts : ${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name} (${shell}${ended ? ", terminé" : ""})`,
     empty: "(rien à l’écran)",
+    byClaude: (title: string) => `Lancé par Claude · ${title}`,
   },
   de: {
     terminal: "Terminal",
@@ -88,6 +91,7 @@ export const t = copy({
     open: (listed: string) => `Geöffnet: ${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name} (${shell}${ended ? ", beendet" : ""})`,
     empty: "(nichts auf dem Bildschirm)",
+    byClaude: (title: string) => `Von Claude gestartet · ${title}`,
   },
   ja: {
     terminal: "ターミナル",
@@ -110,6 +114,7 @@ export const t = copy({
     open: (listed: string) => `開いているもの: ${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name}（${shell}${ended ? "、終了" : ""}）`,
     empty: "（画面には何もありません）",
+    byClaude: (title: string) => `Claude が起動 · ${title}`,
   },
   zh: {
     terminal: "终端",
@@ -132,5 +137,6 @@ export const t = copy({
     open: (listed: string) => `已打开：${listed}`,
     told: (id: number, name: string, shell: string, ended: boolean) => `${id} · ${name}（${shell}${ended ? "，已结束" : ""}）`,
     empty: "（屏幕上没有内容）",
+    byClaude: (title: string) => `由 Claude 启动 · ${title}`,
   },
 });

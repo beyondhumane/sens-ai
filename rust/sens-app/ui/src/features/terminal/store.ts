@@ -1,9 +1,10 @@
 import type { FitAddon } from "@xterm/addon-fit";
 import type { IBufferCell, IBufferLine, ITheme, Terminal } from "@xterm/xterm";
 import { createStore } from "zustand/vanilla";
+import { answers } from "../../app/acts";
 import { closeTools, panelShows, showTool } from "../../app/shell";
 import { commands, events } from "../../ipc/commands";
-import type { TerminalHeard, TerminalReading } from "../../ipc/types";
+import type { TerminalAdopted, TerminalHeard, TerminalReading } from "../../ipc/types";
 import { plain, tokensOf } from "../../shared/ansi";
 import { stem } from "../../shared/format.js";
 import { look, tokenOf } from "../../shared/look";
@@ -19,6 +20,7 @@ export interface Console {
   root: string;
   shell: string;
   ended: boolean;
+  title?: string;
 }
 
 export const consoles = createStore(() => ({
@@ -41,10 +43,13 @@ interface Screen {
 
 const screens = new Map<number, Screen>();
 const early = new Map<number, TerminalHeard[]>();
+const adopting = new Set<number>();
 let newest = 0;
 let owed = false;
 
 const FIRST_SIZE = { cols: 80, rows: 24 };
+const RUN_SIZE = { cols: 120, rows: 30 };
+const CURSOR_REPLY = /^\x1b\[\d+;\d+R$/;
 const RESIZE_PAUSE = 80;
 const TOGGLES = new Set(["`", "ñ"]);
 const CONTRAST = 4.5;
@@ -147,10 +152,11 @@ function keyed(xterm: Terminal, event: KeyboardEvent) {
   return false;
 }
 
-const endedOf = (id: number) => consoles.getState().open.find((one) => one.id === id)?.ended ?? true;
+const consoleOf = (id: number) => consoles.getState().open.find((one) => one.id === id);
 
 function type(id: number, screen: Screen, data: string) {
-  if (endedOf(id)) return;
+  const one = consoleOf(id);
+  if (!one || one.ended || (one.title && CURSOR_REPLY.test(data))) return;
   screen.queued += data;
   if (!screen.sending) send(id, screen);
 }
@@ -191,6 +197,22 @@ export async function openConsole(root = project.getState().work) {
     warn(String(reason));
   } finally {
     set({ opening: false });
+  }
+}
+
+async function adopt({ id, root, shell, title, backlog }: TerminalAdopted) {
+  adopting.add(id);
+  try {
+    const modules = await loadXterm();
+    newest = Math.max(newest, id);
+    const screen = makeScreen(modules, id, RUN_SIZE.cols, RUN_SIZE.rows);
+    set(({ open }) => ({ open: [...open, { id, root, shell, title, ended: false }], shown: id }));
+    screen.xterm.write(backlog);
+    const waiting = early.get(id) ?? [];
+    early.delete(id);
+    waiting.forEach(hear);
+  } finally {
+    adopting.delete(id);
   }
 }
 
@@ -319,7 +341,7 @@ export function toggleConsole() {
 function hear(heard: TerminalHeard) {
   const screen = screens.get(heard.id);
   if (!screen) {
-    if (heard.id > newest) early.set(heard.id, [...(early.get(heard.id) ?? []), heard]);
+    if (heard.id > newest || adopting.has(heard.id)) early.set(heard.id, [...(early.get(heard.id) ?? []), heard]);
     return;
   }
   if (heard.kind === "out") return screen.xterm.write(heard.data);
@@ -327,7 +349,7 @@ function hear(heard: TerminalHeard) {
   set(({ open }) => ({ open: open.map((one) => (one.id === heard.id ? { ...one, ended: true } : one)) }));
 }
 
-export const nameOf = (one: Console) => stem(one.root) || one.shell;
+export const nameOf = (one: Console) => one.title || stem(one.root) || one.shell;
 
 const told = (one: Console) => t.told(one.id, nameOf(one), one.shell, one.ended);
 
@@ -336,7 +358,7 @@ const folded = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").to
 const inside = (root: string, folders: string[]) =>
   Boolean(root) && folders.map(folded).some((folder) => folded(root) === folder || folded(root).startsWith(`${folder}/`));
 
-export function readScreen({ terminal, lines, within }: Omit<TerminalReading, "ask">) {
+export function readScreen({ terminal, lines, within }: TerminalReading) {
   const { shown } = consoles.getState();
   const open = consoles.getState().open.filter((one) => inside(one.root, within));
   if (!open.length) return t.noneHere;
@@ -353,8 +375,6 @@ export function readScreen({ terminal, lines, within }: Omit<TerminalReading, "a
   return said;
 }
 
-const answerRead = (reading: TerminalReading) => commands.terminalScreen(reading.ask, readScreen(reading)).catch(() => {});
-
 function repaint() {
   const theme = themeNow();
   for (const { xterm } of screens.values()) xterm.options.theme = theme;
@@ -364,5 +384,6 @@ look.subscribe(repaint);
 
 export function hearTerminal() {
   events.terminal(hear);
-  events.terminalRead(answerRead);
+  events.terminalAdopted(adopt);
+  answers("read_terminal", readScreen);
 }

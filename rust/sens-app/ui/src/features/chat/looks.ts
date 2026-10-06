@@ -1,7 +1,7 @@
 import type { Link, ToolDetail, ToolInput, Todo } from "../../ipc/types";
 import { ICONS } from "../../shared/icons.js";
 import { addedRows, patchRows, type Row } from "../../shared/rows";
-import type { Shell } from "../../shared/syntax/shells";
+import { RUN_IN_TERMINAL, shellOf, type Shell } from "../../shared/syntax/shells";
 import { project } from "../project/store";
 import { t as sens } from "./canon.copy";
 import { t } from "./step.copy";
@@ -20,7 +20,7 @@ export interface Look {
 
 export const SILENT = new Set(["ToolSearch", "AskUserQuestion", "ExitPlanMode"]);
 export const EDITS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
-export const SHELLS = new Set(["Bash", "PowerShell"]);
+export const SHELLS = new Set(["Bash", "PowerShell", RUN_IN_TERMINAL]);
 
 export function relative(path: string) {
   if (!path) return "";
@@ -64,6 +64,10 @@ const LOOKS: Record<string, (input: ToolInput) => Look> = {
   Agent: (input) => ({ icon: ICONS.split, verb: t.delegate, ask: t.wantsDelegate, target: input.description || input.subagent_type || "" }),
   Skill: (input) => ({ icon: ICONS.book, verb: t.useSkill, ask: t.wantsSkill, target: String(input.skill || input.command || "") }),
   mcp__sens__read_terminal: () => ({ icon: ICONS.terminal, verb: t.readTerminal, ask: t.wantsReadTerminal, target: "" }),
+  [RUN_IN_TERMINAL]: (input) => shellLook(shellOf(RUN_IN_TERMINAL, String(input.command ?? "")), input),
+  mcp__sens__write_terminal: (input) => ({ icon: ICONS.keyboard, verb: t.typeTerminal, ask: t.wantsTypeTerminal, target: oneLine(input.text), mono: true }),
+  mcp__sens__stop_terminal: (input) => ({ icon: ICONS.stopSquare, verb: t.stopTerminal, ask: t.wantsStopTerminal, target: String(input.terminal ?? "") }),
+  mcp__sens__list_terminals: () => ({ icon: ICONS.terminal, verb: t.listTerminals, ask: t.wantsReadTerminal, target: "" }),
   "sens.dependency": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.dependencyTitle, target: String(input.key ?? "").replace(/^R3:/, ""), mono: true }),
   "sens.tests": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.testsTitle, target: relative(String(input.file ?? "")), mono: true, link: relative(String(input.file ?? "")) }),
   "sens.canon": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.canonTitle, target: relative(String(input.file ?? "")), mono: true }),

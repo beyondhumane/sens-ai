@@ -26,6 +26,7 @@ mod snapshot;
 mod spots;
 mod store;
 mod terminal;
+mod tools;
 mod update;
 mod voice;
 mod web;
@@ -227,23 +228,43 @@ fn equip(app: &AppHandle, root: &str, session_id: &str, settings: &mut Settings)
     settings.cwd = worktree::work_dir(Path::new(root), session_id)?;
     let launch = capabilities::launch(&base, root)?;
     settings.extra = launch.args;
-    settings.extra.extend(bridged(app, root, settings.cwd.as_deref()));
+    settings.extra.extend(bridged(app, root, session_id, settings.cwd.as_deref()));
     settings.env = launch.env;
     settings.env.extend(providers::environment(&base));
     Ok(())
 }
 
-fn bridged(app: &AppHandle, root: &str, work: Option<&Path>) -> Vec<String> {
+fn bridged(app: &AppHandle, root: &str, session_id: &str, work: Option<&Path>) -> Vec<String> {
     let within = std::iter::once(root.to_string()).chain(work.map(|work| work.to_string_lossy().into_owned())).collect();
-    let asking = app.clone();
-    let keeper = app.state::<Arc<Engine>>().keeper();
-    let config = app.state::<mcp::Bridge>().config(within, keeper, move |reading| {
-        let _ = asking.emit("terminal-read", reading);
-    });
-    match config {
-        Ok(config) => vec!["--mcp-config".into(), config, "--allowedTools".into(), mcp::allowed()],
+    let scope = tools::Scope { session: session_id.to_string(), within };
+    match app.state::<mcp::Bridge>().config(scope, || hands(app.clone())) {
+        Ok(config) => vec![
+            "--mcp-config".into(),
+            config,
+            "--allowedTools".into(),
+            tools::allowed(),
+            "--disallowedTools".into(),
+            tools::REPLACED.into(),
+        ],
         Err(_) => Vec::new(),
     }
+}
+
+fn hands(app: AppHandle) -> (mcp::Ask, mcp::Hand) {
+    let asking = app.clone();
+    let ask: mcp::Ask = Arc::new(move |acting: mcp::Acting| {
+        let _ = asking.emit("sens-act", acting);
+    });
+    let telling = app.clone();
+    let tell: tools::Tell = Arc::new(move |event: &str, payload: serde_json::Value| {
+        let _ = telling.emit(event, payload);
+    });
+    let hand: mcp::Hand = Arc::new(move |scope: &tools::Scope, name: &str, arguments: &serde_json::Value, ui: &dyn tools::Ui| {
+        let keeper = app.state::<Arc<Engine>>().keeper();
+        let desk = tools::Desk { consoles: &app.state::<terminal::Consoles>(), keeper: &keeper, ui, tell: tell.clone() };
+        tools::call(&desk, scope, name, arguments)
+    });
+    (ask, hand)
 }
 
 #[tauri::command]
@@ -436,8 +457,8 @@ fn hearing(app: AppHandle) -> impl Fn(voice::Heard) + Send + Sync + 'static {
 }
 
 #[tauri::command]
-fn terminal_screen(bridge: State<mcp::Bridge>, ask: u64, text: String) -> Result<(), String> {
-    bridge.answer(ask, text)
+fn act_answer(bridge: State<mcp::Bridge>, ask: u64, ok: bool, text: String) -> Result<(), String> {
+    bridge.answer(ask, if ok { Ok(text) } else { Err(text) })
 }
 
 #[tauri::command]
@@ -933,7 +954,7 @@ fn main() {
             terminal_write,
             terminal_resize,
             terminal_close,
-            terminal_screen,
+            act_answer,
             voice_start,
             voice_test,
             voice_stop,
