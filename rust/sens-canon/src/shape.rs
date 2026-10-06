@@ -16,7 +16,7 @@ pub struct Shape {
 fn drawn(index: &Index, map: &Map) -> Shape {
     Shape {
         areas: map.areas.iter().map(|area| area.name.clone()).collect(),
-        couplings: map.areas.iter().flat_map(|area| area.uses.iter().map(|&used| (area.name.clone(), map.areas[used].name.clone()))).collect(),
+        couplings: map.areas.iter().flat_map(|area| area.uses.iter().map(|&(used, _)| (area.name.clone(), map.areas[used].name.clone()))).collect(),
         cycles: map::cycles(index).into_iter().map(|cycle| cycle.into_iter().collect()).collect(),
     }
 }

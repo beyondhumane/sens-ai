@@ -18,7 +18,7 @@ pub struct Area {
     pub name: String,
     pub files: Vec<usize>,
     pub doors: Vec<usize>,
-    pub uses: Vec<usize>,
+    pub uses: Vec<(usize, usize)>,
     pub tests: bool,
 }
 
@@ -142,7 +142,7 @@ impl Map {
         for (at, area) in areas.iter_mut().enumerate() {
             let doors: HashMap<usize, usize> = area.files.iter().filter_map(|file| outsiders.get(file).map(|from| (*file, from.len()))).collect();
             area.doors = ranked(doors, 1, DOORS).into_iter().map(|(file, _)| file).collect();
-            area.uses = ranked(std::mem::take(&mut uses[at]), 1, usize::MAX).into_iter().map(|(used, _)| used).collect();
+            area.uses = ranked(std::mem::take(&mut uses[at]), 1, usize::MAX);
         }
         let depended: HashMap<usize, usize> = (0..index.files.len()).filter(|&file| !tested[file]).map(|file| (file, dependents[file].iter().filter(|&&from| !tested[from]).count())).collect();
         let hubs = ranked(depended, HUB_FLOOR, HUBS);
@@ -366,8 +366,8 @@ mod tests {
         assert_eq!(names(&map), ["core", "ui"]);
         let core = &map.areas[0];
         assert_eq!(path(&index, core.doors[0]), "core/a.ts");
-        assert_eq!(core.uses, [1]);
-        assert_eq!(map.areas[1].uses, [0]);
+        assert_eq!(core.uses.iter().map(|&(used, _)| used).collect::<Vec<_>>(), [1]);
+        assert_eq!(map.areas[1].uses.iter().map(|&(used, _)| used).collect::<Vec<_>>(), [0]);
         assert_eq!(path(&index, map.hubs[0].0), "core/a.ts");
         assert_eq!(map.hubs[0].1, 4);
         assert!(map.strays.iter().any(|&(file, area)| path(&index, file) == "core/lost.ts" && area == 1), "{:?}", map.strays);

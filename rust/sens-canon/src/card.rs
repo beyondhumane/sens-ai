@@ -87,7 +87,7 @@ fn areas(index: &Index, map: &Map) -> Vec<String> {
                 line.push_str(&format!(" · door {}", doors.join(", ")));
             }
             if !area.uses.is_empty() {
-                let used: Vec<String> = area.uses.iter().map(|&used| map.areas[used].name.clone()).collect();
+                let used: Vec<String> = area.uses.iter().map(|&(used, _)| map.areas[used].name.clone()).collect();
                 line.push_str(&format!(" · uses {}", capped(&used, USES)));
             }
             if !exported[at].is_empty() {

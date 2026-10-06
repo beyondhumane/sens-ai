@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use sens_canon::card;
+use sens_index::map;
 use sens_index::testfile::is_test_file;
 
 use super::keeper::Project;
@@ -30,10 +31,19 @@ pub struct Stray {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+pub struct Link {
+    pub from: String,
+    pub to: String,
+    pub weight: usize,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Shown {
     pub regions: Vec<Region>,
+    pub links: Vec<Link>,
     pub central: Vec<Central>,
     pub strays: Vec<Stray>,
+    pub cycles: Vec<Vec<String>>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -64,13 +74,21 @@ pub fn shown(project: &Project) -> Shown {
             name: area.name.clone(),
             files: area.files.iter().map(|&file| path(file)).collect(),
             doors: area.doors.iter().map(|&file| path(file)).collect(),
-            uses: area.uses.iter().map(|&used| map.areas[used].name.clone()).collect(),
+            uses: area.uses.iter().map(|&(used, _)| map.areas[used].name.clone()).collect(),
             exports: std::mem::take(&mut exported[at]).into_iter().take(EXPORTS).collect(),
         })
         .collect();
     regions.sort_by(|a, b| b.files.len().cmp(&a.files.len()).then(a.name.cmp(&b.name)));
+    let links = map
+        .areas
+        .iter()
+        .filter(|area| !area.tests)
+        .flat_map(|area| area.uses.iter().map(|&(used, weight)| Link { from: area.name.clone(), to: map.areas[used].name.clone(), weight }))
+        .collect();
     Shown {
         regions,
+        links,
+        cycles: map::cycles(index),
         central: map.hubs.iter().map(|&(file, dependents)| Central { path: path(file), dependents }).collect(),
         strays: map.strays.iter().map(|&(file, area)| Stray { path: path(file), area: map.areas[area].name.clone() }).collect(),
     }
@@ -125,6 +143,10 @@ mod tests {
         assert_eq!(src.doors, ["src/core/money.ts", "src/core/tax.ts"]);
         assert!(src.exports.contains(&"cents".to_string()));
         assert_eq!(shown.regions[1].uses, ["src"]);
+        assert_eq!(shown.links.len(), 1);
+        assert_eq!((shown.links[0].from.as_str(), shown.links[0].to.as_str()), ("web", "src"));
+        assert!(shown.links[0].weight >= 2);
+        assert!(shown.cycles.is_empty());
     }
 
     #[test]

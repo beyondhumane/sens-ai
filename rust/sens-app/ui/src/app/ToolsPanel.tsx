@@ -5,7 +5,7 @@ import { ChangeTotals, ChangesPanel } from "../features/changes/Changes";
 import { loadChanges } from "../features/changes/store";
 import { Tree } from "../features/files/Tree";
 import { Viewer, ViewerHead, ViewerModes } from "../features/files/Viewer";
-import { MapPanel, MapTally } from "../features/map/MapPanel";
+import { MapModes, MapPanel, MapTally } from "../features/map/MapPanel";
 import { loadMap } from "../features/map/store";
 import { TaskTally, TasksPanel } from "../features/tasks/TasksPanel";
 import { ConsolePanel, ConsoleTabs, ConsoleTools } from "../features/terminal/Consoles";
@@ -53,7 +53,12 @@ export function ToolsPanel({ pane }: { pane?: RefObject<HTMLElement | null> }) {
             </span>
           </>
         }
-        tools={<Refresh id="map-reload" then={loadMap} />}
+        tools={
+          <>
+            <MapModes />
+            <Refresh id="map-reload" then={loadMap} />
+          </>
+        }
       >
         <div className="tool-body map" id="map" aria-live="polite">
           <MapPanel />
