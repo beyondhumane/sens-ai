@@ -1,13 +1,17 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use sens_agent::canon::checkpoint::Restored;
 use sens_agent::canon::circuit::{self, Excepted};
 use sens_agent::canon::log::{self, Avoided};
 use sens_agent::canon::state;
+use sens_agent::canon::view;
 use sens_agent::chat::Engine;
 use sens_agent::sens_canon::verdict::{Finding, ProjectRules};
 use tauri::State;
+
+const MAP_PATIENCE: Duration = Duration::from_secs(30);
 
 #[tauri::command(async)]
 pub fn canon_held(work: String) -> Option<Vec<Finding>> {
@@ -57,4 +61,14 @@ pub fn canon_set_rules(work: String, rules: ProjectRules) -> Result<(), String> 
 #[tauri::command(async)]
 pub fn canon_avoided(work: String, since: u64) -> Avoided {
     log::avoided(Path::new(&work), since)
+}
+
+#[tauri::command(async)]
+pub fn canon_map(engine: State<Arc<Engine>>, work: String) -> Option<view::Shown> {
+    engine.keeper().ready(Path::new(&work), MAP_PATIENCE).map(|project| view::shown(&project))
+}
+
+#[tauri::command(async)]
+pub fn canon_reach(engine: State<Arc<Engine>>, work: String, file: String) -> Option<view::Reach> {
+    engine.keeper().ready(Path::new(&work), MAP_PATIENCE).and_then(|project| view::reach(&project, &file))
 }

@@ -53,6 +53,7 @@ pub struct Avoided {
     pub protected: u32,
     pub tests: u32,
     pub orphans: u32,
+    pub cycles: u32,
     pub judgment: u32,
     pub held: u32,
     pub accepted: u32,
@@ -120,6 +121,7 @@ pub fn avoided(work: &Path, since: u64) -> Avoided {
             Rule::R6 => &mut avoided.comments,
             Rule::R5 | Rule::R7 => &mut avoided.protected,
             Rule::R8 => &mut avoided.tests,
+            Rule::R9 => &mut avoided.cycles,
             _ => &mut avoided.judgment,
         };
         *slot += 1;

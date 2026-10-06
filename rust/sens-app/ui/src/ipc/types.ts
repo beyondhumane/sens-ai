@@ -258,6 +258,33 @@ export interface Changes {
   fresh: string[];
 }
 
+export interface Region {
+  name: string;
+  files: string[];
+  doors: string[];
+  uses: string[];
+  exports: string[];
+}
+
+export interface ProjectMap {
+  regions: Region[];
+  central: { path: string; dependents: number }[];
+  strays: { path: string; area: string }[];
+}
+
+export interface Reached {
+  path: string;
+  area: string;
+  steps: number;
+}
+
+export interface Reach {
+  file: string;
+  area: string;
+  dependents: Reached[];
+  tests: Reached[];
+}
+
 export interface AgentEvent {
   kind: string;
   id?: string;
@@ -475,7 +502,7 @@ export interface Slash {
   hint: string;
 }
 
-export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7";
+export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7";
 export type Severity = "Block" | "Consider" | "Ask" | "Note";
 
 export interface Target {
@@ -530,6 +557,7 @@ export interface Avoided {
   protected: number;
   tests: number;
   orphans: number;
+  cycles: number;
   judgment: number;
   held: number;
   accepted: number;

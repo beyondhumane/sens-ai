@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use sens_canon::shape::Shape;
 use sens_canon::verdict::{Exceptions, Finding, ProjectRules};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,7 @@ pub struct State {
     pub held: Option<Vec<Finding>>,
     pub dead: Vec<(String, String)>,
     pub dead_known: bool,
+    pub shape: Option<Shape>,
     pub request: String,
     pub canon: BTreeMap<String, String>,
 }

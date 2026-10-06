@@ -710,6 +710,36 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   },
   title_session: () => null,
   replay: ({ id }) => (id === "demo-1" ? (CANON ? CANON_REPLAY : REPLAY) : []),
+  canon_map: () => ({
+    regions: [
+      {
+        name: "src",
+        files: ["src/app.tsx", "src/main.tsx", "src/runner.ts", "src/shelf.tsx"],
+        doors: ["src/runner.ts", "src/app.tsx"],
+        uses: ["src/shared", "src/market"],
+        exports: ["run", "App", "Shelf", "mount"],
+      },
+      { name: "src/shared", files: ["src/shared/format.js", "src/shared/look.ts", "src/shared/i18n.ts"], doors: ["src/shared/format.js"], uses: [], exports: ["stem", "parentOf", "showLook", "copy"] },
+      { name: "src/market", files: ["src/market/search.js", "src/market/rank.js", "src/market/card.tsx"], doors: ["src/market/search.js"], uses: ["src/shared"], exports: ["search", "rank"] },
+    ],
+    central: [
+      { path: "src/shared/format.js", dependents: 9 },
+      { path: "src/runner.ts", dependents: 5 },
+      { path: "src/shared/look.ts", dependents: 3 },
+    ],
+    strays: [{ path: "src/market/card.tsx", area: "src" }],
+  }),
+  canon_reach: ({ file }) => ({
+    file: String(file),
+    area: String(file).startsWith("src/shared") ? "src/shared" : "src",
+    dependents: [
+      { path: "src/runner.ts", area: "src", steps: 1 },
+      { path: "src/market/search.js", area: "src/market", steps: 1 },
+      { path: "src/app.tsx", area: "src", steps: 2 },
+      { path: "src/main.tsx", area: "src", steps: 3 },
+    ],
+    tests: [{ path: "src/app.test.tsx", area: "src", steps: 3 }],
+  }),
   canon_held: () => held,
   canon_accept: () => void (held = null),
   canon_undo: () => {
@@ -725,7 +755,7 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   canon_retract: ({ key }) => void (exceptions = exceptions.filter((one) => one.key !== key)),
   canon_rules: () => ({ noComments }),
   canon_set_rules: ({ rules }) => void (noComments = Boolean((rules as { noComments: boolean }).noComments)),
-  canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
+  canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, cycles: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
   new_session_id: () => "demo-new",
   open_session: ({ id }) => id ?? "demo-new",
   chat_busy: () => false,
