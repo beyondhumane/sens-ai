@@ -139,8 +139,6 @@ mod tests {
     use super::super::call;
     use super::super::testing::{Window, scope};
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
     use std::path::PathBuf;
 
     fn project() -> PathBuf {
@@ -153,10 +151,8 @@ mod tests {
     #[test]
     fn a_file_opens_by_its_path_in_the_project_and_nothing_outside_it() {
         let root = project();
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&root);
 
         call(&desk, &here, "open_file", &json!({ "path": "src/app.ts", "line": 12 })).unwrap().unwrap();
@@ -174,10 +170,8 @@ mod tests {
 
     #[test]
     fn a_pane_is_one_sens_has() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&project());
         call(&desk, &here, "show_pane", &json!({ "pane": "changes" })).unwrap().unwrap();
         assert!(call(&desk, &here, "show_pane", &json!({ "pane": "settings" })).unwrap().unwrap_err().contains("files, changes, web, terminal, tasks"));
@@ -186,22 +180,18 @@ mod tests {
 
     #[test]
     fn the_window_is_seen_as_a_picture_unless_it_is_hidden() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let here = scope(&project());
         let window = Window::default();
-        let said = call(&window.desk(&consoles, &keeper), &here, "screenshot_app", &json!({})).unwrap().unwrap();
+        let said = call(&window.desk(), &here, "screenshot_app", &json!({})).unwrap().unwrap();
         assert!(matches!(said, Said::Picture { ref media_type, .. } if media_type == "image/png"));
         let hidden = Window { hidden: true, ..Window::default() };
-        assert!(call(&hidden.desk(&consoles, &keeper), &here, "screenshot_app", &json!({})).unwrap().unwrap_err().contains("hidden"));
+        assert!(call(&hidden.desk(), &here, "screenshot_app", &json!({})).unwrap().unwrap_err().contains("hidden"));
     }
 
     #[test]
     fn a_notice_reaches_the_person_titled_by_claude_unless_told_otherwise() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&project());
         call(&desk, &here, "notify", &json!({ "body": "Las pruebas pasan." })).unwrap().unwrap();
         call(&desk, &here, "notify", &json!({ "body": "Listo", "title": "Compilación" })).unwrap().unwrap();

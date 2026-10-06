@@ -5,11 +5,10 @@ use sens_agent::chat::Event;
 use sens_agent::session::{self, Entry, Namer};
 use serde_json::{Value, json};
 
-use super::{Desk, Level, Said, Scope, Tool, schema, text};
+use super::{Desk, Level, Said, Scope, Tool, ending, folded, schema, text};
 use crate::projects;
 
 const TURNS: u64 = 10;
-const MOST_CHARS: usize = 30_000;
 const STARTING: Duration = Duration::from_secs(30);
 
 fn project_field() -> Value {
@@ -126,10 +125,6 @@ pub const TOOLS: &[Tool] = &[
     },
 ];
 
-fn folded(path: &str) -> String {
-    path.replace('\\', "/").trim_end_matches('/').to_lowercase()
-}
-
 fn home(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<PathBuf, String> {
     let Some(asked) = arguments["project"].as_str().filter(|asked| !asked.trim().is_empty()) else {
         return Ok(scope.root().to_path_buf());
@@ -137,7 +132,7 @@ fn home(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<PathBuf, String
     if folded(asked) == folded(&scope.root().to_string_lossy()) {
         return Ok(scope.root().to_path_buf());
     }
-    let known = desk.sens.data().map(|data| projects::load(&data).projects).unwrap_or_default();
+    let known = desk.data().map(|data| projects::load(&data).projects).unwrap_or_default();
     known
         .into_iter()
         .find(|one| folded(&one.root) == folded(asked))
@@ -161,7 +156,7 @@ fn not_this(scope: &Scope, id: &str, what: &str) -> Result<(), String> {
 }
 
 fn list_projects(desk: &Desk, scope: &Scope, _: &Value) -> Result<Said, String> {
-    let data = desk.sens.data().ok_or("Sens could not read its own data folder")?;
+    let data = desk.data()?;
     let here = folded(&scope.root().to_string_lossy());
     let lines: Vec<String> = projects::workspaces(&projects::load(&data))
         .into_iter()
@@ -207,10 +202,7 @@ fn transcript(entries: &[Entry], turns: usize) -> String {
     }
     let said: Vec<String> = all.into_iter().filter(|turn| !turn.is_empty()).map(|turn| turn.join("\n")).collect();
     let kept = &said[said.len().saturating_sub(turns)..];
-    let whole = kept.join("\n\n");
-    let over = whole.len().saturating_sub(MOST_CHARS);
-    let cut = (over..=whole.len()).find(|at| whole.is_char_boundary(*at)).unwrap_or_default();
-    if cut == 0 { whole } else { format!("[earlier text cut]\n{}", &whole[cut..]) }
+    ending(&kept.join("\n\n"))
 }
 
 fn read_session(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, String> {
@@ -287,11 +279,8 @@ fn set_session_model(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Sa
 
 #[cfg(test)]
 mod tests {
-    use super::super::call;
     use super::super::testing::Window;
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
 
     const OTHER: &str = "0b9a3c1e-5d2f-4a6b-8c7d-1e2f3a4b5c6d";
     const THIS: &str = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
@@ -318,9 +307,7 @@ mod tests {
     }
 
     fn run(window: &Window, root: &Path, name: &str, arguments: Value) -> Result<Said, String> {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
-        call(&window.desk(&consoles, &keeper), &scope_of(root), name, &arguments).unwrap()
+        window.ask(&scope_of(root), name, arguments)
     }
 
     #[test]

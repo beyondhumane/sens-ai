@@ -7,7 +7,7 @@ import { openSettings, setResident } from "../features/settings/store";
 import { checkUpdates, setAutomatic, updates } from "../features/updates/store";
 import type { Language } from "../shared/i18n";
 import { look, type Accent, type Mode } from "../shared/look";
-import { answers } from "./acts";
+import { answers, onScreen } from "./acts";
 import { showView } from "./session";
 
 type Preference = "notify" | "keep_in_tray" | "start_with_windows" | "check_updates";
@@ -18,8 +18,6 @@ const PREFERENCES: Record<Preference, (on: boolean) => Promise<void>> = {
   start_with_windows: (on) => setResident("startWithWindows", on),
   check_updates: setAutomatic,
 };
-
-const ELSEWHERE = "The person is looking at another session, so Sens left their screen as it was.";
 
 async function refreshCapabilities() {
   if (project.getState().view === "capabilities") await loadCapabilities();
@@ -43,7 +41,7 @@ async function setPreference({ name, on }: { name: Preference; on: boolean }) {
 }
 
 function showViewFor({ session, view }: { session: string; view: string }) {
-  if (project.getState().session !== session) throw new Error(ELSEWHERE);
+  onScreen(session);
   if (view === "settings") openSettings();
   else showView(view === "chat" ? "" : (view as "capabilities" | "artifacts" | "news"));
   return `The ${view} view is on screen.`;

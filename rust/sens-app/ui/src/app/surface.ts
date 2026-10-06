@@ -3,7 +3,7 @@ import { panes } from "../features/panes/store";
 import { project } from "../features/project/store";
 import { consoles, openConsole } from "../features/terminal/store";
 import { aim, goBack, goForward, pickWidth, reloadSite, web } from "../features/web/store";
-import { answers } from "./acts";
+import { answers, onScreen } from "./acts";
 import { closeTools, shell, showTool, type Tool } from "./shell";
 
 interface Here {
@@ -13,14 +13,8 @@ interface Here {
 const LOADING_PATIENCE = 15_000;
 const MOVES: Record<string, () => unknown> = { back: goBack, forward: goForward, reload: reloadSite };
 
-const ELSEWHERE = "The person is looking at another session, so Sens left their screen as it was.";
-
-function here(session: string) {
-  if (project.getState().session !== session) throw new Error(ELSEWHERE);
-}
-
 async function openFileAt({ session, path, line }: Here & { path: string; line: number | null }) {
-  here(session);
+  onScreen(session);
   await showFile(path, line ?? 0);
   const { body } = viewer.getState();
   if (body.kind === "fault") throw new Error(body.fault);
@@ -28,26 +22,26 @@ async function openFileAt({ session, path, line }: Here & { path: string; line: 
 }
 
 function showPane({ session, pane }: Here & { pane: Tool }) {
-  here(session);
+  onScreen(session);
   showTool(pane);
   return `The ${pane} pane is open.`;
 }
 
 function closePane({ session }: Here) {
-  here(session);
+  onScreen(session);
   closeTools();
   return "The side pane is closed.";
 }
 
 async function openTerminalTab({ session, root }: Here & { root: string }) {
-  here(session);
+  onScreen(session);
   showTool("terminal");
   await openConsole(root);
   return `Terminal ${consoles.getState().shown} is open for the person.`;
 }
 
 function present({ session }: Here) {
-  here(session);
+  onScreen(session);
   return "";
 }
 
@@ -70,7 +64,7 @@ function loaded() {
 }
 
 async function browse({ session, url }: Here & { url: string }) {
-  here(session);
+  onScreen(session);
   const finished = loaded();
   await (MOVES[url] ?? (() => aim(url)))();
   showTool("web");
@@ -81,13 +75,13 @@ async function browse({ session, url }: Here & { url: string }) {
 }
 
 function browserWidth({ session, width }: Here & { width: number }) {
-  here(session);
+  onScreen(session);
   pickWidth(width);
   showTool("web");
   return width ? `The page is drawn ${width} px wide.` : "The page is drawn at the pane's own width.";
 }
 
-export function layoutOf({ session }: Here) {
+function layoutOf({ session }: Here) {
   const { session: seen, work } = project.getState();
   const { toolsOpen, tool, treeShown } = shell.getState();
   const { title } = viewer.getState();

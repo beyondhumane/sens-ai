@@ -21,6 +21,7 @@ pub const SERVER: &str = "sens";
 pub const REPLACED: &str = "Bash,PowerShell,Monitor";
 const INDEX_PATIENCE: Duration = Duration::from_secs(20);
 pub const QUICK: Duration = Duration::from_secs(5);
+pub const MOST_CHARS: usize = 30_000;
 const UNINDEXED: &str = "Sens has not finished indexing this project yet; try again in a moment.";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,8 +45,21 @@ impl Scope {
     }
 }
 
-fn folded(path: &str) -> String {
+pub fn folded(path: &str) -> String {
     path.replace('\\', "/").trim_end_matches('/').to_lowercase()
+}
+
+pub fn opening(text: &str) -> String {
+    text.chars().take(MOST_CHARS).collect()
+}
+
+pub fn ending(text: &str) -> String {
+    let over = text.len().saturating_sub(MOST_CHARS);
+    if over == 0 {
+        return text.to_string();
+    }
+    let cut = (over..text.len()).find(|at| text.is_char_boundary(*at)).unwrap_or(over);
+    format!("[the first {cut} bytes are cut]\n{}", &text[cut..])
 }
 
 pub trait Ui: Sync {
@@ -109,6 +123,12 @@ pub struct Desk<'a> {
     pub ui: &'a dyn Ui,
     pub sens: &'a dyn Sens,
     pub tell: Tell,
+}
+
+impl Desk<'_> {
+    pub fn data(&self) -> Result<PathBuf, String> {
+        self.sens.data().ok_or_else(|| "Sens could not read its own data folder".to_string())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -207,6 +227,8 @@ pub mod testing {
         pub requested: Vec<Request>,
         pub base: Option<PathBuf>,
         pub working: Vec<String>,
+        pub consoles: Consoles,
+        pub keeper: Keeper,
     }
 
     impl Ui for Window {
@@ -250,9 +272,13 @@ pub mod testing {
     }
 
     impl Window {
-        pub fn desk<'a>(&'a self, consoles: &'a Consoles, keeper: &'a Keeper) -> Desk<'a> {
+        pub fn desk(&self) -> Desk<'_> {
             let told = self.told.clone();
-            Desk { consoles, keeper, ui: self, sens: self, tell: Arc::new(move |event, payload| told.lock().unwrap().push((event.to_string(), payload))) }
+            Desk { consoles: &self.consoles, keeper: &self.keeper, ui: self, sens: self, tell: Arc::new(move |event, payload| told.lock().unwrap().push((event.to_string(), payload))) }
+        }
+
+        pub fn ask(&self, scope: &Scope, name: &str, arguments: Value) -> Result<Said, String> {
+            call(&self.desk(), scope, name, &arguments).expect("a tool Sens offers")
         }
     }
 
@@ -291,10 +317,8 @@ mod tests {
 
     #[test]
     fn an_unknown_tool_is_not_answered_and_an_unready_index_says_so() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = testing::Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let scope = testing::scope(Path::new("Z:/sens/no-such-project"));
         assert!(call(&desk, &scope, "rm", &json!({})).is_none());
         assert!(text(&json!({ "a": "  " }), "a").is_err());

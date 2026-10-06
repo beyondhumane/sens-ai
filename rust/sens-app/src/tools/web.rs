@@ -2,10 +2,9 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::{Desk, Level, Said, Scope, Tool, schema, text};
+use super::{Desk, Level, Said, Scope, Tool, opening, schema, text};
 
 const PAGE: &str = include_str!("../../ui/src/features/web/page.js");
-const MOST_CHARS: usize = 30_000;
 const LOADING: Duration = Duration::from_secs(20);
 const MOST_LINES: usize = 200;
 const KEYS: [(&str, u32, &str); 15] = [
@@ -264,7 +263,7 @@ fn eval_js(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, String
         Value::String(text) => text,
         other => serde_json::to_string_pretty(&other).unwrap_or_default(),
     };
-    Ok(shown.chars().take(MOST_CHARS).collect::<String>().into())
+    Ok(opening(&shown).into())
 }
 
 fn last<T>(all: Vec<T>) -> Vec<T> {
@@ -313,12 +312,9 @@ fn resize_browser(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said,
 
 #[cfg(test)]
 mod tests {
-    use super::super::call;
     use super::super::testing::{Window, scope};
     use super::*;
     use crate::browser::Request;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
     use std::path::Path;
 
     fn answering(answers: Vec<(&str, Result<Value, String>)>) -> Window {
@@ -326,9 +322,7 @@ mod tests {
     }
 
     fn run(window: &Window, name: &str, arguments: Value) -> Result<Said, String> {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
-        call(&window.desk(&consoles, &keeper), &scope(Path::new("C:/demo")), name, &arguments).unwrap()
+        window.ask(&scope(Path::new("C:/demo")), name, arguments)
     }
 
     #[test]

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { asker } from "../dev/acting";
 import { viewer } from "../features/files/view";
 import { project } from "../features/project/store";
 import { consoles } from "../features/terminal/store";
 import { web } from "../features/web/store";
-import { perform } from "./acts";
 import { shell } from "./shell";
 import { answerSurface } from "./surface";
 
@@ -14,11 +14,7 @@ const ipc = vi.hoisted(() => ({
 
 vi.mock("../ipc/commands", () => ({ commands: ipc.commands, events: {} }));
 
-const ask = async (act: string, input: Record<string, unknown>) => {
-  await perform({ ask: 1, act, input });
-  const [, ok, text] = ipc.commands.actAnswer.mock.calls.at(-1)!;
-  return { ok, text };
-};
+const ask = asker(ipc.commands.actAnswer);
 
 answerSurface();
 

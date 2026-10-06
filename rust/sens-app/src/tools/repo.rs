@@ -59,8 +59,6 @@ mod tests {
     use super::super::call;
     use super::super::testing::{Window, scope};
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
     use std::path::Path;
     use std::process::Command;
 
@@ -88,10 +86,8 @@ mod tests {
         std::fs::write(root.join("app.ts"), "dos\n").unwrap();
         std::fs::write(root.join("nuevo.ts"), "x\n").unwrap();
 
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&root);
         let status = call(&desk, &here, "repo_status", &json!({})).unwrap().unwrap();
         assert_eq!(status, Said::Text("On branch main\nOther branches: rama\n  changed  app.ts\n  new      nuevo.ts".into()));

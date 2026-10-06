@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { asker } from "../dev/acting";
 import { project } from "../features/project/store";
 import { updates } from "../features/updates/store";
 import { look } from "../shared/look";
-import { perform } from "./acts";
 import { answerPreferences } from "./preferences";
 
 const ipc = vi.hoisted(() => ({
@@ -28,11 +28,7 @@ vi.mock("../features/capabilities/store", () => ({ loadCapabilities: ipc.loadCap
 vi.mock("./session", () => ({ showView: ipc.showView }));
 vi.mock(import("../features/updates/store"), async (original) => ({ ...(await original()), checkUpdates: ipc.checkUpdates, setAutomatic: ipc.setAutomatic }));
 
-const ask = async (act: string, input: Record<string, unknown>) => {
-  await perform({ ask: 1, act, input });
-  const [, ok, text] = ipc.commands.actAnswer.mock.calls.at(-1)!;
-  return { ok, text };
-};
+const ask = asker(ipc.commands.actAnswer);
 
 answerPreferences();
 

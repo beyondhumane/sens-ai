@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { asker } from "../dev/acting";
 import { newPane, panes, type Pane } from "../features/panes/store";
 import { project } from "../features/project/store";
-import { perform } from "./acts";
 import { answerSessions } from "./sessions";
 
 const ipc = vi.hoisted(() => ({
@@ -34,11 +34,7 @@ vi.mock("../features/models/store", () => {
   };
 });
 
-const ask = async (act: string, input: Record<string, unknown>) => {
-  await perform({ ask: 1, act, input });
-  const [, ok, text] = ipc.commands.actAnswer.mock.calls.at(-1)!;
-  return { ok, text };
-};
+const ask = asker(ipc.commands.actAnswer);
 
 function paneFor(session: string): Pane {
   const pane = newPane("C:/demo");

@@ -2,14 +2,13 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::{Desk, Level, Said, Scope, Tool, number, schema, text};
+use super::{Desk, Level, Said, Scope, Tool, ending, number, schema, text};
 use crate::terminal::{Listed, Opened};
 
 const WAIT: u64 = 120;
 const LONGEST_WAIT: u64 = 600;
 const LINES: u64 = 200;
 const MOST_LINES: u64 = 1000;
-const MOST_CHARS: usize = 30_000;
 
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -119,15 +118,7 @@ fn adopt(desk: &Desk, scope: &Scope, opened: &Opened, title: &str) {
 }
 
 fn tail(text: &str) -> String {
-    if text.trim().is_empty() {
-        return "(no output)".into();
-    }
-    let over = text.len().saturating_sub(MOST_CHARS);
-    if over == 0 {
-        return text.to_string();
-    }
-    let cut = (over..text.len()).find(|at| text.is_char_boundary(*at)).unwrap_or(over);
-    format!("[the first {cut} bytes are cut]\n{}", &text[cut..])
+    if text.trim().is_empty() { "(no output)".into() } else { ending(text) }
 }
 
 fn ours(desk: &Desk, scope: &Scope, terminal: u64) -> Result<Listed, String> {
@@ -184,10 +175,8 @@ fn list_terminals(desk: &Desk, scope: &Scope, _: &Value) -> Result<Said, String>
 #[cfg(test)]
 mod tests {
     use super::super::testing::{Window, scope};
-    use super::super::call;
+    use super::super::{MOST_CHARS, call};
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
     use std::path::Path;
 
     #[test]
@@ -203,10 +192,8 @@ mod tests {
 
     #[test]
     fn a_terminal_outside_the_project_is_out_of_reach() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&std::env::temp_dir());
         let refused = call(&desk, &here, "stop_terminal", &json!({ "terminal": 9 })).unwrap().unwrap_err();
         assert!(refused.contains("no terminal 9"));
@@ -216,10 +203,8 @@ mod tests {
 
     #[test]
     fn reading_the_persons_terminal_asks_the_window() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(Path::new("C:/demo"));
         call(&desk, &here, "read_terminal", &json!({ "lines": 5000 })).unwrap().unwrap();
         let asked = window.asked.lock().unwrap();
@@ -240,26 +225,22 @@ mod tests {
     #[test]
     #[ignore = "opens a real shell"]
     fn a_command_answers_with_its_output_and_exit_code() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&std::env::temp_dir());
         let command = format!("{}; exit 3", quoted("año-42"));
         let said = text_of(call(&desk, &here, "run_in_terminal", &json!({ "command": command, "description": "eco" })).unwrap().unwrap());
         assert!(said.starts_with("Exit code 3"), "{said}");
         assert!(said.contains("año-42"), "{said}");
-        assert!(consoles.listed().is_empty());
+        assert!(window.consoles.listed().is_empty());
         assert!(window.told.lock().unwrap().is_empty());
     }
 
     #[test]
     #[ignore = "opens a real shell"]
     fn a_slow_command_moves_to_the_background_and_can_be_read_and_stopped() {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let window = Window::default();
-        let desk = window.desk(&consoles, &keeper);
+        let desk = window.desk();
         let here = scope(&std::env::temp_dir());
         let slow = if cfg!(windows) { format!("{}; Start-Sleep 30", quoted("despierto")) } else { format!("{}; sleep 30", quoted("despierto")) };
         let said = text_of(call(&desk, &here, "run_in_terminal", &json!({ "command": slow, "description": "lento", "wait": 3 })).unwrap().unwrap());
@@ -271,7 +252,7 @@ mod tests {
         let read = text_of(call(&desk, &here, "read_terminal", &json!({ "terminal": 1 })).unwrap().unwrap());
         assert!(read.contains("still running") && read.contains("despierto"), "{read}");
         call(&desk, &here, "stop_terminal", &json!({ "terminal": 1 })).unwrap().unwrap();
-        assert!(consoles.wait(1, Duration::from_secs(10)).unwrap().code.is_some());
+        assert!(window.consoles.wait(1, Duration::from_secs(10)).unwrap().code.is_some());
         assert!(text_of(call(&desk, &here, "list_terminals", &json!({})).unwrap().unwrap()).contains("ended"));
     }
 }

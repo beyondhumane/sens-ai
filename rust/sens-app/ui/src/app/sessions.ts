@@ -4,7 +4,7 @@ import { paneOf, split, workOf, type Pane } from "../features/panes/store";
 import { project } from "../features/project/store";
 import { loadRail } from "../features/rail/store";
 import { commands } from "../ipc/commands";
-import { answers } from "./acts";
+import { answers, onScreen } from "./acts";
 import { closePane, draftBeside, openBeside } from "./session";
 
 interface From {
@@ -13,12 +13,6 @@ interface From {
 
 interface Target {
   target: string;
-}
-
-const ELSEWHERE = "The person is looking at another session, so Sens left their screen as it was.";
-
-function here(session: string) {
-  if (project.getState().session !== session) throw new Error(ELSEWHERE);
 }
 
 function shown(target: string) {
@@ -30,7 +24,7 @@ function shown(target: string) {
 async function opened(from: string, root: string, target: string) {
   const pane = paneOf(target);
   if (pane) return pane;
-  here(from);
+  onScreen(from);
   await openBeside(root, target);
   return shown(target);
 }
@@ -48,7 +42,7 @@ async function openSession({ session, target, root }: From & Target & { root: st
 }
 
 async function newSession({ session, root, prompt }: From & { root: string; prompt: string }) {
-  here(session);
+  onScreen(session);
   const pane = await draftBeside(root);
   if (!prompt) return "A new, empty session is open beside this one for the person.";
   const id = await message(pane, prompt);

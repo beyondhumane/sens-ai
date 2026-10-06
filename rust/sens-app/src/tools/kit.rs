@@ -1,15 +1,13 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
-use super::{Desk, Level, Said, Scope, Tool, schema, text};
+use super::{Desk, Level, MOST_CHARS, Said, Scope, Tool, opening, schema, text};
 use crate::capabilities::{self, NewServer};
 use crate::market::{self, Kind};
 
 const KINDS: [&str; 3] = ["skill", "server", "plugin"];
 const NEXT: &str = "It applies from each session's next message.";
-const MOST_CHARS: usize = 30_000;
 
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -112,10 +110,6 @@ pub const TOOLS: &[Tool] = &[
     },
 ];
 
-fn data(desk: &Desk) -> Result<PathBuf, String> {
-    desk.sens.data().ok_or_else(|| "Sens could not read its own data folder".to_string())
-}
-
 fn root(scope: &Scope) -> String {
     scope.root().to_string_lossy().into_owned()
 }
@@ -130,7 +124,7 @@ fn on(enabled: bool) -> &'static str {
 }
 
 fn list_capabilities(desk: &Desk, scope: &Scope, _: &Value) -> Result<Said, String> {
-    let all = capabilities::all(&data(desk)?, &root(scope));
+    let all = capabilities::all(&desk.data()?, &root(scope));
     let mut lines = vec!["Skills:".to_string()];
     lines.extend(all.skills.iter().map(|skill| format!("  {} · {} · {}", skill.name, on(skill.enabled), skill.description)));
     lines.push("MCP servers:".into());
@@ -144,19 +138,19 @@ fn list_capabilities(desk: &Desk, scope: &Scope, _: &Value) -> Result<Said, Stri
 }
 
 fn read_skill(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
-    capabilities::skill_text(&data(desk)?, &text(arguments, "name")?).map(Said::from)
+    capabilities::skill_text(&desk.data()?, &text(arguments, "name")?).map(Said::from)
 }
 
 fn create_skill(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, String> {
     let name = text(arguments, "name")?;
-    capabilities::create_skill(&data(desk)?, &root(scope), &name, &text(arguments, "description")?, &text(arguments, "body")?)?;
+    capabilities::create_skill(&desk.data()?, &root(scope), &name, &text(arguments, "description")?, &text(arguments, "body")?)?;
     changed(desk, format!("The skill {name} is written and on for this project."))
 }
 
 fn set_capability(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, String> {
     let (kind, name) = (text(arguments, "kind")?, text(arguments, "name")?);
     let enabled = arguments["enabled"].as_bool().ok_or("`enabled` is missing")?;
-    let (base, root) = (data(desk)?, root(scope));
+    let (base, root) = (desk.data()?, root(scope));
     match kind.as_str() {
         "skill" => capabilities::set_skill(&base, &root, &name, enabled),
         "server" => capabilities::set_server(&base, &root, &name, enabled),
@@ -168,7 +162,7 @@ fn set_capability(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said,
 
 fn remove_capability(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
     let (kind, name) = (text(arguments, "kind")?, text(arguments, "name")?);
-    let base = data(desk)?;
+    let base = desk.data()?;
     match kind.as_str() {
         "skill" => capabilities::remove_skill(&base, &name),
         "server" => capabilities::remove_server(&base, &name),
@@ -182,7 +176,7 @@ fn add_server(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, Str
     let name = text(arguments, "name")?;
     let args = arguments["args"].as_array().map(|args| args.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default();
     let server = NewServer { name: name.clone(), command: text(arguments, "command")?, args, env: BTreeMap::new() };
-    capabilities::add_server(&data(desk)?, &root(scope), &server)?;
+    capabilities::add_server(&desk.data()?, &root(scope), &server)?;
     changed(desk, format!("The MCP server {name} is added and on for this project."))
 }
 
@@ -195,7 +189,7 @@ fn kind_name(kind: Kind) -> &'static str {
 }
 
 fn market_search(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
-    let found = market::search(&data(desk)?, &text(arguments, "query")?)?;
+    let found = market::search(&desk.data()?, &text(arguments, "query")?)?;
     let lines: Vec<String> = found
         .iter()
         .take(20)
@@ -208,18 +202,18 @@ fn market_search(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, Stri
 }
 
 fn market_detail(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
-    let detail = market::detail(&data(desk)?, &text(arguments, "id")?)?;
+    let detail = market::detail(&desk.data()?, &text(arguments, "id")?)?;
     let mut shown = serde_json::to_value(&detail).map_err(|error| error.to_string())?;
     if let Some(readme) = shown["readme"].as_str() {
         shown["readme"] = json!(readme.chars().take(MOST_CHARS / 2).collect::<String>());
     }
     let text = serde_json::to_string_pretty(&shown).map_err(|error| error.to_string())?;
-    Ok(text.chars().take(MOST_CHARS).collect::<String>().into())
+    Ok(opening(&text).into())
 }
 
 fn market_install(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said, String> {
     let id = text(arguments, "id")?;
-    let base = data(desk)?;
+    let base = desk.data()?;
     let detail = market::detail(&base, &id)?;
     if let Some(secret) = detail.needs.iter().find(|need| need.secret && need.required) {
         return Err(format!("{} needs a secret ({}); the person installs it themselves in Capabilities", detail.listing.title, secret.name));
@@ -237,17 +231,15 @@ fn market_install(desk: &Desk, scope: &Scope, arguments: &Value) -> Result<Said,
 
 fn market_update(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
     let name = text(arguments, "name")?;
-    market::update(&data(desk)?, &text(arguments, "id")?, &name)?;
+    market::update(&desk.data()?, &text(arguments, "id")?, &name)?;
     changed(desk, format!("{name} is up to date."))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::call;
     use super::super::testing::{Window, scope};
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
+    use std::path::PathBuf;
 
     fn window(name: &str) -> (Window, PathBuf) {
         let base = std::env::temp_dir().join(name);
@@ -258,9 +250,7 @@ mod tests {
     }
 
     fn run(window: &Window, project: &std::path::Path, name: &str, arguments: Value) -> Result<Said, String> {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
-        call(&window.desk(&consoles, &keeper), &scope(project), name, &arguments).unwrap()
+        window.ask(&scope(project), name, arguments)
     }
 
     #[test]

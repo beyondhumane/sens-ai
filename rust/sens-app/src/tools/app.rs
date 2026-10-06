@@ -1,8 +1,6 @@
-use std::path::PathBuf;
-
 use serde_json::{Value, json};
 
-use super::{Desk, Level, Said, Scope, Tool, schema, text};
+use super::{Desk, Level, Said, Scope, Tool, opening, schema, text};
 use crate::{artifacts, canon, language, look, news, profile, projects};
 
 const VIEWS: [&str; 5] = ["chat", "capabilities", "artifacts", "news", "settings"];
@@ -10,7 +8,6 @@ const MODES: [&str; 3] = ["dark", "light", "system"];
 const ACCENTS: [&str; 5] = ["signal", "ice", "iris", "rose", "neutral"];
 const LANGUAGES: [&str; 6] = ["en", "es", "fr", "de", "ja", "zh"];
 const PREFERENCES: [&str; 4] = ["notify", "keep_in_tray", "start_with_windows", "check_updates"];
-const MOST_CHARS: usize = 30_000;
 
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -95,10 +92,6 @@ pub const TOOLS: &[Tool] = &[
     },
 ];
 
-fn data(desk: &Desk) -> Result<PathBuf, String> {
-    desk.sens.data().ok_or_else(|| "Sens could not read its own data folder".to_string())
-}
-
 fn chosen(arguments: &Value, key: &str, allowed: &[&str]) -> Result<Option<String>, String> {
     match arguments[key].as_str() {
         None => Ok(None),
@@ -108,7 +101,7 @@ fn chosen(arguments: &Value, key: &str, allowed: &[&str]) -> Result<Option<Strin
 }
 
 fn get_settings(desk: &Desk, _: &Scope, _: &Value) -> Result<Said, String> {
-    let base = data(desk)?;
+    let base = desk.data()?;
     let person = profile::load(&base);
     let looks = serde_json::to_value(look::load(&base)).unwrap_or_default();
     let spoken = language::load(&base).map(|spoken| serde_json::to_value(spoken).unwrap_or_default()).unwrap_or(json!("as Windows"));
@@ -157,11 +150,11 @@ fn check_updates(desk: &Desk, _: &Scope, _: &Value) -> Result<Said, String> {
 fn read_news(_: &Desk, _: &Scope, _: &Value) -> Result<Said, String> {
     let all = news::since("")?;
     let said: Vec<String> = all.iter().take(5).map(|one| format!("{} · {} ({})\n{}", one.version, one.title, one.published, one.notes.trim())).collect();
-    Ok(if said.is_empty() { "There is no news.".into() } else { said.join("\n\n").chars().take(MOST_CHARS).collect::<String>().into() })
+    Ok(if said.is_empty() { "There is no news.".into() } else { opening(&said.join("\n\n")).into() })
 }
 
 fn list_artifacts(desk: &Desk, _: &Scope, _: &Value) -> Result<Said, String> {
-    let all = artifacts::all(&projects::load(&data(desk)?));
+    let all = artifacts::all(&projects::load(&desk.data()?));
     let lines: Vec<String> = all
         .iter()
         .take(100)
@@ -175,8 +168,8 @@ fn list_artifacts(desk: &Desk, _: &Scope, _: &Value) -> Result<Said, String> {
 }
 
 fn read_artifact(desk: &Desk, _: &Scope, arguments: &Value) -> Result<Said, String> {
-    let read = artifacts::text(&projects::load(&data(desk)?), &text(arguments, "target")?)?;
-    Ok(read.chars().take(MOST_CHARS).collect::<String>().into())
+    let read = artifacts::text(&projects::load(&desk.data()?), &text(arguments, "target")?)?;
+    Ok(opening(&read).into())
 }
 
 fn canon_status(_: &Desk, scope: &Scope, _: &Value) -> Result<Said, String> {
@@ -188,23 +181,18 @@ fn canon_status(_: &Desk, scope: &Scope, _: &Value) -> Result<Said, String> {
         "avoided": canon::canon_avoided(work, 0),
     });
     let text = serde_json::to_string_pretty(&status).map_err(|error| error.to_string())?;
-    Ok(text.chars().take(MOST_CHARS).collect::<String>().into())
+    Ok(opening(&text).into())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::call;
     use super::super::testing::{Window, scope};
     use super::*;
-    use crate::terminal::Consoles;
-    use sens_agent::canon::keeper::Keeper;
 
     fn run(window: &Window, name: &str, arguments: Value) -> Result<Said, String> {
-        let consoles = Consoles::default();
-        let keeper = Keeper::default();
         let here = std::env::temp_dir().join("sens-tools-app");
         std::fs::create_dir_all(&here).unwrap();
-        call(&window.desk(&consoles, &keeper), &scope(&here), name, &arguments).unwrap()
+        window.ask(&scope(&here), name, arguments)
     }
 
     #[test]
