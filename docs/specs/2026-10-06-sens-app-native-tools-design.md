@@ -3,7 +3,7 @@
 Fecha: 2026-10-06 · Ámbito: `rust/sens-app` (`mcp.rs`, `tools/`, `terminal.rs`,
 `main.rs`), `rust/sens-agent/src/canon/circuit.rs`, `ui/src/app/acts.ts`,
 `ui/src/features/terminal/`, `ui/src/features/chat/looks.ts`.
-Fases 1 a 4 implementadas; la 5 por hacer.
+Implementado: las cinco fases, 58 herramientas propias más las 6 del índice.
 
 ## Decisiones
 
@@ -177,12 +177,44 @@ protocolo de DevTools de esa misma vista (`browser::devtools`, con
 - No hay herramienta para aislar una sesión en un worktree: Sens lo decide antes del
   primer mensaje y mover una sesión viva de carpeta rompería su proceso.
 
-## Fases siguientes
+## Fase 5 · Capacidades, mercado, ajustes, artefactos y Canon
 
-5. Capacidades, mercado, artefactos y ajustes: skills, servidores y plugins,
-   `create_skill`, `market_search`, `market_detail`, `market_install`,
-   `market_update`; artefactos; tema, idioma, avisos, bandeja, inicio con Windows,
-   novedades y actualizaciones. Canon solo en lectura.
+| Herramienta | Nivel | Qué hace |
+| --- | --- | --- |
+| `list_capabilities` | Leer | Skills, servidores MCP y plugins instalados, y si cada uno está activo en este proyecto |
+| `read_skill` | Leer | `{ name }`. Su `SKILL.md` entero |
+| `create_skill` | Cambiar | `{ name, description, body }`. Una skill nueva, activa en este proyecto |
+| `set_capability` | Cambiar | `{ kind, name, enabled }`. Activa o desactiva una skill, un servidor o un plugin en este proyecto |
+| `remove_capability` | Cambiar | `{ kind, name }`. La desinstala de Sens |
+| `add_server` | Cambiar | `{ name, command, args? }`. Un servidor MCP local, sin variables de entorno |
+| `market_search` | Leer | `{ query }`. Hasta 20 resultados del mercado |
+| `market_detail` | Leer | `{ id }`. Todo lo de un elemento: partes, archivos, readme y valores que pide |
+| `market_install` | Cambiar | `{ id, values? }`. Lo instala, activo en este proyecto |
+| `market_update` | Cambiar | `{ id, name }`. Lo trae a su última versión |
+| `get_settings` | Leer | Nombre, aspecto, idioma, avisos, bandeja, inicio con Windows y búsqueda de actualizaciones |
+| `set_look` | Cambiar | `{ mode?, accent? }`. Oscuro, claro o como Windows, y el acento |
+| `set_language` | Cambiar | `{ language }`: `en`, `es`, `fr`, `de`, `ja` o `zh` |
+| `set_preference` | Cambiar | `{ name, on }`: `notify`, `keep_in_tray`, `start_with_windows` o `check_updates` |
+| `show_view` | Mostrar | `{ view }`: `capabilities`, `artifacts`, `news`, `settings` o vuelta a `chat` |
+| `check_updates` | Leer | Si hay una versión nueva de Sens |
+| `read_news` | Leer | Lo nuevo de las últimas versiones |
+| `list_artifacts` | Leer | Lo que hicieron o enlazaron las sesiones de todos los proyectos |
+| `read_artifact` | Leer | `{ target }`. El texto de un artefacto |
+| `canon_status` | Leer | Reglas, cambios retenidos, excepciones y lo que el Canon evitó en este proyecto |
+
+- Ningún secreto pasa por Claude: `add_server` no acepta variables de entorno ni
+  cabeceras, y `market_install` se niega con un elemento que pide un secreto
+  obligatorio o con un valor secreto, y dice a la persona que lo instale en
+  Capacidades.
+- Instalar una actualización de Sens no tiene herramienta: reinicia la app, así que
+  es el clic de la persona en la píldora de la barra de título.
+- Del Canon solo se lee. Aceptar lo retenido, deshacer, cambiar reglas o conceder
+  excepciones siguen siendo de la persona, porque son justo la manera de saltárselo.
+- Los ajustes pasan por las mismas funciones de la interfaz que los ajustes
+  (`chooseLook`, `chooseLanguage`, `setNotices`, `setResident`, `setAutomatic`), así
+  que se aplican al momento y quedan guardados. Un cambio de capacidades vale desde
+  el siguiente mensaje de cada sesión y refresca la vista de Capacidades si está
+  abierta.
 
 ## Pruebas
 
@@ -218,5 +250,12 @@ protocolo de DevTools de esa misma vista (`browser::devtools`, con
 - `sessions.test.ts`: escribe a una sesión en pantalla sin mover nada, abre al lado
   antes de escribir, empieza una nueva con su mensaje, elige modelo y esfuerzo, y
   cierra un panel solo si hay dos.
+- `tools/kit.rs`: una skill se escribe, se lista, se lee, se desactiva y se
+  desinstala; un servidor se añade sin secretos.
+- `tools/app.rs`: los ajustes se leen de la carpeta de datos; una elección ha de ser
+  de las que Sens ofrece; el Canon solo se lee.
+- `preferences.test.ts`: cambia solo la parte del aspecto pedida, usa el mismo
+  setter que los ajustes, muestra una vista solo para la sesión en pantalla, dice si
+  hay versión nueva y refresca Capacidades solo si están a la vista.
 - `terminal.test.tsx`: la pestaña de Claude llega con lo impreso antes y después, y
   no contesta dos veces al cursor; el puente recibe lo leído o el fallo.

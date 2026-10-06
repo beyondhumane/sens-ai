@@ -1,4 +1,6 @@
+mod app;
 mod console;
+mod kit;
 mod repo;
 mod sessions;
 mod surface;
@@ -148,7 +150,7 @@ impl Tool {
 }
 
 fn domains() -> impl Iterator<Item = &'static Tool> {
-    console::TOOLS.iter().chain(surface::TOOLS).chain(web::TOOLS).chain(sessions::TOOLS).chain(repo::TOOLS)
+    console::TOOLS.iter().chain(surface::TOOLS).chain(web::TOOLS).chain(sessions::TOOLS).chain(repo::TOOLS).chain(kit::TOOLS).chain(app::TOOLS)
 }
 
 pub fn listed() -> Vec<Value> {
