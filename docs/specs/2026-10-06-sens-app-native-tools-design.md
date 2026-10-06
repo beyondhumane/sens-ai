@@ -3,7 +3,7 @@
 Fecha: 2026-10-06 · Ámbito: `rust/sens-app` (`mcp.rs`, `tools/`, `terminal.rs`,
 `main.rs`), `rust/sens-agent/src/canon/circuit.rs`, `ui/src/app/acts.ts`,
 `ui/src/features/terminal/`, `ui/src/features/chat/looks.ts`.
-Fase 1 implementada; fases 2 a 5 por hacer.
+Fases 1 y 2 implementadas; 3 a 5 por hacer.
 
 ## Decisiones
 
@@ -37,7 +37,10 @@ Fase 1 implementada; fases 2 a 5 por hacer.
   sesión está aislada, su worktree, que es la última y donde se trabaja). Cada ámbito
   tiene su token; una herramienta nunca toca nada fuera de `within`.
 - `Desk` es lo que un manejador puede usar: `Consoles`, el `Keeper` del índice, la
-  ventana (`Ui`) y `tell` para emitir eventos.
+  ventana (`Ui`), la app (`Sens`: captura de la ventana y avisos de Windows) y
+  `tell` para emitir eventos.
+- Un manejador devuelve `Said`: texto, o una imagen con su pie, que viaja como
+  contenido `image` de MCP.
 - La ventana responde por un único canal de ida y vuelta: el backend emite
   `sens-act { ask, act, input }` y la interfaz contesta con
   `act_answer(ask, ok, text)`. `app/acts.ts` reparte cada `act` a quien lo registró
@@ -89,17 +92,34 @@ Con *Plan* las de cambiar quedan bloqueadas y con *No checks* pasan, igual que
   `command` o `text`. Como el modelo ya no tiene otra shell, el Canon ve todo
   comando, también lo que teclea en una terminal.
 
+## Fase 2 · Superficie de la app
+
+| Herramienta | Nivel | Qué hace |
+| --- | --- | --- |
+| `open_file` | Mostrar | `{ path, line? }`. El archivo en el visor, con el árbol desplegado hasta él; la línea queda en el centro, marcada con `--tint` y su número con `--focus`. Un Markdown pedido en una línea se abre como código |
+| `show_pane` | Mostrar | `{ pane }`: `files`, `changes`, `web`, `terminal` o `tasks` |
+| `close_pane` | Mostrar | Cierra el panel lateral |
+| `open_terminal_tab` | Mostrar | Una terminal para la persona en la carpeta de la sesión |
+| `get_layout` | Leer | Si la persona mira esta sesión, qué panel y qué archivo hay, cuántas terminales (y cuántas de Claude) y cuántos chats lado a lado |
+| `screenshot_app` | Leer | La ventana de Sens como imagen (`PrintWindow`, la misma captura que la barra flotante) |
+| `notify` | Mostrar | `{ body, title? }`. Un aviso de Windows, titulado «Claude» si no se dice otra cosa |
+
+- Lo que cambia la pantalla solo ocurre si la persona está mirando esa sesión; si
+  no, la herramienta falla diciéndolo y la pantalla queda como estaba. Una sesión
+  en segundo plano nunca le mueve la vista a quien trabaja en otra.
+- La ruta de `open_file` se resuelve canónica dentro de la carpeta de trabajo:
+  `../` o una ruta absoluta de fuera se rechazan.
+- Partir el chat en dos y abrir una sesión en un panel pasan a la fase 4, con las
+  sesiones.
+
 ## Fases siguientes
 
-2. Superficie de la app: `open_file` (archivo y línea en el visor),
-   `reveal_in_tree`, `show_changes`, `show_pane`, `close_pane`, `get_layout`,
-   `split_pane`, `notify`, `screenshot_app`, `open_terminal_tab`.
 3. Navegador y preview: `preview_start`, `navigate`, `page_text`, `read_page`,
    `find`, `click`, `type`, `scroll`, `screenshot`, `eval_js`, `console_logs`,
    `network_requests`, `resize`.
 4. Sesiones, git y proyectos: `list_sessions`, `read_session`, `new_session`,
    `send_to_session`, `rename_session`, `archive_session`, `stop_session`,
-   `open_session_in_pane`, modelo, esfuerzo y pensamiento; `repo_status`,
+   `open_session_in_pane`, `split_pane`, modelo, esfuerzo y pensamiento; `repo_status`,
    `changes`, `checkout`, `isolate_session`; `list_projects`, `open_project`.
 5. Capacidades, mercado, artefactos y ajustes: skills, servidores y plugins,
    `create_skill`, `market_search`, `market_detail`, `market_install`,
@@ -117,5 +137,11 @@ Con *Plan* las de cambiar quedan bloqueadas y con *No checks* pasan, igual que
   comando viaja entero.
 - `mcp.rs`: por HTTP actúa dentro de las carpetas de la sesión y rechaza a extraños.
 - `circuit.rs`: teclear `rm -rf .sens` en una terminal se deniega como un comando.
+- `tools/surface.rs`: un archivo se abre por su ruta y nada de fuera; los paneles
+  son los que hay; la ventana llega como imagen salvo oculta; el aviso lleva su
+  título.
+- `surface.test.ts`: abre en una línea, dice por qué no pudo leer, abre y cierra el
+  panel, no toca la pantalla si la persona mira otra sesión, y describe lo que hay.
+- `Viewer.test.tsx`: marca la línea pedida.
 - `terminal.test.tsx`: la pestaña de Claude llega con lo impreso antes y después, y
   no contesta dos veces al cursor; el puente recibe lo leído o el fallo.

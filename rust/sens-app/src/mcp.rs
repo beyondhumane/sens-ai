@@ -12,7 +12,7 @@ use sens_agent::said;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::tools::{self, SERVER, Scope, Ui};
+use crate::tools::{self, SERVER, Said, Scope, Ui};
 
 const PATH: &str = "/mcp";
 const LATEST: &str = "2025-06-18";
@@ -52,7 +52,7 @@ pub struct Acting {
 }
 
 pub type Ask = Arc<dyn Fn(Acting) + Send + Sync>;
-type Answered = Option<Result<String, String>>;
+type Answered = Option<Result<Said, String>>;
 pub type Hand = Arc<dyn Fn(&Scope, &str, &Value, &dyn Ui) -> Answered + Send + Sync>;
 
 #[derive(Default)]
@@ -269,8 +269,8 @@ fn success(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-fn told(text: String, failed: bool) -> Value {
-    json!({ "content": [{ "type": "text", "text": text }], "isError": failed })
+fn told(said: &Said, failed: bool) -> Value {
+    json!({ "content": said.content(), "isError": failed })
 }
 
 fn respond(message: &Value, call: &dyn Fn(&str, &Value) -> Answered) -> Option<Value> {
@@ -288,8 +288,8 @@ fn respond(message: &Value, call: &dyn Fn(&str, &Value) -> Answered) -> Option<V
         "ping" => success(id, json!({})),
         "tools/list" => success(id, json!({ "tools": tools::listed() })),
         "tools/call" => match call(params["name"].as_str().unwrap_or_default(), &params["arguments"]) {
-            Some(Ok(text)) => success(id, told(text, false)),
-            Some(Err(reason)) => success(id, told(reason, true)),
+            Some(Ok(said)) => success(id, told(&said, false)),
+            Some(Err(reason)) => success(id, told(&Said::Text(reason), true)),
             None => failure(id, -32602, "Unknown tool"),
         },
         _ => failure(id, -32601, "Method not found"),
@@ -304,7 +304,7 @@ mod tests {
         respond(&message, &|name, arguments| match name {
             "rm" => None,
             "broken" => Some(Err("`name` is missing".into())),
-            _ => Some(Ok(format!("{name} {arguments}"))),
+            _ => Some(Ok(format!("{name} {arguments}").into())),
         })
     }
 
@@ -372,7 +372,7 @@ mod tests {
                 thread::spawn(move || bridge.answer(acting.ask, Ok(format!("pantalla {}", acting.input["lines"]))).unwrap());
             });
             let hand: Hand = Arc::new(|scope: &Scope, name: &str, arguments: &Value, ui: &dyn Ui| {
-                (name == "read_terminal").then(|| ui.act(name, json!({ "lines": arguments["lines"], "within": scope.within }))).map(|said| said.map(|text| format!("{text} en {}", scope.within.join(" y "))))
+                (name == "read_terminal").then(|| ui.act(name, json!({ "lines": arguments["lines"], "within": scope.within }))).map(|said| said.map(|text| format!("{text} en {}", scope.within.join(" y ")).into()))
             });
             (ask, hand)
         }
@@ -387,7 +387,7 @@ mod tests {
             let ask: Ask = Arc::new(move |acting: Acting| {
                 let _ = answering.answer(acting.ask, Ok("PS C:\\demo> npm run dev\nError: el puerto 5173 ya está en uso".into()));
             });
-            let hand: Hand = Arc::new(|_: &Scope, name: &str, _: &Value, ui: &dyn Ui| (name == "read_terminal").then(|| ui.act(name, json!({}))));
+            let hand: Hand = Arc::new(|_: &Scope, name: &str, _: &Value, ui: &dyn Ui| (name == "read_terminal").then(|| ui.act(name, json!({})).map(Said::from)));
             (ask, hand)
         };
         let config = bridge.config(scope(&[&std::env::temp_dir().to_string_lossy()]), hands).unwrap();

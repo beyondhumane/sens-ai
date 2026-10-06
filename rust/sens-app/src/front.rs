@@ -22,8 +22,8 @@ pub struct Clip {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Shot {
-    media_type: &'static str,
-    data: String,
+    pub media_type: &'static str,
+    pub data: String,
     width: u32,
     height: u32,
 }
@@ -46,6 +46,10 @@ pub fn front() -> Option<Front> {
 
 pub fn shot() -> Option<Shot> {
     let window = SEEN.lock().unwrap_or_else(PoisonError::into_inner).as_ref()?.window;
+    native::shot(window)
+}
+
+pub fn shot_of(window: isize) -> Option<Shot> {
     native::shot(window)
 }
 

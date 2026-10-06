@@ -1,4 +1,5 @@
 mod console;
+mod surface;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -40,18 +41,60 @@ pub trait Ui: Sync {
     fn act(&self, act: &str, input: Value) -> Result<String, String>;
 }
 
+pub struct Picture {
+    pub media_type: String,
+    pub data: String,
+}
+
+pub trait Sens: Sync {
+    fn screenshot(&self) -> Option<Picture>;
+    fn notify(&self, title: &str, body: &str) -> Result<(), String>;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Said {
+    Text(String),
+    Picture { media_type: String, data: String, caption: String },
+}
+
+impl From<String> for Said {
+    fn from(text: String) -> Said {
+        Said::Text(text)
+    }
+}
+
+impl From<&str> for Said {
+    fn from(text: &str) -> Said {
+        Said::Text(text.to_string())
+    }
+}
+
+impl Said {
+    pub fn content(&self) -> Value {
+        match self {
+            Said::Text(text) => json!([{ "type": "text", "text": text }]),
+            Said::Picture { media_type, data, caption } => json!([
+                { "type": "image", "data": data, "mimeType": media_type },
+                { "type": "text", "text": caption }
+            ]),
+        }
+    }
+}
+
 pub type Tell = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 pub struct Desk<'a> {
     pub consoles: &'a Consoles,
     pub keeper: &'a Keeper,
     pub ui: &'a dyn Ui,
+    pub sens: &'a dyn Sens,
     pub tell: Tell,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Level {
     Read,
+    Show,
     Change,
 }
 
@@ -61,7 +104,7 @@ pub struct Tool {
     pub level: Level,
     pub description: &'static str,
     pub input: fn() -> Value,
-    pub run: fn(&Desk, &Scope, &Value) -> Result<String, String>,
+    pub run: fn(&Desk, &Scope, &Value) -> Result<Said, String>,
 }
 
 impl Tool {
@@ -87,7 +130,7 @@ impl Tool {
 }
 
 fn domains() -> impl Iterator<Item = &'static Tool> {
-    console::TOOLS.iter()
+    console::TOOLS.iter().chain(surface::TOOLS)
 }
 
 pub fn listed() -> Vec<Value> {
@@ -104,7 +147,7 @@ pub fn allowed() -> String {
         .join(",")
 }
 
-pub fn call(desk: &Desk, scope: &Scope, name: &str, arguments: &Value) -> Option<Result<String, String>> {
+pub fn call(desk: &Desk, scope: &Scope, name: &str, arguments: &Value) -> Option<Result<Said, String>> {
     if let Some(tool) = domains().find(|tool| tool.name == name) {
         return Some((tool.run)(desk, scope, arguments));
     }
@@ -112,7 +155,7 @@ pub fn call(desk: &Desk, scope: &Scope, name: &str, arguments: &Value) -> Option
         return None;
     }
     let answer = desk.keeper.ready(scope.work(), INDEX_PATIENCE).and_then(|project| index::call(&project, name, arguments));
-    Some(answer.unwrap_or_else(|| Err(UNINDEXED.to_string())))
+    Some(answer.unwrap_or_else(|| Err(UNINDEXED.to_string())).map(Said::from))
 }
 
 pub fn text(arguments: &Value, key: &str) -> Result<String, String> {
@@ -136,6 +179,8 @@ pub mod testing {
     pub struct Window {
         pub asked: Mutex<Vec<(String, Value)>>,
         pub told: Arc<Mutex<Vec<(String, Value)>>>,
+        pub notified: Mutex<Vec<(String, String)>>,
+        pub hidden: bool,
     }
 
     impl Ui for Window {
@@ -145,10 +190,21 @@ pub mod testing {
         }
     }
 
+    impl Sens for Window {
+        fn screenshot(&self) -> Option<Picture> {
+            (!self.hidden).then(|| Picture { media_type: "image/png".into(), data: "iVBORw0KGgo=".into() })
+        }
+
+        fn notify(&self, title: &str, body: &str) -> Result<(), String> {
+            self.notified.lock().unwrap().push((title.to_string(), body.to_string()));
+            Ok(())
+        }
+    }
+
     impl Window {
         pub fn desk<'a>(&'a self, consoles: &'a Consoles, keeper: &'a Keeper) -> Desk<'a> {
             let told = self.told.clone();
-            Desk { consoles, keeper, ui: self, tell: Arc::new(move |event, payload| told.lock().unwrap().push((event.to_string(), payload))) }
+            Desk { consoles, keeper, ui: self, sens: self, tell: Arc::new(move |event, payload| told.lock().unwrap().push((event.to_string(), payload))) }
         }
     }
 
@@ -195,5 +251,12 @@ mod tests {
         assert!(call(&desk, &scope, "rm", &json!({})).is_none());
         assert!(text(&json!({ "a": "  " }), "a").is_err());
         assert_eq!(number(&json!({ "a": 3 }), "a"), Ok(3));
+    }
+
+    #[test]
+    fn a_picture_travels_as_an_image_with_its_caption() {
+        let picture = Said::Picture { media_type: "image/png".into(), data: "AA==".into(), caption: "Sens".into() };
+        assert_eq!(picture.content(), json!([{ "type": "image", "data": "AA==", "mimeType": "image/png" }, { "type": "text", "text": "Sens" }]));
+        assert_eq!(Said::from("hola").content(), json!([{ "type": "text", "text": "hola" }]));
     }
 }

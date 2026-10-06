@@ -13,6 +13,7 @@ import { hearHandOver } from "./features/handover/store";
 import { loadCatalog } from "./features/models/store";
 import { newsAtStart } from "./features/news/store";
 import { hearActs } from "./app/acts";
+import { answerSurface } from "./app/surface";
 import { hearBarWatching, watchPresence } from "./features/notify/store";
 import { loadProfile } from "./features/profile/store";
 import { tickTasks } from "./features/tasks/store";
@@ -31,6 +32,7 @@ greetAtStart();
 newsAtStart();
 
 hearActs();
+answerSurface();
 hearChat();
 hearBrowser();
 hearTerminal();

@@ -13,9 +13,6 @@ import { project, type Edits } from "../project/store";
 import { t } from "./copy";
 import { setMode, textOf, viewer, viewOf, type Body } from "./view";
 
-// The file beside the tree: as code, or as a page when it reads as one. Its
-// name and the agent's counts (ViewerHead) and the Código/Vista switch
-// (ViewerModes) go in the panel's header.
 export function Viewer() {
   const title = useStore(viewer, (s) => s.title);
   const mode = useStore(viewer, (s) => s.mode);
@@ -75,25 +72,27 @@ export function ViewerModes() {
   );
 }
 
-// Each text opens at its top, or at the first line the agent added.
 function useOpensAtTop<Box extends HTMLElement>() {
   const box = useRef<Box>(null);
   const shown = useStore(viewer, (s) => s.shown);
   useLayoutEffect(() => {
-    if (!box.current) return;
-    box.current.scrollTop = 0;
-    box.current.querySelector('[data-touched="add"]')?.scrollIntoView({ block: "center" });
+    const at = box.current;
+    if (!at) return;
+    const { line } = viewer.getState();
+    at.scrollTop = line ? topOf(at, line) : 0;
+    if (!line) at.querySelector('[data-touched="add"]')?.scrollIntoView({ block: "center" });
   }, [shown]);
   return box;
 }
 
-// The text as code, with its line numbers and the lines the agent added,
-// colored as VS Code colors its language.
+const topOf = (box: HTMLElement, line: number) => Math.max(0, (line - 1) * (parseFloat(getComputedStyle(box).getPropertyValue("--line")) || 0) - box.clientHeight / 2);
+
 function Source({ hidden }: { hidden: boolean }) {
   const title = useStore(viewer, (s) => s.title);
   const text = useStore(viewer, (s) => textOf(s.body));
   const shown = useStore(viewer, (s) => s.shown);
   const edits = useEdits();
+  const focus = useStore(viewer, (s) => s.line);
   const box = useOpensAtTop<HTMLDivElement>();
   const lines = useMemo(() => text.split(/\r?\n/), [text]);
   const code = useMemo(() => lines.join("\n"), [lines]);
@@ -103,7 +102,7 @@ function Source({ hidden }: { hidden: boolean }) {
 
   const blocks = [];
   for (let from = 0; from < lines.length; from += BLOCK) {
-    blocks.push(<Block key={`${shown}/${from}`} from={from} lines={lines} colored={colored} edits={edits} />);
+    blocks.push(<Block key={`${shown}/${from}`} from={from} lines={lines} colored={colored} edits={edits} focus={focus} />);
   }
   return (
     <div className="source" ref={box} hidden={hidden}>
@@ -112,9 +111,6 @@ function Source({ hidden }: { hidden: boolean }) {
   );
 }
 
-// Lines are drawn a block at a time, as the block comes near the screen, so a
-// file of thousands of lines opens at once: until then a block only holds its
-// height. The first one, and those with the agent's lines, are drawn at once.
 const BLOCK = 200;
 
 interface BlockProps {
@@ -122,18 +118,19 @@ interface BlockProps {
   lines: string[];
   colored: Painted | null;
   edits?: Edits;
+  focus: number;
 }
 
-const Block = memo(function Block({ from, lines, colored, edits }: BlockProps) {
+const Block = memo(function Block({ from, lines, colored, edits, focus }: BlockProps) {
   const box = useRef<HTMLDivElement>(null);
   const to = Math.min(from + BLOCK, lines.length);
   const touched = edits ? [...edits.add].some((line) => line > from && line <= to) : false;
-  const seen = useSeen(box, { root: () => box.current?.closest(".source") ?? null, margin: "1500px 0px", now: from === 0 || touched });
+  const seen = useSeen(box, { root: () => box.current?.closest(".source") ?? null, margin: "1500px 0px", now: from === 0 || touched || (focus > from && focus <= to) });
   if (!seen) return <div className="block" ref={box} style={{ height: `calc(var(--line) * ${to - from})` }} />;
 
   const rows = [];
   for (let at = from; at < to; at++) {
-    rows.push(<Line key={at} number={at + 1} runs={colored?.lines[at] ?? lines[at]} looks={colored?.looks} added={edits?.add.has(at + 1) ?? false} />);
+    rows.push(<Line key={at} number={at + 1} runs={colored?.lines[at] ?? lines[at]} looks={colored?.looks} added={edits?.add.has(at + 1) ?? false} focused={focus === at + 1} />);
   }
   return (
     <div className="block" ref={box}>
@@ -142,9 +139,17 @@ const Block = memo(function Block({ from, lines, colored, edits }: BlockProps) {
   );
 });
 
-const Line = memo(function Line({ number, runs, looks, added }: { number: number; runs: Runs | string; looks?: Look[]; added: boolean }) {
+interface LineProps {
+  number: number;
+  runs: Runs | string;
+  looks?: Look[];
+  added: boolean;
+  focused: boolean;
+}
+
+const Line = memo(function Line({ number, runs, looks, added, focused }: LineProps) {
   return (
-    <div className="line" data-touched={added ? "add" : undefined}>
+    <div className="line" data-touched={added ? "add" : undefined} data-focused={focused ? "true" : undefined}>
       <span className="num">{number}</span>
       <span className="src">
         {typeof runs === "string"

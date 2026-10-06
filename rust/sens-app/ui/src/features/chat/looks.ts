@@ -68,6 +68,16 @@ const LOOKS: Record<string, (input: ToolInput) => Look> = {
   mcp__sens__write_terminal: (input) => ({ icon: ICONS.keyboard, verb: t.typeTerminal, ask: t.wantsTypeTerminal, target: oneLine(input.text), mono: true }),
   mcp__sens__stop_terminal: (input) => ({ icon: ICONS.stopSquare, verb: t.stopTerminal, ask: t.wantsStopTerminal, target: String(input.terminal ?? "") }),
   mcp__sens__list_terminals: () => ({ icon: ICONS.terminal, verb: t.listTerminals, ask: t.wantsReadTerminal, target: "" }),
+  mcp__sens__open_file: (input) => {
+    const path = relative(String(input.path ?? ""));
+    return { icon: ICONS.fileText, verb: t.showInSens, ask: t.wantsUse("Sens"), target: input.line ? `${path}:${input.line}` : path, mono: true, link: path };
+  },
+  mcp__sens__show_pane: (input) => ({ icon: ICONS.panelOpen, verb: t.openPane, ask: t.wantsUse("Sens"), target: String(input.pane ?? "") }),
+  mcp__sens__close_pane: () => ({ icon: ICONS.panelClose, verb: t.closePane, ask: t.wantsUse("Sens"), target: "" }),
+  mcp__sens__open_terminal_tab: () => ({ icon: ICONS.terminal, verb: t.openTerminal, ask: t.wantsUse("Sens"), target: "" }),
+  mcp__sens__get_layout: () => ({ icon: ICONS.monitor, verb: t.lookLayout, ask: t.wantsUse("Sens"), target: "" }),
+  mcp__sens__screenshot_app: () => ({ icon: ICONS.scan, verb: t.lookSens, ask: t.wantsUse("Sens"), target: "" }),
+  mcp__sens__notify: (input) => ({ icon: ICONS.message, verb: t.notify, ask: t.wantsUse("Sens"), target: oneLine(input.body) }),
   "sens.dependency": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.dependencyTitle, target: String(input.key ?? "").replace(/^R3:/, ""), mono: true }),
   "sens.tests": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.testsTitle, target: relative(String(input.file ?? "")), mono: true, link: relative(String(input.file ?? "")) }),
   "sens.canon": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.canonTitle, target: relative(String(input.file ?? "")), mono: true }),

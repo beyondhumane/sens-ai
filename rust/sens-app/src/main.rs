@@ -261,10 +261,28 @@ fn hands(app: AppHandle) -> (mcp::Ask, mcp::Hand) {
     });
     let hand: mcp::Hand = Arc::new(move |scope: &tools::Scope, name: &str, arguments: &serde_json::Value, ui: &dyn tools::Ui| {
         let keeper = app.state::<Arc<Engine>>().keeper();
-        let desk = tools::Desk { consoles: &app.state::<terminal::Consoles>(), keeper: &keeper, ui, tell: tell.clone() };
+        let desk = tools::Desk { consoles: &app.state::<terminal::Consoles>(), keeper: &keeper, ui, sens: &Desktop(app.clone()), tell: tell.clone() };
         tools::call(&desk, scope, name, arguments)
     });
     (ask, hand)
+}
+
+struct Desktop(AppHandle);
+
+impl tools::Sens for Desktop {
+    fn screenshot(&self) -> Option<tools::Picture> {
+        let window = self.0.get_window(MAIN)?;
+        #[cfg(windows)]
+        let handle = window.hwnd().ok()?.0 as isize;
+        #[cfg(not(windows))]
+        let handle = { drop(window); 0 };
+        let shot = front::shot_of(handle)?;
+        Some(tools::Picture { media_type: shot.media_type.to_string(), data: shot.data })
+    }
+
+    fn notify(&self, title: &str, body: &str) -> Result<(), String> {
+        notify(self.0.clone(), title.to_string(), body.to_string())
+    }
 }
 
 #[tauri::command]
@@ -302,6 +320,7 @@ fn chat_stop_task(engine: State<Arc<Engine>>, session_id: String, task_id: Strin
     engine.stop_task(&session_id, &task_id)
 }
 
+const MAIN: &str = "main";
 const TASK_TAIL: u64 = 64 * 1024;
 
 #[tauri::command(async)]
