@@ -3,7 +3,7 @@
 Fecha: 2026-10-06 · Ámbito: `rust/sens-app` (`mcp.rs`, `tools/`, `terminal.rs`,
 `main.rs`), `rust/sens-agent/src/canon/circuit.rs`, `ui/src/app/acts.ts`,
 `ui/src/features/terminal/`, `ui/src/features/chat/looks.ts`.
-Fases 1, 2 y 3 implementadas; 4 y 5 por hacer.
+Fases 1 a 4 implementadas; la 5 por hacer.
 
 ## Decisiones
 
@@ -148,12 +148,37 @@ protocolo de DevTools de esa misma vista (`browser::devtools`, con
 - Para la preview de un servidor de desarrollo no hay herramienta propia: Claude lo
   arranca con `run_in_terminal` en segundo plano y lo abre con `navigate`.
 
+## Fase 4 · Sesiones, proyectos y git
+
+| Herramienta | Nivel | Qué hace |
+| --- | --- | --- |
+| `list_projects` | Leer | Los proyectos abiertos en Sens, con cuántas sesiones tienen y cuál es el de esta |
+| `list_sessions` | Leer | `{ project?, archived? }`. Id, título, mensajes de la persona, y si es esta o está trabajando |
+| `read_session` | Leer | `{ session, project?, turns? }`. Los últimos turnos (10): lo que pidió la persona, lo que respondió Claude y las herramientas que usó |
+| `open_session` | Mostrar | `{ session, project? }`. La abre al lado: la ventana se parte en dos chats |
+| `new_session` | Cambiar | `{ prompt?, project? }`. Una sesión nueva al lado; con `prompt`, se lo envía y otro Claude trabaja en paralelo |
+| `send_to_session` | Cambiar | `{ session, text, project? }`. Le escribe como lo haría la persona, con el modelo y el modo de ese panel; la abre al lado si no está en pantalla |
+| `stop_session` | Cambiar | `{ session }`. Como el botón de parar |
+| `rename_session` | Cambiar | `{ title, session?, project? }`. Esta si no se dice otra |
+| `archive_session` | Cambiar | `{ session, archived?, project? }` |
+| `close_session_pane` | Mostrar | `{ session }`. Cierra la mitad de la ventana que la muestra |
+| `set_session_model` | Cambiar | `{ session?, model?, effort?, thinking? }`. Para los mensajes siguientes de una sesión en pantalla; el modelo por su nombre o id en el selector, y un esfuerzo que ese modelo tenga |
+| `repo_status` | Leer | Rama, las demás ramas, y los archivos cambiados o nuevos desde el último commit |
+| `switch_branch` | Cambiar | `{ branch }`. Cambia de rama en la carpeta de trabajo y refresca el árbol, el visor y la rama del panel |
+
+- Una sesión nunca se para, se archiva ni se escribe a sí misma, y no se escribe a una
+  que sigue trabajando.
+- Otro proyecto vale solo si Sens lo tiene registrado; la ruta se compara sin
+  distinguir barras ni mayúsculas.
+- Leer, renombrar, archivar y la rama van directos al backend (`session`, `git`);
+  abrir, escribir, empezar y elegir modelo pasan por la ventana, que conoce los
+  paneles y el modelo de cada uno (`currentSettings`). Abrir una sesión que no está en
+  pantalla solo ocurre si la persona mira la que lo pide.
+- No hay herramienta para aislar una sesión en un worktree: Sens lo decide antes del
+  primer mensaje y mover una sesión viva de carpeta rompería su proceso.
+
 ## Fases siguientes
 
-4. Sesiones, git y proyectos: `list_sessions`, `read_session`, `new_session`,
-   `send_to_session`, `rename_session`, `archive_session`, `stop_session`,
-   `open_session_in_pane`, `split_pane`, modelo, esfuerzo y pensamiento; `repo_status`,
-   `changes`, `checkout`, `isolate_session`; `list_projects`, `open_project`.
 5. Capacidades, mercado, artefactos y ajustes: skills, servidores y plugins,
    `create_skill`, `market_search`, `market_detail`, `market_install`,
    `market_update`; artefactos; tema, idioma, avisos, bandeja, inicio con Windows,
@@ -185,5 +210,13 @@ protocolo de DevTools de esa misma vista (`browser::devtools`, con
   las referencias; encuentra; lee el texto; apunta, enfoca, vacía y avisa de una
   referencia caducada.
 - `surface.test.ts`: navega y espera la carga; vuelve atrás; ancho de móvil.
+- `tools/sessions.rs`: una sesión se lee por turnos; la lista marca esta y las que
+  trabajan; ninguna se para, archiva ni escribe a sí misma; renombrar y archivar
+  llegan al disco; otro proyecto ha de ser conocido; escribir pasa por la ventana.
+- `tools/repo.rs`: rama, otras ramas, cambiados y nuevos en un repositorio real, y el
+  cambio de rama.
+- `sessions.test.ts`: escribe a una sesión en pantalla sin mover nada, abre al lado
+  antes de escribir, empieza una nueva con su mensaje, elige modelo y esfuerzo, y
+  cierra un panel solo si hay dos.
 - `terminal.test.tsx`: la pestaña de Claude llega con lo impreso antes y después, y
   no contesta dos veces al cursor; el puente recibe lo leído o el fallo.

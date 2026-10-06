@@ -1,8 +1,10 @@
 mod console;
+mod repo;
+mod sessions;
 mod surface;
 mod web;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +28,10 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn root(&self) -> &Path {
+        Path::new(self.within.first().map_or("", String::as_str))
+    }
+
     pub fn work(&self) -> &Path {
         Path::new(self.within.last().map_or("", String::as_str))
     }
@@ -59,6 +65,8 @@ pub trait Sens: Sync {
     fn devtools(&self, method: &str, params: Value) -> Result<Value, String>;
     fn console(&self) -> Vec<(String, String)>;
     fn requests(&self) -> Vec<Request>;
+    fn data(&self) -> Option<PathBuf>;
+    fn busy(&self, session: &str) -> bool;
 }
 
 #[derive(Debug, PartialEq)]
@@ -140,7 +148,7 @@ impl Tool {
 }
 
 fn domains() -> impl Iterator<Item = &'static Tool> {
-    console::TOOLS.iter().chain(surface::TOOLS).chain(web::TOOLS)
+    console::TOOLS.iter().chain(surface::TOOLS).chain(web::TOOLS).chain(sessions::TOOLS).chain(repo::TOOLS)
 }
 
 pub fn listed() -> Vec<Value> {
@@ -195,6 +203,8 @@ pub mod testing {
         pub answers: Mutex<Vec<(String, Result<Value, String>)>>,
         pub said: Vec<(String, String)>,
         pub requested: Vec<Request>,
+        pub base: Option<PathBuf>,
+        pub working: Vec<String>,
     }
 
     impl Ui for Window {
@@ -226,6 +236,14 @@ pub mod testing {
 
         fn requests(&self) -> Vec<Request> {
             self.requested.clone()
+        }
+
+        fn data(&self) -> Option<PathBuf> {
+            self.base.clone()
+        }
+
+        fn busy(&self, session: &str) -> bool {
+            self.working.iter().any(|one| one == session)
         }
     }
 

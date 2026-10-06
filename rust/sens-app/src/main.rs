@@ -295,6 +295,15 @@ impl tools::Sens for Desktop {
     fn requests(&self) -> Vec<tools::Request> {
         browser::requests()
     }
+
+    fn data(&self) -> Option<PathBuf> {
+        data_dir(&self.0).ok()
+    }
+
+    fn busy(&self, session: &str) -> bool {
+        let engine = self.0.state::<Arc<Engine>>();
+        engine.busy(session) || !engine.tasks(session).is_empty()
+    }
 }
 
 #[tauri::command]
