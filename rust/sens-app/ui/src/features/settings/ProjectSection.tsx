@@ -18,6 +18,7 @@ export function avoidedLines(avoided: Avoided) {
     avoided.protected && t.protectedFiles(avoided.protected),
     avoided.tests && t.tests(avoided.tests),
     avoided.orphans && t.orphans(avoided.orphans),
+    avoided.cycles && t.cycles(avoided.cycles),
     avoided.judgment && t.judgment(avoided.judgment),
     avoided.held && t.held(avoided.held),
     avoided.reviews && t.reviews(avoided.reviews, `$${avoided.reviewerCost.toFixed(2)}`),

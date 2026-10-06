@@ -30,7 +30,7 @@ fn main() {
         let after = std::fs::read_to_string(run.join(&path)).ok();
         changes.push(Change { path, before, after });
     }
-    let (verdict, _) = judge_turn(&index, &changes, &dead, &ProjectRules::default(), &Exceptions::default());
+    let (verdict, _) = judge_turn(&index, &changes, &dead, None, &ProjectRules::default(), &Exceptions::default());
     println!("{}: {} cambios", run.file_name().unwrap_or_default().to_string_lossy(), changes.len());
     for finding in verdict.findings {
         println!("  {:?} {:?} {}:{} {}", finding.rule, finding.severity, finding.file, finding.line, finding.message.chars().take(200).collect::<String>());
