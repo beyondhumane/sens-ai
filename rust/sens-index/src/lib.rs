@@ -4,6 +4,7 @@ pub mod fingerprint;
 pub mod format;
 pub mod index;
 pub mod lang;
+pub mod map;
 pub mod query;
 pub mod reflective;
 pub mod testfile;

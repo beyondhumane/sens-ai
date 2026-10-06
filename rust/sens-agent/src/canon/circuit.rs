@@ -1,13 +1,15 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use sens_canon::card;
 use sens_canon::judge::{judge_command, judge_since, judge_turn};
 use sens_canon::orphans;
 use sens_canon::review::Review;
 use sens_canon::verdict::{Change, Finding, Rule, Severity, Verdict};
 use sens_index::index::Index;
+use sens_index::map;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -30,6 +32,9 @@ pub const BARRED_TOOLS: &str = "EnterWorktree,ExitWorktree";
 
 const WAIT: u64 = 3600;
 const INDEX_PATIENCE: Duration = Duration::from_secs(30);
+const MAP_LINES: usize = 30;
+const MAP_SHARE: usize = 5;
+const MAP_FEW: usize = 5;
 const UNJUDGED: [&str; 12] = ["Read", "Grep", "Glob", "WebFetch", "WebSearch", "TodoWrite", "ToolSearch", "Skill", "AskUserQuestion", "Write", "Edit", "Agent"];
 const LOCKFILES: [&str; 7] = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "poetry.lock", "uv.lock", "composer.lock"];
 
@@ -119,11 +124,12 @@ pub struct Circuit {
     keeper: Arc<Keeper>,
     checkpoints: Option<Checkpoints>,
     reviewer: Option<Arc<dyn Reviewer>>,
+    seen: Mutex<Option<BTreeMap<String, String>>>,
 }
 
 impl Circuit {
     pub fn new(work: &Path, session: &str, keeper: Arc<Keeper>, resumed: bool) -> Circuit {
-        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None };
+        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None, seen: Mutex::default() };
         if !resumed {
             circuit.keeper.exclusive(&circuit.work, || {
                 let mut state = State::load(&circuit.work);
@@ -136,6 +142,35 @@ impl Circuit {
 
     pub fn reviewed_by(self, reviewer: Arc<dyn Reviewer>) -> Circuit {
         Circuit { reviewer: Some(reviewer), ..self }
+    }
+
+    pub fn greeted(&self, project: &Project) {
+        *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(project.map.placement(&project.index));
+    }
+
+    pub fn forget_map(&self) {
+        *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
+    fn mapped(&self, project: &Project) -> Option<String> {
+        let now = project.map.placement(&project.index);
+        let mut seen = self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let whole = || card::card(&project.index, &project.map);
+        let told = match seen.as_ref() {
+            None => Some(whole()),
+            Some(before) => {
+                let changes = map::moved(before, &now);
+                if changes.is_empty() {
+                    None
+                } else if changes.len() > MAP_LINES || (changes.len() > MAP_FEW && changes.len() * MAP_SHARE > now.len().max(before.len())) {
+                    Some(format!("The project changed a lot since you last saw its map. This is the map now:\n\n{}", whole()))
+                } else {
+                    Some(format!("The project map changed since you last saw it (+ new, - gone, ~ moved to another area):\n{}", changes.join("\n")))
+                }
+            }
+        };
+        *seen = Some(now);
+        told
     }
 
     pub fn retry(&self, voice: &dyn Voice) -> Value {
@@ -249,8 +284,11 @@ impl Circuit {
         let mut state = State::load(&self.work);
         state.turn += 1;
         state.request = input["prompt"].as_str().unwrap_or_default().to_string();
-        let project = self.project(Duration::ZERO);
+        let mut project = self.project(Duration::ZERO);
         let now = self.snapshot(&mut state, "start");
+        if project.is_some() && now.is_some() && now != state.end {
+            project = Some(self.keeper.refresh(&self.work));
+        }
         if state.approved.is_none() {
             state.approved = now.clone();
             if let Some(project) = &project {
@@ -263,6 +301,9 @@ impl Circuit {
         if state.canon.get(&self.session).map(String::as_str) != Some(sens_canon::VERSION) {
             context.push(sens_canon::CANON.to_string());
             state.canon.insert(self.session.clone(), sens_canon::VERSION.to_string());
+        }
+        if let Some(told) = project.as_deref().and_then(|project| self.mapped(project)) {
+            context.push(told);
         }
         if let Some(project) = &project {
             let found: Vec<Suggested> = project
@@ -744,6 +785,22 @@ mod tests {
         let first = old.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
         assert!(first["hookSpecificOutput"]["additionalContext"].as_str().unwrap().contains("# Sens Canon"));
         assert_eq!(old.answer(&ear, PROMPT, &json!({ "prompt": "hola" })), json!({}));
+    }
+
+    #[test]
+    fn the_map_travels_once_then_only_what_changed_and_again_after_it_is_forgotten() {
+        let (root, keeper) = project("map");
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        let told = |circuit: &Circuit| circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }))["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default().to_string();
+        assert!(told(&circuit).contains("## This project, as Sens indexed it"));
+        assert_eq!(told(&circuit), "");
+        std::fs::write(root.join("src/lib/round.ts"), "export const round = (n: number) => Math.round(n);\n").unwrap();
+        let changed = told(&circuit);
+        assert!(changed.contains("+ src/lib/round.ts (src)") && !changed.contains("## This project"), "{changed}");
+        assert_eq!(told(&circuit), "");
+        circuit.forget_map();
+        assert!(told(&circuit).contains("## This project, as Sens indexed it"));
     }
 
     #[test]

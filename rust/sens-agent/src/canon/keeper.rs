@@ -7,17 +7,20 @@ use std::time::Duration;
 use sens_canon::relevant::Catalog;
 use sens_index::build;
 use sens_index::index::Index;
+use sens_index::map::Map;
 
 pub struct Project {
     pub index: Index,
     pub catalog: Catalog,
+    pub map: Map,
 }
 
 impl Project {
-    fn of(work: &Path) -> Project {
+    pub fn of(work: &Path) -> Project {
         let index = build::build(work);
         let catalog = Catalog::of(&index);
-        Project { index, catalog }
+        let map = Map::of(&index);
+        Project { index, catalog, map }
     }
 }
 

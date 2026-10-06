@@ -258,6 +258,33 @@ export interface Changes {
   fresh: string[];
 }
 
+export interface Region {
+  name: string;
+  files: string[];
+  doors: string[];
+  uses: string[];
+  exports: string[];
+}
+
+export interface ProjectMap {
+  regions: Region[];
+  central: { path: string; dependents: number }[];
+  strays: { path: string; area: string }[];
+}
+
+export interface Reached {
+  path: string;
+  area: string;
+  steps: number;
+}
+
+export interface Reach {
+  file: string;
+  area: string;
+  dependents: Reached[];
+  tests: Reached[];
+}
+
 export interface AgentEvent {
   kind: string;
   id?: string;
