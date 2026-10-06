@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::index::SymbolInfo;
-use crate::query::{DeadCandidate, DeadCodeReport, FileDependencies, MapEntry, Neighborhood, Tier, WhoUses};
+use crate::query::{DeadCandidate, DeadCodeReport, MapEntry, Tier, WhoUses};
 
 fn symbol_name(id: &str) -> &str {
     id.split('#').nth(1).unwrap_or(id)
@@ -97,72 +97,6 @@ pub fn format_map(entries: &[MapEntry]) -> String {
         }
     }
     lines.join("\n")
-}
-
-pub fn format_file_dependencies(deps: &FileDependencies) -> String {
-    let mut lines = vec![deps.file.clone()];
-    if deps.imports.is_empty() {
-        lines.push("  imports: (none)".to_string());
-    } else {
-        lines.push(format!("  imports ({}):", deps.imports.len()));
-        for f in &deps.imports {
-            lines.push(format!("    {f}"));
-        }
-    }
-    if deps.imported_by.is_empty() {
-        lines.push("  imported by: (none)".to_string());
-    } else {
-        lines.push(format!("  imported by ({}):", deps.imported_by.len()));
-        for f in &deps.imported_by {
-            lines.push(format!("    {f}"));
-        }
-    }
-    lines.join("\n")
-}
-
-pub fn format_explain(results: &[Neighborhood]) -> String {
-    if results.is_empty() {
-        return "symbol not found".to_string();
-    }
-    let mut lines: Vec<String> = Vec::new();
-    let block = |lines: &mut Vec<String>, title: &str, syms: &[&SymbolInfo]| {
-        lines.push(format!("  {title} ({}):", syms.len()));
-        if syms.is_empty() {
-            lines.push("    (none)".to_string());
-        }
-        for s in syms {
-            lines.push(format!("    {}  {}:{}", s.name, s.file, s.line));
-        }
-    };
-    for r in results {
-        lines.push(format!(
-            "{}  ({}:{})  {}",
-            r.symbol.name, r.symbol.file, r.symbol.line, r.symbol.signature
-        ));
-        block(&mut lines, "called by", &r.callers);
-        block(&mut lines, "calls", &r.callees);
-    }
-    lines.join("\n")
-}
-
-pub fn format_path(path: Option<&[&SymbolInfo]>, from: &str, to: &str) -> String {
-    match path {
-        None | Some([]) => format!("no path found from {from} to {to}"),
-        Some(p) => p
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                format!(
-                    "{}{}  ({}:{})",
-                    if i == 0 { "" } else { "  → " },
-                    s.name,
-                    s.file,
-                    s.line
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-    }
 }
 
 const TIER_LABELS: [(Tier, &str); 3] = [

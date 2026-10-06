@@ -13,10 +13,8 @@ pub struct Engine<'a> {
     by_name_or_suffix: HashMap<&'a str, Vec<usize>>,
     by_file: Vec<(&'a str, Vec<usize>)>,
     by_file_index: HashMap<&'a str, usize>,
-    imports_from: HashMap<&'a str, OrderedStrings<'a>>,
-    imports_to: HashMap<&'a str, OrderedStrings<'a>>,
+    imported: HashSet<&'a str>,
     callees_of: HashMap<usize, OrderedSet>,
-    callers_of: HashMap<usize, OrderedSet>,
 }
 
 #[derive(Default)]
@@ -41,27 +39,10 @@ pub struct WhoUses<'a> {
     pub references: Vec<Reference>,
 }
 
-pub struct OnlyUsedIn<'a> {
-    pub symbol: &'a SymbolInfo,
-    pub sites: Vec<(&'a str, u32)>,
-}
-
 pub struct MapEntry<'a> {
     pub file: &'a str,
     pub exported: Vec<&'a SymbolInfo>,
     pub internal_count: usize,
-}
-
-pub struct FileDependencies<'a> {
-    pub file: String,
-    pub imports: Vec<&'a str>,
-    pub imported_by: Vec<&'a str>,
-}
-
-pub struct Neighborhood<'a> {
-    pub symbol: &'a SymbolInfo,
-    pub callers: Vec<&'a SymbolInfo>,
-    pub callees: Vec<&'a SymbolInfo>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -101,10 +82,8 @@ impl<'a> Engine<'a> {
             by_name_or_suffix: HashMap::new(),
             by_file: Vec::new(),
             by_file_index: HashMap::new(),
-            imports_from: HashMap::new(),
-            imports_to: HashMap::new(),
+            imported: HashSet::new(),
             callees_of: HashMap::new(),
-            callers_of: HashMap::new(),
         };
 
         for (i, s) in index.symbols.iter().enumerate() {
@@ -123,16 +102,7 @@ impl<'a> Engine<'a> {
             }
         }
 
-        let files: HashSet<&str> = index.files.iter().map(|f| f.path.as_str()).collect();
-        for edge in &index.imports {
-            if edge.from == edge.to {
-                continue;
-            }
-            if files.contains(edge.to.as_str()) {
-                engine.imports_from.entry(&edge.from).or_default().insert(&edge.to);
-            }
-            engine.imports_to.entry(&edge.to).or_default().insert(&edge.from);
-        }
+        engine.imported = index.imports.iter().filter(|edge| edge.from != edge.to).map(|edge| edge.to.as_str()).collect();
 
         for si in 0..index.symbols.len() {
             for &(_, _, from) in index.raw_references(si) {
@@ -140,7 +110,6 @@ impl<'a> Engine<'a> {
                     continue;
                 }
                 engine.callees_of.entry(from as usize).or_default().insert(si);
-                engine.callers_of.entry(si).or_default().insert(from as usize);
             }
         }
 
@@ -176,33 +145,6 @@ impl<'a> Engine<'a> {
             .collect()
     }
 
-    pub fn used_only_in(&self, files: &HashSet<&str>) -> Vec<OnlyUsedIn<'a>> {
-        let path_of = |slot: u32| self.index.files.get(slot as usize).map(|file| file.path.as_str());
-        let mut found = Vec::new();
-        for si in 0..self.index.symbols.len() {
-            let refs = self.index.raw_references(si);
-            let inside = !refs.is_empty()
-                && refs
-                    .iter()
-                    .all(|&(slot, _, _)| path_of(slot).is_some_and(|path| files.contains(path)));
-            if !inside {
-                continue;
-            }
-            found.push(OnlyUsedIn {
-                symbol: self.symbol(si),
-                sites: refs
-                    .iter()
-                    .filter_map(|&(slot, line, _)| Some((path_of(slot)?, line)))
-                    .collect(),
-            });
-        }
-        found
-    }
-
-    pub fn is_entry_point(&self, file: &str) -> bool {
-        self.entry_points.contains(file)
-    }
-
     pub fn file_outline(&self, file: &str) -> Vec<&'a SymbolInfo> {
         let norm = normalize(file);
         let mut syms: Vec<&SymbolInfo> = match self.by_file_index.get(norm.as_str()) {
@@ -215,34 +157,6 @@ impl<'a> Engine<'a> {
 }
 
 impl<'a> Engine<'a> {
-    pub fn already_exists(&self, query: &str, limit: usize) -> Vec<&'a SymbolInfo> {
-        let keywords: Vec<String> = query
-            .to_lowercase()
-            .split_whitespace()
-            .map(str::to_string)
-            .collect();
-        if keywords.is_empty() {
-            return Vec::new();
-        }
-        let mut scored: Vec<(usize, f64)> = self
-            .index
-            .symbols
-            .iter()
-            .enumerate()
-            .map(|(i, s)| (i, score(s, &keywords)))
-            .filter(|(_, score)| *score > 0.0)
-            .collect();
-        scored.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    let exported = |i: usize| u8::from(self.symbol(i).exported);
-                    exported(b.0).cmp(&exported(a.0))
-                })
-        });
-        scored.into_iter().take(limit).map(|(i, _)| self.symbol(i)).collect()
-    }
-
     pub fn map(&self, subdir: Option<&str>) -> Vec<MapEntry<'a>> {
         let sub = subdir.map(normalize);
         let mut entries: Vec<MapEntry> = Vec::new();
@@ -266,119 +180,6 @@ impl<'a> Engine<'a> {
         entries.sort_by(|a, b| compare_paths(a.file, b.file));
         entries
     }
-
-    pub fn file_dependencies(&self, file: &str) -> FileDependencies<'a> {
-        let norm = normalize(file);
-        let target = self
-            .index
-            .files
-            .iter()
-            .find(|f| f.path == norm || f.path.ends_with(&norm))
-            .map(|f| f.path.clone())
-            .unwrap_or(norm);
-        let sorted = |set: Option<&OrderedStrings<'a>>| {
-            let mut v: Vec<&str> = set.map(|s| s.iter().copied().collect()).unwrap_or_default();
-            v.sort_by(|a, b| compare_paths(a, b));
-            v
-        };
-        FileDependencies {
-            imports: sorted(self.imports_from.get(target.as_str())),
-            imported_by: sorted(self.imports_to.get(target.as_str())),
-            file: target,
-        }
-    }
-
-    fn neighbors(&self, set: Option<&OrderedSet>) -> Vec<&'a SymbolInfo> {
-        let mut out: Vec<&SymbolInfo> = set
-            .map(|s| s.iter().map(|&i| self.symbol(i)).collect())
-            .unwrap_or_default();
-        out.sort_by(|a, b| {
-            compare_paths(a.file.as_str(), b.file.as_str()).then_with(|| a.line.cmp(&b.line))
-        });
-        out
-    }
-
-    pub fn explain(&self, name: &str) -> Vec<Neighborhood<'a>> {
-        self.resolve_indices(name)
-            .into_iter()
-            .map(|si| Neighborhood {
-                symbol: self.symbol(si),
-                callers: self.neighbors(self.callers_of.get(&si)),
-                callees: self.neighbors(self.callees_of.get(&si)),
-            })
-            .collect()
-    }
-
-    pub fn path(&self, from: &str, to: &str) -> Option<Vec<&'a SymbolInfo>> {
-        let sources = self.resolve_indices(from);
-        let targets: HashSet<usize> = self.resolve_indices(to).into_iter().collect();
-        if sources.is_empty() || targets.is_empty() {
-            return None;
-        }
-
-        let mut prev: HashMap<usize, Option<usize>> = HashMap::new();
-        let mut queue: Vec<usize> = Vec::new();
-        for si in sources {
-            if prev.contains_key(&si) {
-                continue;
-            }
-            prev.insert(si, None);
-            queue.push(si);
-        }
-
-        let mut i = 0;
-        while i < queue.len() {
-            let si = queue[i];
-            i += 1;
-            if targets.contains(&si) {
-                return Some(self.rebuild(&prev, si));
-            }
-            let neighbors = self
-                .callees_of
-                .get(&si)
-                .into_iter()
-                .flat_map(|s| s.iter().copied())
-                .chain(self.callers_of.get(&si).into_iter().flat_map(|s| s.iter().copied()));
-            for n in neighbors {
-                if prev.contains_key(&n) {
-                    continue;
-                }
-                prev.insert(n, Some(si));
-                queue.push(n);
-            }
-        }
-        None
-    }
-
-    fn rebuild(&self, prev: &HashMap<usize, Option<usize>>, end: usize) -> Vec<&'a SymbolInfo> {
-        let mut ids: Vec<usize> = Vec::new();
-        let mut cur = Some(end);
-        while let Some(si) = cur {
-            ids.push(si);
-            cur = prev.get(&si).copied().flatten();
-        }
-        ids.reverse();
-        ids.into_iter().map(|i| self.symbol(i)).collect()
-    }
-}
-
-fn score(s: &SymbolInfo, keywords: &[String]) -> f64 {
-    let name = s.name.to_lowercase();
-    let hay = format!("{} {}", s.name, s.signature).to_lowercase();
-    let mut score = 0.0;
-    for k in keywords {
-        if name == *k {
-            score += 10.0;
-        } else if name.contains(k.as_str()) {
-            score += 4.0;
-        } else if hay.contains(k.as_str()) {
-            score += 1.0;
-        }
-    }
-    if score > 0.0 && s.exported {
-        score += 0.5;
-    }
-    score
 }
 
 impl<'a> Engine<'a> {
@@ -521,7 +322,7 @@ impl<'a> Engine<'a> {
             if !in_scope(file) || is_test_file(file) || self.entry_points.contains(file) {
                 continue;
             }
-            if self.imports_to.get(file).map(OrderedStrings::len).unwrap_or(0) > 0 {
+            if self.imported.contains(file) {
                 continue;
             }
             if !ids.is_empty() && ids.iter().all(|i| !live.contains(i)) {
@@ -531,25 +332,5 @@ impl<'a> Engine<'a> {
         files.sort_by(|a, b| compare_paths(a, b));
 
         DeadCodeReport { candidates, files }
-    }
-}
-
-#[derive(Default)]
-pub struct OrderedStrings<'a> {
-    order: Vec<&'a str>,
-    seen: HashSet<&'a str>,
-}
-
-impl<'a> OrderedStrings<'a> {
-    fn insert(&mut self, value: &'a str) {
-        if self.seen.insert(value) {
-            self.order.push(value);
-        }
-    }
-    fn iter(&self) -> impl Iterator<Item = &&'a str> {
-        self.order.iter()
-    }
-    fn len(&self) -> usize {
-        self.order.len()
     }
 }
