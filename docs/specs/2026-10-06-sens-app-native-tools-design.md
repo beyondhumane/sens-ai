@@ -3,7 +3,7 @@
 Fecha: 2026-10-06 · Ámbito: `rust/sens-app` (`mcp.rs`, `tools/`, `terminal.rs`,
 `main.rs`), `rust/sens-agent/src/canon/circuit.rs`, `ui/src/app/acts.ts`,
 `ui/src/features/terminal/`, `ui/src/features/chat/looks.ts`.
-Fases 1 y 2 implementadas; 3 a 5 por hacer.
+Fases 1, 2 y 3 implementadas; 4 y 5 por hacer.
 
 ## Decisiones
 
@@ -44,8 +44,8 @@ Fases 1 y 2 implementadas; 3 a 5 por hacer.
 - La ventana responde por un único canal de ida y vuelta: el backend emite
   `sens-act { ask, act, input }` y la interfaz contesta con
   `act_answer(ask, ok, text)`. `app/acts.ts` reparte cada `act` a quien lo registró
-  con `answers(act, run)`. Si nadie contesta en 5 s, la herramienta falla con «Sens
-  did not answer in time».
+  con `answers(act, run)`. Si nadie contesta en 5 s (20 s para `navigate`, que espera
+  a que cargue la página), la herramienta falla con «Sens did not answer in time».
 
 ## Niveles
 
@@ -112,11 +112,44 @@ Con *Plan* las de cambiar quedan bloqueadas y con *No checks* pasan, igual que
 - Partir el chat en dos y abrir una sesión en un panel pasan a la fase 4, con las
   sesiones.
 
+## Fase 3 · Navegador
+
+El navegador de Sens es una WebView2 hija de la ventana. Claude lo maneja por el
+protocolo de DevTools de esa misma vista (`browser::devtools`, con
+`CallDevToolsProtocolMethod`), sin otro navegador ni extensión.
+
+| Herramienta | Nivel | Qué hace |
+| --- | --- | --- |
+| `navigate` | Mostrar | `{ url }`: una dirección, un servidor local, una página del proyecto (por el servidor de preview), palabras que buscar, o `back`, `forward` y `reload`. Abre el panel web y espera a que cargue (15 s) |
+| `read_page` | Leer | `{ all? }`. Lo que se puede usar en la página, con su referencia `ref_N`; con `all`, también encabezados, regiones y listas. Nunca el valor de una contraseña |
+| `find` | Leer | `{ query }`. Hasta 20 elementos por nombre, rol o placeholder |
+| `page_text` | Leer | El texto de la página, el contenido principal primero |
+| `click` | Cambiar | `{ ref }` o `{ x, y }`, y `double`. Lleva el elemento a la vista y envía el ratón por `Input.dispatchMouseEvent` |
+| `type_text` | Cambiar | `{ text, ref?, clear? }`. Enfoca el campo, lo vacía si se pide, y escribe con `Input.insertText` |
+| `press_key` | Cambiar | `{ key }`: Enter, Tab, Escape, Backspace, Delete, Space, flechas, Home, End, PageUp, PageDown, F5. Enter lleva su texto, así que envía un formulario |
+| `scroll` | Mostrar | `{ ref?, screens? }` |
+| `screenshot_page` | Leer | La página como imagen (`Page.captureScreenshot`) |
+| `eval_js` | Cambiar | `{ expression }`. Su valor en JSON; una promesa se espera |
+| `console_logs` | Leer | `{ errors_only?, pattern? }`. Lo que la página escribió en su consola desde que cargó |
+| `network_requests` | Leer | `{ failed_only?, pattern? }`. Método, dirección, estado y tipo, o por qué falló |
+| `resize_browser` | Mostrar | `{ width }`: 375 un móvil, 768 una tableta, 0 el ancho del panel |
+
+- El guion que lee la página vive en `ui/src/features/web/page.js`, se prueba con
+  jsdom y Rust lo incluye con `include_str!`. Se instala una vez por página como
+  `window.__sens` y marca cada elemento con `data-sens-ref`, así que las referencias
+  duran mientras la página no cambie; una que ya no está lo dice.
+- La consola y la red se guardan también en el backend (las últimas 500 entradas).
+  La consola se vacía al empezar a cargar una página, como la del panel; la red se
+  sigue con `Network.enable`.
+- Leer la página se puede desde cualquier sesión; lo que la cambia o la mueve
+  (`navigate`, `click`, `type_text`, `press_key`, `scroll`, `eval_js`,
+  `resize_browser`) solo si la persona mira esa sesión, porque el navegador es uno
+  para toda la ventana.
+- Para la preview de un servidor de desarrollo no hay herramienta propia: Claude lo
+  arranca con `run_in_terminal` en segundo plano y lo abre con `navigate`.
+
 ## Fases siguientes
 
-3. Navegador y preview: `preview_start`, `navigate`, `page_text`, `read_page`,
-   `find`, `click`, `type`, `scroll`, `screenshot`, `eval_js`, `console_logs`,
-   `network_requests`, `resize`.
 4. Sesiones, git y proyectos: `list_sessions`, `read_session`, `new_session`,
    `send_to_session`, `rename_session`, `archive_session`, `stop_session`,
    `open_session_in_pane`, `split_pane`, modelo, esfuerzo y pensamiento; `repo_status`,
@@ -143,5 +176,14 @@ Con *Plan* las de cambiar quedan bloqueadas y con *No checks* pasan, igual que
 - `surface.test.ts`: abre en una línea, dice por qué no pudo leer, abre y cierra el
   panel, no toca la pantalla si la persona mira otra sesión, y describe lo que hay.
 - `Viewer.test.tsx`: marca la línea pedida.
+- `tools/web.rs`: la página se lee con el guion de Sens; el clic va donde está el
+  elemento y solo en la sesión en pantalla; un fallo de la página vuelve como su
+  mensaje; Enter lleva su texto; el JS devuelve su valor; consola y red se filtran;
+  la captura es una imagen.
+- `browser.rs`: una petición se sigue de enviada a respondida o fallida.
+- `page.test.ts`: lista lo usable con referencias y nunca una contraseña; mantiene
+  las referencias; encuentra; lee el texto; apunta, enfoca, vacía y avisa de una
+  referencia caducada.
+- `surface.test.ts`: navega y espera la carga; vuelve atrás; ancho de móvil.
 - `terminal.test.tsx`: la pestaña de Claude llega con lo impreso antes y después, y
   no contesta dos veces al cursor; el puente recibe lo leído o el fallo.

@@ -1,5 +1,6 @@
 mod console;
 mod surface;
+mod web;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -9,11 +10,13 @@ use sens_agent::canon::keeper::Keeper;
 use sens_agent::canon::tools as index;
 use serde_json::{Value, json};
 
+pub use crate::browser::Request;
 use crate::terminal::Consoles;
 
 pub const SERVER: &str = "sens";
 pub const REPLACED: &str = "Bash,PowerShell,Monitor";
 const INDEX_PATIENCE: Duration = Duration::from_secs(20);
+pub const QUICK: Duration = Duration::from_secs(5);
 const UNINDEXED: &str = "Sens has not finished indexing this project yet; try again in a moment.";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,7 +41,11 @@ fn folded(path: &str) -> String {
 }
 
 pub trait Ui: Sync {
-    fn act(&self, act: &str, input: Value) -> Result<String, String>;
+    fn act_within(&self, act: &str, input: Value, patience: Duration) -> Result<String, String>;
+
+    fn act(&self, act: &str, input: Value) -> Result<String, String> {
+        self.act_within(act, input, QUICK)
+    }
 }
 
 pub struct Picture {
@@ -49,6 +56,9 @@ pub struct Picture {
 pub trait Sens: Sync {
     fn screenshot(&self) -> Option<Picture>;
     fn notify(&self, title: &str, body: &str) -> Result<(), String>;
+    fn devtools(&self, method: &str, params: Value) -> Result<Value, String>;
+    fn console(&self) -> Vec<(String, String)>;
+    fn requests(&self) -> Vec<Request>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -130,7 +140,7 @@ impl Tool {
 }
 
 fn domains() -> impl Iterator<Item = &'static Tool> {
-    console::TOOLS.iter().chain(surface::TOOLS)
+    console::TOOLS.iter().chain(surface::TOOLS).chain(web::TOOLS)
 }
 
 pub fn listed() -> Vec<Value> {
@@ -181,10 +191,14 @@ pub mod testing {
         pub told: Arc<Mutex<Vec<(String, Value)>>>,
         pub notified: Mutex<Vec<(String, String)>>,
         pub hidden: bool,
+        pub called: Mutex<Vec<(String, Value)>>,
+        pub answers: Mutex<Vec<(String, Result<Value, String>)>>,
+        pub said: Vec<(String, String)>,
+        pub requested: Vec<Request>,
     }
 
     impl Ui for Window {
-        fn act(&self, act: &str, input: Value) -> Result<String, String> {
+        fn act_within(&self, act: &str, input: Value, _: std::time::Duration) -> Result<String, String> {
             self.asked.lock().unwrap().push((act.to_string(), input.clone()));
             Ok(format!("{act} {input}"))
         }
@@ -198,6 +212,20 @@ pub mod testing {
         fn notify(&self, title: &str, body: &str) -> Result<(), String> {
             self.notified.lock().unwrap().push((title.to_string(), body.to_string()));
             Ok(())
+        }
+
+        fn devtools(&self, method: &str, params: Value) -> Result<Value, String> {
+            self.called.lock().unwrap().push((method.to_string(), params.clone()));
+            let answer = self.answers.lock().unwrap().iter().find(|(asked, _)| method.starts_with(asked.as_str()) || params.to_string().contains(asked.as_str())).map(|(_, answer)| answer.clone());
+            answer.unwrap_or_else(|| Ok(json!({})))
+        }
+
+        fn console(&self) -> Vec<(String, String)> {
+            self.said.clone()
+        }
+
+        fn requests(&self) -> Vec<Request> {
+            self.requested.clone()
         }
     }
 

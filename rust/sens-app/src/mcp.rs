@@ -16,7 +16,6 @@ use crate::tools::{self, SERVER, Said, Scope, Ui};
 
 const PATH: &str = "/mcp";
 const LATEST: &str = "2025-06-18";
-const PATIENCE: Duration = Duration::from_secs(5);
 const STALLED: Duration = Duration::from_secs(10);
 const HEAD_CAP: usize = 16 * 1024;
 const BODY_CAP: usize = 1024 * 1024;
@@ -78,12 +77,12 @@ impl Waiting {
         self.scopes.lock().ok()?.get(at).cloned()
     }
 
-    fn act(&self, ask: &Ask, act: &str, input: Value) -> Result<String, String> {
+    fn act(&self, ask: &Ask, act: &str, input: Value, patience: Duration) -> Result<String, String> {
         let id = self.made.fetch_add(1, Ordering::SeqCst) + 1;
         let (answer, heard) = mpsc::channel();
         self.answers.lock().map_err(|_| broken())?.insert(id, answer);
         ask(Acting { ask: id, act: act.to_string(), input });
-        let said = heard.recv_timeout(PATIENCE);
+        let said = heard.recv_timeout(patience);
         if let Ok(mut answers) = self.answers.lock() {
             answers.remove(&id);
         }
@@ -105,8 +104,8 @@ struct Window<'a> {
 }
 
 impl Ui for Window<'_> {
-    fn act(&self, act: &str, input: Value) -> Result<String, String> {
-        self.waiting.act(self.ask, act, input)
+    fn act_within(&self, act: &str, input: Value, patience: Duration) -> Result<String, String> {
+        self.waiting.act(self.ask, act, input, patience)
     }
 }
 

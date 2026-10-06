@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { viewer } from "../features/files/view";
 import { project } from "../features/project/store";
 import { consoles } from "../features/terminal/store";
+import { web } from "../features/web/store";
 import { perform } from "./acts";
 import { shell } from "./shell";
 import { answerSurface } from "./surface";
 
 const ipc = vi.hoisted(() => ({
-  commands: { openFile: vi.fn(), folder: vi.fn(), actAnswer: vi.fn() },
+  commands: { openFile: vi.fn(), folder: vi.fn(), actAnswer: vi.fn(), browserOpen: vi.fn(), browserShow: vi.fn(), browserPlace: vi.fn(), browserAct: vi.fn() },
 }));
 
 vi.mock("../ipc/commands", () => ({ commands: ipc.commands, events: {} }));
@@ -27,6 +28,7 @@ beforeEach(() => {
   project.setState({ root: "C:/demo", work: "C:/demo", session: "s1" });
   shell.setState(shell.getInitialState(), true);
   viewer.setState(viewer.getInitialState(), true);
+  web.setState(web.getInitialState(), true);
 });
 
 describe("what Claude changes on screen", () => {
@@ -64,5 +66,32 @@ describe("what Claude changes on screen", () => {
       ["The person is looking at this session.", "Side pane: files, showing src/app.ts, with the tree.", "Terminals: 2 open, 1 started by Claude.", "One chat on screen."].join("\n"),
     );
     expect((await ask("get_layout", { session: "s9" })).text).toContain("The person is looking at another session, in C:/demo.");
+  });
+
+  it("browses to a page and waits until it has loaded", async () => {
+    const said = ask("browse", { session: "s1", url: "localhost:5173" });
+    await new Promise((done) => setTimeout(done, 0));
+    web.setState({ loading: true });
+    web.setState({ loading: false, url: "http://localhost:5173/", title: "Vite" });
+    expect(await said).toEqual({ ok: true, text: "Loaded http://localhost:5173/ · Vite" });
+    expect(ipc.commands.browserOpen).toHaveBeenCalledWith("http://localhost:5173", expect.anything(), 1);
+    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "web" });
+  });
+
+  it("goes back and waits for the page it lands on", async () => {
+    web.setState({ url: "http://localhost:5173/b" });
+    const said = ask("browse", { session: "s1", url: "back" });
+    await new Promise((done) => setTimeout(done, 0));
+    web.setState({ loading: true });
+    web.setState({ loading: false, url: "http://localhost:5173/a" });
+    expect((await said).text).toBe("Loaded http://localhost:5173/a");
+    expect(ipc.commands.browserAct).toHaveBeenCalledWith("back");
+  });
+
+  it("draws the page at a phone's width, and acts on the page only for the session on screen", async () => {
+    expect(await ask("browser_width", { session: "s1", width: 375 })).toEqual({ ok: true, text: "The page is drawn 375 px wide." });
+    expect(web.getState().width).toBe(375);
+    expect(await ask("present", { session: "s1" })).toEqual({ ok: true, text: "" });
+    expect((await ask("present", { session: "s2" })).ok).toBe(false);
   });
 });

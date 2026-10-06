@@ -283,6 +283,18 @@ impl tools::Sens for Desktop {
     fn notify(&self, title: &str, body: &str) -> Result<(), String> {
         notify(self.0.clone(), title.to_string(), body.to_string())
     }
+
+    fn devtools(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+        browser::devtools(&self.0, method, &params)
+    }
+
+    fn console(&self) -> Vec<(String, String)> {
+        browser::said()
+    }
+
+    fn requests(&self) -> Vec<tools::Request> {
+        browser::requests()
+    }
 }
 
 #[tauri::command]

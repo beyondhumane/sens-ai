@@ -1,3 +1,6 @@
+use std::collections::VecDeque;
+use std::sync::{Mutex, PoisonError};
+
 use sens_agent::said;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,6 +10,70 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url
 const LABEL: &str = "browser";
 const HOST: &str = "main";
 const EVENT: &str = "browser";
+const KEPT: usize = 500;
+const CLOSED: &str = "Nothing is open in Sens's browser; open a page with navigate first.";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Request {
+    pub id: String,
+    pub method: String,
+    pub url: String,
+    pub kind: String,
+    pub status: Option<u64>,
+    pub failed: Option<String>,
+}
+
+static SAID: Mutex<VecDeque<(String, String)>> = Mutex::new(VecDeque::new());
+static REQUESTS: Mutex<VecDeque<Request>> = Mutex::new(VecDeque::new());
+
+fn kept<T>(list: &Mutex<VecDeque<T>>, change: impl FnOnce(&mut VecDeque<T>)) {
+    let mut list = list.lock().unwrap_or_else(PoisonError::into_inner);
+    change(&mut list);
+    while list.len() > KEPT {
+        list.pop_front();
+    }
+}
+
+fn remember(heard: &Heard) {
+    match heard {
+        Heard::Loading { .. } => kept(&SAID, VecDeque::clear),
+        Heard::Said { level, text } => kept(&SAID, |said| said.push_back((level.clone(), text.clone()))),
+        _ => {}
+    }
+}
+
+pub fn said() -> Vec<(String, String)> {
+    SAID.lock().unwrap_or_else(PoisonError::into_inner).iter().cloned().collect()
+}
+
+pub fn requests() -> Vec<Request> {
+    REQUESTS.lock().unwrap_or_else(PoisonError::into_inner).iter().cloned().collect()
+}
+
+fn network(event: &str, value: &Value, list: &mut VecDeque<Request>) {
+    let id = value["requestId"].as_str().unwrap_or_default();
+    match event {
+        "Network.requestWillBeSent" => list.push_back(Request {
+            id: id.to_string(),
+            method: value["request"]["method"].as_str().unwrap_or("GET").to_string(),
+            url: value["request"]["url"].as_str().unwrap_or_default().to_string(),
+            kind: value["type"].as_str().unwrap_or_default().to_string(),
+            status: None,
+            failed: None,
+        }),
+        "Network.responseReceived" => {
+            if let Some(request) = list.iter_mut().rev().find(|request| request.id == id) {
+                request.status = value["response"]["status"].as_u64();
+            }
+        }
+        "Network.loadingFailed" => {
+            if let Some(request) = list.iter_mut().rev().find(|request| request.id == id) {
+                request.failed = Some(value["errorText"].as_str().unwrap_or("failed").to_string());
+            }
+        }
+        _ => {}
+    }
+}
 
 #[derive(Deserialize, Clone, Copy)]
 pub struct Frame {
@@ -35,7 +102,53 @@ enum Heard {
 }
 
 fn tell(app: &AppHandle, heard: Heard) {
+    remember(&heard);
     let _ = app.emit_to(HOST, EVENT, heard);
+}
+
+#[cfg(windows)]
+pub fn devtools(app: &AppHandle, method: &str, params: &Value) -> Result<Value, String> {
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use windows_core::HSTRING;
+
+    const PATIENCE: Duration = Duration::from_secs(30);
+
+    let view = view(app).ok_or(CLOSED)?;
+    let (answer, heard) = mpsc::channel::<Result<String, String>>();
+    let failing = answer.clone();
+    let (method, params) = (HSTRING::from(method), HSTRING::from(params.to_string()));
+    view.with_webview(move |platform| {
+        let called = unsafe {
+            platform.controller().CoreWebView2().and_then(|core| {
+                let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |done, json| {
+                    let _ = answer.send(match done {
+                        Ok(()) => Ok(json),
+                        Err(_) => Err(json),
+                    });
+                    Ok(())
+                }));
+                core.CallDevToolsProtocolMethod(&method, &params, &handler)
+            })
+        };
+        if let Err(error) = called {
+            let _ = failing.send(Err(error.message()));
+        }
+    })
+    .map_err(failed)?;
+    let json = heard.recv_timeout(PATIENCE).map_err(|_| "Sens's browser did not answer in time".to_string())?.map_err(|json| refusal(&json))?;
+    serde_json::from_str(&json).map_err(|error| error.to_string())
+}
+
+#[cfg(not(windows))]
+pub fn devtools(app: &AppHandle, _method: &str, _params: &Value) -> Result<Value, String> {
+    view(app).ok_or(CLOSED)?;
+    Err("Sens's browser can only be driven on Windows".into())
+}
+
+fn refusal(json: &str) -> String {
+    serde_json::from_str::<Value>(json).ok().and_then(|value| value["message"].as_str().map(str::to_string)).unwrap_or_else(|| json.to_string())
 }
 
 fn failed(error: tauri::Error) -> String {
@@ -230,17 +343,16 @@ fn listen_console(view: &Webview, app: AppHandle) {
 
     type Reader = fn(&Value) -> Option<Heard>;
 
-    unsafe fn follow(core: &ICoreWebView2, event: windows_core::PCWSTR, read: Reader, app: AppHandle) -> windows_core::Result<()> {
-        let receiver = unsafe { core.GetDevToolsProtocolEventReceiver(event)? };
+    unsafe fn follow(core: &ICoreWebView2, event: &'static str, heard: impl Fn(&Value) + 'static) -> windows_core::Result<()> {
+        let receiver = unsafe { core.GetDevToolsProtocolEventReceiver(&windows_core::HSTRING::from(event))? };
         let handler = DevToolsProtocolEventReceivedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else {
                 return Ok(());
             };
             let mut json = PWSTR::null();
             unsafe { args.ParameterObjectAsJson(&mut json)? };
-            let heard = serde_json::from_str::<Value>(&take_pwstr(json)).ok().and_then(|value| read(&value));
-            if let Some(heard) = heard {
-                tell(&app, heard);
+            if let Ok(value) = serde_json::from_str::<Value>(&take_pwstr(json)) {
+                heard(&value);
             }
             Ok(())
         }));
@@ -248,17 +360,26 @@ fn listen_console(view: &Webview, app: AppHandle) {
         unsafe { receiver.add_DevToolsProtocolEventReceived(&handler, &mut token) }
     }
 
+    fn told(app: AppHandle, read: Reader) -> impl Fn(&Value) + 'static {
+        move |value| {
+            if let Some(heard) = read(value) {
+                tell(&app, heard);
+            }
+        }
+    }
+
     let _ = view.with_webview(move |platform| unsafe {
         let Ok(core) = platform.controller().CoreWebView2() else {
             return;
         };
-        let _ = follow(&core, w!("Runtime.consoleAPICalled"), console_line, app.clone());
-        let _ = follow(&core, w!("Runtime.exceptionThrown"), exception_line, app);
-        let _ = core.CallDevToolsProtocolMethod(
-            w!("Runtime.enable"),
-            w!("{}"),
-            &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|_, _| Ok(()))),
-        );
+        let _ = follow(&core, "Runtime.consoleAPICalled", told(app.clone(), console_line));
+        let _ = follow(&core, "Runtime.exceptionThrown", told(app, exception_line));
+        for event in ["Network.requestWillBeSent", "Network.responseReceived", "Network.loadingFailed"] {
+            let _ = follow(&core, event, move |value| kept(&REQUESTS, |list| network(event, value, list)));
+        }
+        for domain in [w!("Runtime.enable"), w!("Network.enable")] {
+            let _ = core.CallDevToolsProtocolMethod(domain, w!("{}"), &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|_, _| Ok(()))));
+        }
     });
 }
 
@@ -311,6 +432,19 @@ mod tests {
             ]
         }));
         assert_eq!(heard, Some(Heard::Said { level: "warn".into(), text: "cargados 3 Object undefined".into() }));
+    }
+
+    #[test]
+    fn a_request_is_followed_from_sent_to_answered_or_failed() {
+        let mut list = VecDeque::new();
+        network("Network.requestWillBeSent", &json!({ "requestId": "1", "type": "Fetch", "request": { "method": "POST", "url": "http://localhost:5173/api" } }), &mut list);
+        network("Network.requestWillBeSent", &json!({ "requestId": "2", "type": "Script", "request": { "method": "GET", "url": "http://localhost:5173/app.js" } }), &mut list);
+        network("Network.responseReceived", &json!({ "requestId": "1", "response": { "status": 500 } }), &mut list);
+        network("Network.loadingFailed", &json!({ "requestId": "2", "errorText": "net::ERR_CONNECTION_REFUSED" }), &mut list);
+        assert_eq!((list[0].method.as_str(), list[0].status, list[0].kind.as_str()), ("POST", Some(500), "Fetch"));
+        assert_eq!(list[1].failed.as_deref(), Some("net::ERR_CONNECTION_REFUSED"));
+        assert_eq!(refusal(r#"{"code":-32000,"message":"Cannot find context"}"#), "Cannot find context");
+        assert_eq!(refusal("roto"), "roto");
     }
 
     #[test]
