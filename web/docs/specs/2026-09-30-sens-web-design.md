@@ -1,8 +1,8 @@
 # La web de Sens
 
-Fecha: 2026-09-30 · Estado: prototipo construido y publicado en
-`github.com/iiTzSenn/sens-ai-website`; la etapa 2 está pendiente (ver *Etapas*).
-Ámbito: `P:\sens-web`. Lee de `P:\Sens`: `src/brand/{tokens,mark}.ts`,
+Fecha: 2026-09-30 · Estado: construida, en la carpeta `web/` del repositorio de Sens y publicada
+en GitHub Pages desde `main`; la etapa 2 está pendiente (ver *Etapas*).
+Ámbito: `web/`. Lee del mismo repositorio: `src/brand/{tokens,mark}.ts`,
 `rust/sens-app/ui/public/fonts/` y `rust/sens-app/ui/src` como referencia de la interfaz.
 
 Este documento describe la web tal como está construida. Lo que aún no existe lo dice en su
@@ -571,7 +571,7 @@ necesita una sensación física.
 ## Arquitectura
 
 ```
-sens-web/
+web/
   CLAUDE.md               local, fuera de git
   README.md
   astro.config.ts
@@ -580,7 +580,7 @@ sens-web/
     specs/                este documento
     screenshots/          las imágenes del README
   scripts/
-    brand.ts              tokens.css, brand.json, marca, favicon, `sens` gigante y fuentes desde P:\Sens
+    brand.ts              tokens.css, brand.json, marca, favicon, `sens` gigante y fuentes desde el repositorio
     display.ts            el trazado de `sens` en Space Grotesk 700
     release.ts            versión, fecha, tamaño y enlace del instalador desde GitHub
     frames.ts             capturas por posición, por capítulo, de la entrada y del cambio de tema
@@ -617,7 +617,7 @@ sens-web/
   test/                   contraste, geometría, tokens, release, icono de tema y colores de código
 ```
 
-- **`npm run brand`** importa `tokens.ts` y `mark.ts` de `P:\Sens\src\brand`, o de la ruta en
+- **`npm run brand`** importa `tokens.ts` y `mark.ts` de `../src/brand`, o de la ruta en
   `SENS_REPO`, ensancha ×1,3 el trazado de `display.ts` y escribe `tokens.css` (con la proporción
   del `sens` gigante), `brand.json`, `wordmark.svg`, `mark.svg` y `favicon.svg`. Copia
   `space-grotesk.woff2` con su `OFL.txt` y Geist Mono desde `@fontsource-variable/geist-mono`. Lo

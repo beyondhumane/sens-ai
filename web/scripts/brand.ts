@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { heavySensPath } from "./display";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sens = path.resolve(process.env.SENS_REPO ?? path.join(root, "..", "Sens"));
+const sens = path.resolve(process.env.SENS_REPO ?? path.join(root, ".."));
 const brandSource = path.join(sens, "src", "brand");
 
 const fromSens = async <T>(file: string): Promise<T> =>

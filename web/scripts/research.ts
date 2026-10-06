@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sens = path.resolve(process.env.SENS_REPO ?? path.join(root, "..", "Sens"));
+const sens = path.resolve(process.env.SENS_REPO ?? path.join(root, ".."));
 const steps = path.join(sens, "bench", "results", "2026-10-01-horizonte-confirmacion", "steps.jsonl");
 const figure = path.join(sens, "docs", "paper", "figuras", "2-horizonte-lineas.svg");
 const canonText = path.join(sens, "rust", "sens-canon", "src", "canon.md");

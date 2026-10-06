@@ -63,3 +63,20 @@ jobs:
       - run: cargo test --manifest-path rust/sens-app/Cargo.toml
       - run: cargo test --manifest-path rust/sens-setup/Cargo.toml
       - run: cargo test --manifest-path rust/sens-bench/Cargo.toml
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build

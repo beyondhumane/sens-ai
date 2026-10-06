@@ -53,8 +53,8 @@ The window on the page is not a video or a screenshot. It is the app's interface
 You need [Node.js](https://nodejs.org) 22.12 or later; the site is built with 24.
 
 ```bash
-git clone https://github.com/iiTzSenn/sens-ai-website.git
-cd sens-ai-website
+git clone https://github.com/beyondhumane/sens-ai.git
+cd sens-ai/web
 npm ci
 npm run dev
 ```
@@ -81,9 +81,9 @@ Set `SITE_URL` to the site's address when you build, so canonical links and shar
 
 Both scripts write files that are committed, so the site builds on its own, and neither kind of file is edited by hand.
 
-- **`npm run brand`** reads `src/brand` from a Sens checkout — `../Sens` beside this folder, or the path in `SENS_REPO` — and writes `src/styles/tokens.css`, `src/brand/brand.json`, the giant `sens`, the mark and the favicon. It copies Space Grotesk and Geist Mono with their licences.
+- **`npm run brand`** reads `src/brand` from the Sens repository this folder lives in — or the path in `SENS_REPO` — and writes `src/styles/tokens.css`, `src/brand/brand.json`, the giant `sens`, the mark and the favicon. It copies Space Grotesk and Geist Mono with their licences.
 - **`npm run release`** asks GitHub for the releases of `beyondhumane/sens-ai` and writes `src/data/release.json` and `src/data/releases.json`. Credits are each release's commit authors and co-authors. If GitHub does not answer, the last good data stays; with none at all, the download buttons go to the releases page. A token in `GITHUB_TOKEN` or `GH_TOKEN` avoids GitHub's limit for anonymous requests.
-- **`npm run research`** reads the confirmation run of Horizonte from `bench/results`, the reference solution's size from the paper's figure 2 and the Canon from `rust/sens-canon`, in the same Sens checkout, and writes `src/data/research.json`.
+- **`npm run research`** reads the confirmation run of Horizonte from `bench/results`, the reference solution's size from the paper's figure 2 and the Canon from `rust/sens-canon`, in the same repository, and writes `src/data/research.json`.
 
 ## How it moves
 
