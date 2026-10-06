@@ -23,9 +23,7 @@ const [before, strong, after] = answer.lead;
       {
         answer.bullets.map((bullet) => (
           <li>
-            <code>{bullet.path}</code> {bullet.rest[0]}
-            {bullet.path.endsWith("test.tsx") ? <strong>{bullet.rest[1]}</strong> : <code>{bullet.rest[1]}</code>}
-            {bullet.rest[2]}
+            {bullet.map((piece) => ("code" in piece ? <code>{piece.code}</code> : "strong" in piece ? <strong>{piece.strong}</strong> : piece.text))}
           </li>
         ))
       }

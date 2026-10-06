@@ -1,0 +1,352 @@
+---
+import "../styles/page.css";
+import "../styles/motion.css";
+import "../styles/research.css";
+import Download from "../components/Download.astro";
+import Icon from "../components/Icon.astro";
+import LineChart from "../components/LineChart.astro";
+import Pieces from "../components/Pieces.astro";
+import { siteIcons } from "../content/icons";
+import { blockCounts, calibration, changeCodes, hooks, reproduce, reviewCodes, testsWritten } from "../content/research";
+import { links } from "../content/site";
+import data from "../data/research.json";
+import { dayIn, htmlLang, type Locale } from "../i18n/locales";
+import { research } from "../i18n/research";
+import { site } from "../i18n/site";
+import Base from "../layouts/Base.astro";
+import { median } from "../lib/chart";
+import Footer from "../sections/Footer.astro";
+import Nav from "../sections/Nav.astro";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = research(locale);
+const lang = htmlLang[locale];
+const PUBLISHED = "2026-10-01";
+const REFERENCE = 455;
+
+const steps = [t.start, ...t.tasks.map((task, at) => `${at + 1} · ${task}`)];
+const arm = (name: "with" | "without") => data.sequences.filter((sequence) => sequence.arm === name);
+const medianOf = (name: "with" | "without", field: "lines" | "tokens") =>
+  steps.map((_, at) => median(arm(name).map((sequence) => sequence[field][at])));
+const finals = (name: "with" | "without") => arm(name).map((sequence) => sequence.lines.at(-1) ?? 0);
+const millions = (tokens: number) => `${new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(tokens / 1e6)}M`;
+const tokensOf = (name: "with" | "without") => millions(arm(name).reduce((sum, sequence) => sum + (sequence.tokens.at(-1) ?? 0), 0));
+
+const STRIP = { width: 760, left: 150, right: 40, min: 400, max: 580 };
+const stripX = (value: number) => STRIP.left + ((value - STRIP.min) / (STRIP.max - STRIP.min)) * (STRIP.width - STRIP.left - STRIP.right);
+const stripTicks = [400, 440, 480, 520, 560];
+const armsOrder = ["without", "with"] as const;
+const armLabel = { without: t.without, with: t.with };
+const contents = [
+  { id: "problem", title: t.problemTitle },
+  { id: "circuit", title: t.circuitTitle },
+  { id: "results", title: t.resultsTitle },
+  { id: "single", title: t.singleTitle },
+  { id: "rules", title: t.rulesTitle },
+  { id: "wrong", title: t.wrongTitle },
+  { id: "method", title: t.methodTitle },
+  { id: "canon", title: t.canonTitle },
+];
+const chartLabels = (title: string) => ({ showData: t.showData, afterTask: t.afterTask, hint: t.readHint(title), locale: lang });
+---
+
+<Base title={t.title} description={t.description} image="research" locale={locale} path="/research">
+  <a class="skip" href="#main">{site(locale).skip}</a>
+  <Nav locale={locale} path="/research" />
+  <div class="read-progress" aria-hidden="true"><span></span></div>
+  <main id="main" class="research">
+    <header class="wrap research-head">
+      <p class="label">{t.kicker} · <time datetime={PUBLISHED}>{dayIn(locale, PUBLISHED)}</time></p>
+      <h1 class="research-title">{t.heading}</h1>
+      <p class="research-lead">{t.lead}</p>
+      <div class="research-actions">
+        <Download label={t.download} locale={locale} />
+        <a class="link" href={links.paper}>{t.paper} <Icon paths={siteIcons.external} size={18} /></a>
+      </div>
+    </header>
+
+    <section class="wrap research-figures" aria-label={t.glance}>
+      <dl class="measured">
+        {
+          t.figures.map((item) => (
+            <div>
+              <dt>{item.figure}</dt>
+              <dd>{item.said}</dd>
+            </div>
+          ))
+        }
+      </dl>
+      <p class="mono research-note">{t.conditions}</p>
+    </section>
+
+    <div class="wrap research-layout">
+      <nav class="toc" aria-label={t.contents}>
+        <p class="label">{t.contents}</p>
+        <ol>
+          {contents.map((entry) => <li><a href={`#${entry.id}`} data-toc={entry.id}>{entry.title}</a></li>)}
+        </ol>
+      </nav>
+      <article class="research-body">
+        <section class="research-section" aria-labelledby="problem">
+          <h2 id="problem">{t.problemTitle}</h2>
+          {t.problem.map((paragraph) => <p><Pieces pieces={paragraph} /></p>)}
+        </section>
+
+        <section class="research-section" aria-labelledby="circuit">
+          <h2 id="circuit">{t.circuitTitle}</h2>
+          <p><Pieces pieces={t.circuitLead} /></p>
+          <ol class="circuit">
+            {
+              t.stages.map((stage, at) => (
+                <li>
+                  <span class="circuit-step mono">{String(at + 1).padStart(2, "0")}</span>
+                  <p class="circuit-when">{stage.when}</p>
+                  <p class="mono circuit-hook">{hooks[at]}</p>
+                  <p class="circuit-does">{stage.does}</p>
+                </li>
+              ))
+            }
+          </ol>
+          <h3>{t.aroundTitle}</h3>
+          <p><Pieces pieces={t.around} /></p>
+          <div class="table" tabindex="0">
+            <table>
+              <thead>
+                <tr>{t.shortcutsHead.map((head) => <th scope="col">{head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {t.shortcuts.map(([shortcut, closed]) => <tr><td>{shortcut}</td><td>{closed}</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+          <p class="research-aside">{t.limit}</p>
+        </section>
+
+        <section class="research-section" aria-labelledby="results">
+          <h2 id="results">{t.resultsTitle}</h2>
+          {t.results.map((paragraph) => <p><Pieces pieces={paragraph} /></p>)}
+
+          <LineChart
+            id="size"
+            title={t.sizeTitle}
+            caption={t.sizeCaption}
+            axis={t.task}
+            steps={steps}
+            {...chartLabels(t.sizeTitle)}
+            drawn={[
+              ...arm("without").map((sequence) => ({ tone: "without" as const, values: sequence.lines })),
+              ...arm("with").map((sequence) => ({ tone: "with" as const, values: sequence.lines })),
+              { tone: "reference" as const, values: data.reference },
+              { tone: "without" as const, values: medianOf("without", "lines"), main: true },
+              { tone: "with" as const, values: medianOf("with", "lines"), main: true },
+            ]}
+            rows={[
+              { label: t.without, tone: "without", values: medianOf("without", "lines") },
+              { label: t.reference, tone: "reference", values: data.reference },
+              { label: t.with, tone: "with", values: medianOf("with", "lines") },
+            ]}
+          />
+
+          <figure class="chart" aria-labelledby="final-title">
+            <figcaption class="chart-head">
+              <p class="chart-title" id="final-title">{t.finalTitle}</p>
+            </figcaption>
+            <div class="strip-scroll" tabindex="0">
+              <svg class="strip" viewBox={`0 0 ${STRIP.width} 170`} role="img" aria-label={t.finalAria(finals("without").join(", "), finals("with").join(", "))}>
+                {
+                  stripTicks.map((tick) => (
+                    <g class="chart-grid">
+                      <line x1={stripX(tick)} x2={stripX(tick)} y1="14" y2="132" />
+                      <text x={stripX(tick)} y="154" text-anchor="middle">{tick}</text>
+                    </g>
+                  ))
+                }
+                <line class="strip-reference" x1={stripX(REFERENCE)} x2={stripX(REFERENCE)} y1="22" y2="116" />
+                <text class="chart-end" data-tone="reference" x={stripX(REFERENCE) + 6} y="16">{t.referenceAt(REFERENCE)}</text>
+                {
+                  armsOrder.map((name, row) => (
+                    <g data-tone={name}>
+                      <text class="strip-label" x="0" y={58 + row * 52}>{armLabel[name]}</text>
+                      {finals(name).map((value) => (
+                        <g>
+                          <circle class="strip-dot" cx={stripX(value)} cy={54 + row * 52} r="7">
+                            <title>{t.finalLines(armLabel[name], value)}</title>
+                          </circle>
+                          <text class="strip-value" x={stripX(value)} y={name === "with" ? 54 + row * 52 + 22 : 54 + row * 52 - 13} text-anchor="middle">{value}</text>
+                        </g>
+                      ))}
+                    </g>
+                  ))
+                }
+              </svg>
+            </div>
+            <p class="chart-caption">{t.finalCaption}</p>
+          </figure>
+
+          <LineChart
+            id="tokens"
+            title={t.tokensTitle}
+            caption={t.tokensCaption}
+            axis={t.task}
+            steps={steps}
+            format="millions"
+            {...chartLabels(t.tokensTitle)}
+            drawn={[
+              ...arm("without").map((sequence) => ({ tone: "without" as const, values: sequence.tokens })),
+              ...arm("with").map((sequence) => ({ tone: "with" as const, values: sequence.tokens })),
+              { tone: "without" as const, values: medianOf("without", "tokens"), main: true },
+              { tone: "with" as const, values: medianOf("with", "tokens"), main: true },
+            ]}
+            rows={[
+              { label: t.without, tone: "without", values: medianOf("without", "tokens") },
+              { label: t.with, tone: "with", values: medianOf("with", "tokens") },
+            ]}
+          />
+
+          <h3>{t.sourceTitle}</h3>
+          {t.source.map((paragraph) => <p><Pieces pieces={paragraph} /></p>)}
+          <p class="mono research-note">{t.totals(tokensOf("without"), tokensOf("with"))}</p>
+        </section>
+
+        <section class="research-section" aria-labelledby="single">
+          <h2 id="single">{t.singleTitle}</h2>
+          <p>{t.singleLead}</p>
+          <div class="table" tabindex="0">
+            <table>
+              <thead>
+                <tr>{t.calibrationHead.map((head) => <th scope="col">{head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {
+                  t.calibration.map((measure, row) => (
+                    <tr>
+                      <th scope="row">{measure}</th>
+                      {calibration[row].map((value, at) => <td class:list={[at === 2 && "lit"]}>{value}</td>)}
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+          <p><Pieces pieces={t.singleAfter} /></p>
+
+          <figure class="chart bars" aria-labelledby="tests-title">
+            <figcaption class="chart-head">
+              <p class="chart-title" id="tests-title">{t.testsTitle}</p>
+            </figcaption>
+            {
+              testsWritten.map((batch, at) => (
+                <div class="bars-group">
+                  <p class="bars-name">{t.testBatches[at]}</p>
+                  {batch.arms.map((count, arm) => (
+                    <div class="bar" data-tone={arm === 2 ? "with" : "without"}>
+                      <span class="bar-label">{t.testArms[arm]}</span>
+                      <span class="bar-track">
+                        <span class="bar-fill" style={`--share: ${count / batch.runs}`} />
+                      </span>
+                      <span class="bar-value mono">{count}/{batch.runs}</span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            }
+            <p class="chart-caption">{t.testsCaption}</p>
+          </figure>
+        </section>
+
+        <section class="research-section" aria-labelledby="rules">
+          <h2 id="rules">{t.rulesTitle}</h2>
+          <p>{t.rulesLead}</p>
+          <div class="table" tabindex="0">
+            <table>
+              <thead>
+                <tr>{t.rulesHead.map((head) => <th scope="col">{head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {
+                  t.changeRules.map(([name, catches, answer], at) => (
+                    <tr>
+                      <th scope="row"><span class="mono">{changeCodes[at]}</span> {name}</th>
+                      <td>{catches}</td>
+                      <td>{answer}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+          <p>{t.reviewLead}</p>
+          <div class="table" tabindex="0">
+            <table>
+              <thead>
+                <tr>{t.reviewHead.map((head) => <th scope="col">{head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {t.reviewRules.map((catches, at) => <tr><th scope="row" class="mono">{reviewCodes[at]}</th><td>{catches}</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="research-section" aria-labelledby="wrong">
+          <h2 id="wrong">{t.wrongTitle}</h2>
+          <p>{t.wrongLead}</p>
+          <div class="table" tabindex="0">
+            <table>
+              <thead>
+                <tr>{t.blocksHead.map((head) => <th scope="col">{head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {
+                  t.blocks.map(([batch, unfair, cause, fix], at) => (
+                    <tr>
+                      <th scope="row">{batch}</th>
+                      <td>{blockCounts[at]}</td>
+                      <td>{unfair}</td>
+                      <td>{cause}</td>
+                      <td>{fix}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+          <p>{t.wrongAfter}</p>
+          <h3>{t.limitsTitle}</h3>
+          <ul class="limits">
+            {t.limits.map(([title, text]) => <li><strong>{title}</strong> {text}</li>)}
+          </ul>
+        </section>
+
+        <section class="research-section" aria-labelledby="method">
+          <h2 id="method">{t.methodTitle}</h2>
+          <p><Pieces pieces={t.method} /></p>
+          <h3>{t.reproduceTitle}</h3>
+          <pre class="research-code" tabindex="0"><code>{reproduce.join("\n")}</code></pre>
+          <p><Pieces pieces={t.data} href={links.repo} /></p>
+        </section>
+
+        <section class="research-section" aria-labelledby="canon">
+          <h2 id="canon">{t.canonTitle}</h2>
+          <p>{t.canonLead}</p>
+          <pre class="research-code canon-text" tabindex="0" lang="en"><code>{data.canon}</code></pre>
+        </section>
+      </article>
+    </div>
+  </main>
+  <Footer locale={locale} path="/research" />
+</Base>
+
+<script>
+  import { boot } from "../motion/boot";
+  import { charts } from "../motion/charts";
+  import { contents } from "../motion/contents";
+
+  boot();
+  charts();
+  contents();
+</script>

@@ -1,6 +1,6 @@
 ---
 import Icon from "../components/Icon.astro";
-import { chapters, numberOf } from "../content/chapters";
+import { numberOf } from "../content/chapters";
 import { siteIcons } from "../content/icons";
 import type { Release } from "../content/release";
 import data from "../data/release.json";
@@ -10,28 +10,34 @@ import Composer from "../product/Composer.astro";
 import Crop from "../product/Crop.astro";
 import Request from "../product/Request.astro";
 import Run from "../product/Run.astro";
+import { home } from "../i18n/home";
+import type { Locale } from "../i18n/locales";
 
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = home(locale);
+const chapters = t.chapters.map((chapter, at) => ({ ...chapter, n: at + 1 }));
 const release = data as Release;
 const minor = release.version?.split(".").slice(0, 2).join(".");
-const animated = new Set([2, 3, 4]);
+const animated = new Set([2, 3, 4, 5]);
 ---
 
 <section class="demo" id="how-it-works" aria-labelledby="demo-title">
   <div class="wrap">
     <div class="demo-copy">
       <div class="demo-intro">
-        <p class="label">How it works</p>
-        <h2 class="demo-title" id="demo-title">A chat that shows its work.</h2>
-        <p class="demo-lead">
-          A desktop app for Claude Code. Every step the agent takes on screen, with the project's files, changes, terminal and
-          browser beside it.
-        </p>
-        <p class="mono stage-tag">Replay · recreated from Sens{minor ? ` ${minor}` : ""}</p>
+        <p class="label">{t.demoLabel}</p>
+        <h2 class="demo-title" id="demo-title">{t.demoTitle}</h2>
+        <p class="demo-lead">{t.demoLead}</p>
+        {minor && <p class="mono stage-tag">{t.replayTag(minor)}</p>}
       </div>
-      <nav class="chapter-index" aria-label="Chapters" data-index>
+      <nav class="chapter-index" aria-label={t.chaptersLabel} data-index>
         {
           chapters.map((chapter) => (
-            <a class="mono" href={`#chapter-${chapter.n}`} data-to={chapter.n} aria-label={`Chapter ${numberOf(chapter.n)}: ${chapter.title}`}>
+            <a class="mono" href={`#chapter-${chapter.n}`} data-to={chapter.n} aria-label={t.chapterLabel(numberOf(chapter.n), chapter.title)}>
               {numberOf(chapter.n)}
             </a>
           ))
@@ -67,23 +73,28 @@ const animated = new Set([2, 3, 4]);
                   )}
                   {chapter.n === 4 && (
                     <Crop id="card-4">
-                      <Run open only={["thought-prop", "edit-header", "edit-test"]} />
+                      <Run open openStep="sens-stop" only={["thought-prop", "sens-stop", "thought-reuse"]} />
+                    </Crop>
+                  )}
+                  {chapter.n === 5 && (
+                    <Crop id="card-5">
+                      <Run open only={["thought-reuse", "edit-header", "edit-test"]} />
                       <div class="code">
                         <Changes />
                       </div>
                     </Crop>
                   )}
-                  {chapter.n === 5 && (
-                    <Crop id="card-5">
+                  {chapter.n === 6 && (
+                    <Crop id="card-6">
                       <Run />
                       <Answer />
                     </Crop>
                   )}
                 </div>
                 {animated.has(chapter.n) && (
-                  <button class="replay" type="button" data-replay aria-label={`Replay chapter ${numberOf(chapter.n)}`}>
+                  <button class="replay" type="button" data-replay aria-label={t.replayChapter(numberOf(chapter.n))}>
                     <Icon paths={siteIcons.replay} size={18} />
-                    <span aria-hidden="true">Replay</span>
+                    <span aria-hidden="true">{t.replay}</span>
                   </button>
                 )}
               </div>

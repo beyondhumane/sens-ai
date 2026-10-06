@@ -45,7 +45,7 @@ export function watchChapters(root: ParentNode, onChange: (chapter: number) => v
 export function watchStuck(element: HTMLElement, top: number): () => void {
   const observer = new IntersectionObserver(
     ([entry]) => element.toggleAttribute("data-stuck", entry.intersectionRatio < 1 && entry.boundingClientRect.top < top + 1),
-    { rootMargin: `-${top + 1}px 0px 0px 0px`, threshold: 1 },
+    { rootMargin: `-${top + 1}px 0px 0px 0px`, threshold: [0, 1] },
   );
   observer.observe(element);
   return () => {

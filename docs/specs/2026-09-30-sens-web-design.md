@@ -24,8 +24,9 @@ Tomadas el 2026-09-30 en la sesión de diseño.
 - **Tipografías**: Space Grotesk, la de la marca en `tokens.ts` y en la app (`identity.md` aún dice
   Geist), y Geist Mono para datos y código.
 - **Repositorio que se enlaza**: `github.com/beyondhumane/sens-ai`. `iiTzSenn/Sens` redirige ahí.
-- **Fuera de la web**: el Canon (rama `feat/canon`, sin publicar) y el logo de Windows del botón de
-  la referencia, porque la identidad solo admite iconos Lucide. «for Windows» lo dice en texto.
+- **Fuera de la web**: el logo de Windows del botón de la referencia, porque la identidad solo
+  admite iconos Lucide. «for Windows» lo dice en texto. El Canon quedó fuera mientras no estaba
+  publicado; desde la 0.30.0 es lo principal de la web (ver *El motor*).
 - **Reglas del repositorio**: las de Sens. Ningún comentario en ningún fichero, e `identity.md`
   como fuente de verdad salvo las excepciones escritas aquí.
 - **Recorrido**: escritorio con escena fija a partir de 1024 × 640 px; por debajo, tarjetas.
@@ -47,6 +48,26 @@ Tomados el 2026-09-30 al revisar el prototipo en movimiento.
 - **Flip no hace falta.** Los viajes se calculan con la geometría de la escena, y la ruta que viaja
   a Changes es una copia que vuela (`motion/ghost.ts`).
 
+### El motor
+
+Tomado el 2026-10-06, cuando la 0.30.0 publicó el Canon. Lo que hace a Sens distinto es el motor
+que obliga a Claude Code a reutilizar y a escribir menos, y la web lo cuenta en cuatro sitios:
+
+- **Portada**: la entradilla es *Claude Code that reuses what you have, and writes less.*, con
+  «12% less code and 18% fewer tokens in our benchmark» debajo.
+- **Demo**: un capítulo nuevo, 04 *Sens checks it.*, en el que Sens para una escritura que copiaba
+  `greetingFor` y Claude la reutiliza. La demo pasa a seis capítulos.
+- **Sección «What Sens checks»**, tras la demo: *Less code for the same work.*, las tres cifras
+  con su condición, cuatro bloques (lo que ya tienes, cada cambio antes de llegar al disco, la
+  segunda lectura, la última palabra es tuya), el aviso de turno retenido y los treinta lenguajes.
+  Va detrás de la demo porque delante partiría el viaje de la ventana.
+- **`/research`**: la investigación como página propia, al estilo de un anuncio de modelo, con las
+  gráficas de Horizonte, las tablas de calibración, las reglas, lo que no funcionó, el método y el
+  texto del Canon. Sale del paper `docs/paper/sens-canon.md` y de los datos del banco.
+
+Y dos páginas de apoyo: **`/releases`**, con cada versión, sus notas recortadas como en la app y
+sus créditos, y una **píldora de versión** junto al logo que lleva allí.
+
 ## Lo que la web puede afirmar
 
 Solo hechos comprobados el 2026-09-30 en el README, en el código o en la API de GitHub. Ninguna
@@ -55,7 +76,11 @@ cifra de uso, testimonio, premio ni integración que no esté en esta tabla.
 | Hecho | Fuente |
 | --- | --- |
 | App de escritorio para Claude Code sobre la CLI oficial sin modificar, un proceso por sesión | README, «What it is» |
-| Versión 0.29.0, publicada el 2026-09-29; instalador `Sens_0.29.0_x64-setup.exe` de 7,8 MB | API de releases |
+| Versión 0.30.0, publicada el 2026-10-02; instalador `Sens_0.30.0_x64-setup.exe` de 12,1 MB | API de releases |
+| Sens ve lo que ya existe y se lo da a Claude con cada mensaje; juzga cada cambio antes de que llegue al disco (copias, también renombradas, código sin usar, comentarios nuevos); pregunta por dependencias nuevas y tests quitados; un revisor deja notas que no paran nada; tras tres intentos el turno queda retenido con *Accept*, *Undo* o *Ask Claude to fix them* | Notas de la 0.30.0 y paper |
+| El modelo no puede apagar el circuito ni rodearlo por la terminal, un subagente o un *commit* | Paper, §3.3 |
+| Con Claude Sonnet 5.5, tras 30 tareas encadenadas, el proyecto queda un 12 % más pequeño (436 frente a 496 líneas, mediana) con un 18 % menos de tokens y 90 de 90 tareas aceptadas en los dos brazos | Paper, §5.6, y `bench/results` |
+| Treinta lenguajes: diecinueve en nivel completo y once en básico | Notas de la 0.30.0 y paper, §3.5 |
 | Windows 10 y 11, x64, con WebView2, y una cuenta de Claude: Pro, Max, Console o clave de API | README, «Requirements» |
 | Se instala por usuario, sin permisos de administrador | README, «Download» |
 | El instalador aún no está firmado: SmartScreen avisa y el SHA-256 va en las notas de la release | README |
@@ -222,8 +247,9 @@ línea fina. En móvil: marca, Download compacto, tema y un botón de menú de 4
 | 01 | You ask. | Type it, or say it. The request stays at the top of the thread, with the project and branch it works in. |
 | 02 | Sens shows the work. | Every tool call is a step, in order: what Claude thought, read, searched, ran and edited, with how long each took. |
 | 03 | Open any step. | A command opens to its output, in its own program's colours. A file and line open the file. |
-| 04 | See what changed. | Each edit lands in Changes as a diff, file by file, against the last commit. |
-| 05 | Read the result. | When the reply is done, the work folds into one line that opens to all of it. A failure is never folded away. |
+| 04 | Sens checks it. | Every change is checked before it reaches the disk. Claude wrote a greeting helper the project already had; Sens stopped the write, showed the original, and Claude used it. |
+| 05 | See what changed. | Each edit lands in Changes as a diff, file by file, against the last commit. |
+| 06 | Read the result. | When the reply is done, the work folds into one line: what Claude did, and what Sens stopped, reused and approved. A failure is never folded away. |
 
 - Etiqueta mono junto a la escena: `Replay · recreated from Sens 0.29`. Distingue la demo de una
   sesión real.
@@ -287,27 +313,34 @@ capa de movimiento.
 
 - **Petición**: «The header should greet people by name, with a greeting that defaults to Welcome.
   Add a test for it.» Chips: carpeta `orbit` y rama `main`.
-- **Pasos**:
-  1. Thought · *Reading how the header is built* · 0,6 s
-  2. Read · `src/header.tsx` · 13 lines · 0,2 s
-  3. Search · `<h1>` · 1 result · 0,3 s
-  4. Thought · *Checking the tests before changing anything* · 0,8 s
-  5. Run · `npm test` · 1,4 s, con salida `✓ src/header.test.tsx (2 tests)`,
+- **Pasos**, con las filas de Sens tal como las pinta la app (`SensStep.tsx`):
+  1. Sens · *already has greetingFor*, con `greetingFor(name: string, greeting = "Welcome")`,
+     `src/greeting.ts:1` y «used 3 times»
+  2. Thought · *Reading how the header is built* · 0,6 s
+  3. Read · `src/header.tsx` · 13 lines · 0,2 s
+  4. Search · `<h1>` · 1 result · 0,3 s
+  5. Thought · *Checking the tests before changing anything* · 0,8 s
+  6. Run · `npm test` · 1,4 s, con salida `✓ src/header.test.tsx (2 tests)`,
      `✓ src/user.test.ts (8 tests)`, `Test Files 2 passed`, `Tests 10 passed`
-  6. Thought · *Adding the prop with its default* · 0,7 s
-  7. Edit · `src/header.tsx` · +8 −2 · 0,3 s
-  8. Edit · `src/header.test.tsx` · +9 · 0,4 s
-  9. Run · `npm test` · 1,5 s, con `src/header.test.tsx (4 tests)` y `Tests 12 passed`
-- **Pliegue**: «Worked · 2 commands · 1 file read · 2 edits · 1 search · 6.2 s», con el recuento
-  que hace la app (`work.ts`: Tasks no cuenta, Edit y Write son ediciones).
+  7. Thought · *Adding the prop with its default* · 0,7 s
+  8. Sens · *stopped a write*: «Copies existing code» en `src/header.tsx:7`, con «Already in the
+     project» `src/greeting.ts:1` y el código de `greetingFor`
+  9. Thought · *Using greetingFor instead* · 0,4 s
+  10. Edit · `src/header.tsx` · +4 −2 · 0,3 s
+  11. Edit · `src/header.test.tsx` · +9 · 0,4 s
+  12. Run · `npm test` · 1,5 s, con `src/header.test.tsx (4 tests)` y `Tests 12 passed`
+  13. Sens · *approved the changes*
+- **Pliegue**: «Worked · 2 commands · 1 file read · 2 edits · 1 search · Sens: 1 stop · 1 reused ·
+  approved · 6.6 s», con el recuento que hace la app (`work.ts`) y, como en ella, solo «1 reused ·
+  approved» en el acento.
 - **Respuesta**: «Done. The header greets people by name now, and falls back to **Welcome** when no
   greeting is given:», un bloque TSX con `<Header user={alex} />` y `<Header user={alex}
-  greeting="Good morning" />`, y dos viñetas: «`src/header.tsx` takes an optional `greeting` prop»
-  y «`src/header.test.tsx` covers both cases, and the suite passes: **12 tests**». Debajo, `7.6 s ·
-  2.1k tokens`.
-- **Changes**: `2 files +17 −2`. `header.tsx` modificado (+8 −2) con su diff y `header.test.tsx`
-  modificado (+9). En el capítulo 01, antes de las ediciones, dice «No changes since the last
-  commit.»
+  greeting="Good morning" />`, y dos viñetas: «`src/header.tsx` takes an optional `greeting` prop
+  and reuses `greetingFor`» y «`src/header.test.tsx` covers both cases, and the suite passes:
+  **12 tests**». Debajo, `7.6 s · 2.1k tokens`.
+- **Changes**: `2 files +13 −2`. `header.tsx` modificado (+4 −2): importa `greetingFor` y el `h1`
+  la llama; `header.test.tsx` modificado (+9). En el capítulo 01, antes de las ediciones, dice
+  «No changes since the last commit.»
 - **Pie del compositor**: `Opus 5.5 (1M)`, `Ask`, anillo de contexto al 31 % y `Medium`.
 
 El código se colorea al compilar con Shiki y las gramáticas y temas de VS Code que usa la app:
@@ -398,8 +431,9 @@ reproduce los intermedios comprimidos en 1,4 s como máximo.
 | → 01 | La marca va a la petición; los pasos y la respuesta bajan al 25 %; Changes queda vacío | 500 ms | `move`, `control` |
 | 01 → 02 | La línea «Worked» se abre; los pasos llegan en orden, 80 ms entre ellos, con los estados vivos de la app; pausa de 400 ms; el resto baja al 35 % y la marca viaja al primer Run | ~2,1 s | `enter`, `move` |
 | 02 → 03 | El Run se abre desde su propia fila (altura, no aparición); su salida aparece línea a línea, 40 ms entre líneas; el hilo se desplaza si hace falta y la marca crece con él | 360 ms; la salida acaba hacia los 500 ms | `move`, `enter` |
-| 03 → 04 | El Run se cierra; el hilo baja al primer Edit y la marca lo sigue; una copia de la ruta `src/header.tsx` vuela a la cabecera del fichero en Changes en 700 ms y las dos se iluminan al llegar; el diff se despliega línea a línea, 30 ms entre líneas | ~1,8 s | `move`, `enter` |
-| 04 → 05 | Los pasos se pliegan en una línea; la respuesta vuelve; la marca va al resultado y brilla una vez: 1,5 veces más ancha y `signal-100` en 200 ms, y de vuelta en 360 ms | ~1,1 s | `move`, `enter`, `control` |
+| 03 → 04 | El Run se cierra (300 ms) y la parada de Sens se abre desde su fila con la regla, el sitio y el código que ya existía, igual que se abrió el Run; la marca la sigue | ~0,7 s | `move`, `enter` |
+| 04 → 05 | La parada se cierra; el hilo baja al primer Edit y la marca lo sigue; una copia de la ruta `src/header.tsx` vuela a la cabecera del fichero en Changes en 700 ms y las dos se iluminan al llegar; el diff se despliega línea a línea, 30 ms entre líneas | ~1,8 s | `move`, `enter` |
+| 05 → 06 | Los pasos se pliegan en una línea; la respuesta vuelve; la marca va al resultado y brilla una vez: 1,5 veces más ancha y `signal-100` en 200 ms, y de vuelta en 360 ms | ~1,1 s | `move`, `enter`, `control` |
 
 Mientras un capítulo está activo no se mueve nada: es la pausa para leer. Nada se repite en bucle.
 

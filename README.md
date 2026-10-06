@@ -5,8 +5,8 @@
 <h1 align="center">The Sens website</h1>
 
 <p align="center">
-  <b>One page for <a href="https://github.com/beyondhumane/sens-ai">Sens</a>, a desktop app for Claude Code.</b><br>
-  The app's own window, rebuilt in HTML, replays a real turn as you scroll, in light and dark.
+  <b>The website of <a href="https://github.com/beyondhumane/sens-ai">Sens</a>, the desktop app that makes Claude Code reuse what you have and write less.</b><br>
+  The app's own window, rebuilt in HTML, replays a real turn as you scroll, and the research behind it has a page of its own.
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@ The window on the page is not a video or a screenshot. It is the app's interface
 
 | | |
 | --- | --- |
-| **Page** | One: the hero, a demo in five chapters, and the closing |
+| **Pages** | The home page (hero, a demo in six chapters, what Sens checks, the closing), `/research` and `/releases` |
 | **Stack** | Astro 7 with static output, GSAP 3 with ScrollTrigger, and CSS |
 | **Weight** | One deferred script of about 55 KB and 8 KB of CSS, gzipped |
 | **Looks** | Light and dark; it follows the system until you pick one |
@@ -61,7 +61,7 @@ npm run dev
 
 The page opens at `http://localhost:4321`. Add `?motion=reduce` to the address to see it with reduced motion.
 
-`npm run build` writes the site to `dist/`: HTML, CSS, fonts, icons and one script, for any static host. `npm run preview` serves that build.
+Set `SITE_URL` to the site's address when you build, so canonical links and share images get absolute URLs. `npm run build` writes the site to `dist/`: HTML, CSS, fonts, icons and one script, for any static host. `npm run preview` serves that build.
 
 | Script | Does |
 | --- | --- |
@@ -70,7 +70,9 @@ The page opens at `http://localhost:4321`. Add `?motion=reduce` to the address t
 | `check` | Types in `.astro` and `.ts` files |
 | `test` | The contrast of every colour pair, the scene's geometry, motion tokens, release data, the theme icon and code colours |
 | `brand` | Colours, mark, favicon, the giant `sens` and the fonts, from a Sens checkout |
-| `release` | Version, date, size and link of the latest installer, from GitHub |
+| `release` | Every release from GitHub: version, date, installer, notes cut as the app cuts them, and credits from its commits |
+| `research` | The Horizonte sequences, the reference line and the Canon's text, from a Sens checkout |
+| `og` | The share images in `public/og`, one per page, drawn with the brand's fonts and colours |
 | `frames` | Screenshots at scroll positions, per chapter, of the entrance or of a theme switch |
 | `perf` | Frame times while scrolling or switching themes, with the CPU slowed down |
 | `a11y` | axe on the page |
@@ -80,7 +82,8 @@ The page opens at `http://localhost:4321`. Add `?motion=reduce` to the address t
 Both scripts write files that are committed, so the site builds on its own, and neither kind of file is edited by hand.
 
 - **`npm run brand`** reads `src/brand` from a Sens checkout — `../Sens` beside this folder, or the path in `SENS_REPO` — and writes `src/styles/tokens.css`, `src/brand/brand.json`, the giant `sens`, the mark and the favicon. It copies Space Grotesk and Geist Mono with their licences.
-- **`npm run release`** asks GitHub for the latest release of `beyondhumane/sens-ai` and writes `src/data/release.json`. If GitHub does not answer, the last good data stays; with none at all, the download buttons go to the releases page.
+- **`npm run release`** asks GitHub for the releases of `beyondhumane/sens-ai` and writes `src/data/release.json` and `src/data/releases.json`. Credits are each release's commit authors and co-authors. If GitHub does not answer, the last good data stays; with none at all, the download buttons go to the releases page. A token in `GITHUB_TOKEN` or `GH_TOKEN` avoids GitHub's limit for anonymous requests.
+- **`npm run research`** reads the confirmation run of Horizonte from `bench/results`, the reference solution's size from the paper's figure 2 and the Canon from `rust/sens-canon`, in the same Sens checkout, and writes `src/data/research.json`.
 
 ## How it moves
 

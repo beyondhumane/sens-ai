@@ -1,7 +1,7 @@
 ---
 import Icon from "../components/Icon.astro";
 import { appIcons } from "../content/icons";
-import { secondsOf, steps, tallyOf } from "../content/session";
+import { secondsOf, sensTallyOf, steps, tallyOf } from "../content/session";
 import Step from "./Step.astro";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 }
 
 const { open = false, openStep, only } = Astro.props;
+const sens = sensTallyOf(steps);
 const shown = only ? steps.filter((step) => only.includes(step.id)) : steps;
 ---
 
@@ -19,6 +20,7 @@ const shown = only ? steps.filter((step) => only.includes(step.id)) : steps;
     <span class="run-icon"><Icon paths={appIcons.chevronRight} size={16} /></span>
     <span class="run-verb">Worked</span>
     <span class="run-tally">{tallyOf(steps)}</span>
+    <span class="run-sens">Sens: {sens.quiet}{sens.quiet && sens.lit && " · "}<span class="run-sens-lit">{sens.lit}</span></span>
     <span class="run-time">{secondsOf(steps)}</span>
     <span class="run-state"></span>
   </div>

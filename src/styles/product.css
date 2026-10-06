@@ -21,6 +21,8 @@
   --glint-peak: light-dark(var(--sens-signal-700), var(--sens-signal-200));
   --mark-body: light-dark(var(--sens-carbon-900), var(--sens-carbon-800));
   --mark-cut: var(--sens-signal-500);
+  --primary: light-dark(var(--sens-carbon-900), var(--sens-bone-50));
+  --primary-ink: light-dark(var(--sens-chalk-0), var(--sens-carbon-950));
   --tongue: var(--sens-lang-azure);
   --r-key: 4px;
   --r-control: 8px;
@@ -309,6 +311,151 @@
   color: var(--text);
 }
 
+.product .run-sens {
+  flex: none;
+  color: var(--dim);
+}
+
+.product .run-sens-lit {
+  color: var(--accent-text);
+}
+
+.product .ask {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--hair-strong);
+  border-left: 2px solid var(--amber);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+
+.product .ask-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.product .ask-icon {
+  display: grid;
+  flex: none;
+  color: var(--amber);
+}
+
+.product .ask-title {
+  font-weight: 500;
+}
+
+.product .ask-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.product .ask-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--faint);
+}
+
+.product .ask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product .ask-actions > * {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--r-control);
+  font-size: 13px;
+}
+
+.product .ask-actions .primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 500;
+}
+
+.product .ask-actions .quiet {
+  border: 1px solid var(--hair-strong);
+  color: var(--dim);
+}
+
+.product .step.sens[data-tone="stop"] .step-icon {
+  color: var(--amber);
+}
+
+.product .step.sens[data-tone="pass"] .step-icon {
+  color: var(--accent-text);
+}
+
+.product .sens-found {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.product .sens-signature {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.product .sens-uses {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ghost);
+}
+
+.product .sens-place {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.product :is(.sens-finding, .sens-target) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.product .sens-rule {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.product .step .sens-target .codeblock pre {
+  padding: 10px 12px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.product .sens-target .sens-rule {
+  font-size: 12px;
+  color: var(--faint);
+}
+
 .product :is(.thought-time, .run-time, .step-meta) {
   margin-left: auto;
   flex: none;
@@ -546,7 +693,7 @@
   color: var(--faint);
 }
 
-.product .prose .codeblock pre {
+.product :is(.prose, .sens-target) .codeblock pre {
   margin: 0;
   padding: 12px 14px;
   overflow: hidden;
@@ -557,7 +704,7 @@
   white-space: pre;
 }
 
-.product .prose .codeblock code {
+.product :is(.prose, .sens-target) .codeblock code {
   padding: 0;
   background: none;
   font-size: inherit;
@@ -991,11 +1138,11 @@
   visibility: hidden;
 }
 
-.product[data-stage] [data-step="run-before"] {
+.product[data-stage] :is([data-step="run-before"], [data-step="sens-stop"]) {
   position: relative;
 }
 
-.product[data-stage] .step[data-step="run-before"] > .step-body {
+.product[data-stage] .step:is([data-step="run-before"], [data-step="sens-stop"]) > .step-body {
   position: absolute;
   top: 100%;
   left: 0;

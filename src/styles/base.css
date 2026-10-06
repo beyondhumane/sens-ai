@@ -165,3 +165,29 @@ button {
   font-weight: 450;
   font-variant-numeric: tabular-nums;
 }
+
+:root:lang(ja) {
+  --font-ui: "Space Grotesk", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+}
+
+:root:lang(zh-Hans) {
+  --font-ui: "Space Grotesk", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) body {
+  line-break: strict;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) :is(h1, h2, h3, .lead, .measured dt) {
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+:root:is(:lang(ja), :lang(zh-Hans)) :is(h1, h2, h3) {
+  max-width: none;
+  text-wrap: balance;
+}
+
+:root:lang(ja) :is(h1, h2, h3, .lead) {
+  word-break: auto-phrase;
+}

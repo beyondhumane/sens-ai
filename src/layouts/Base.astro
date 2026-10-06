@@ -5,22 +5,47 @@ import "../styles/product.css";
 import brand from "../brand/brand.json";
 import { rootCss } from "../lib/root";
 import { pageColors, THEME_KEY } from "../motion/theme";
+import { htmlLang, locales, ogLocale, pathFor, withBase, type Locale } from "../i18n/locales";
 
 interface Props {
   title: string;
   description: string;
+  image: "home" | "research" | "releases";
+  locale: Locale;
+  path: string;
+  structured?: Record<string, unknown>;
 }
 
-const { title, description } = Astro.props;
+const { title, description, image, locale, path, structured } = Astro.props;
+const at = (path: string) => (Astro.site ? new URL(path, Astro.site).href : path);
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : null;
+const picture = at(withBase(`/og/${image}.png`));
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={htmlLang[locale]}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    {locales.map((other) => <link rel="alternate" hreflang={htmlLang[other]} href={at(pathFor(other, path))} />)}
+    <link rel="alternate" hreflang="x-default" href={at(pathFor("en", path))} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content={ogLocale[locale]} />
+    <meta property="og:site_name" content="Sens" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={picture} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={picture} />
+    {structured && <script type="application/ld+json" set:html={JSON.stringify(structured)} />}
     <meta name="theme-color" content={brand.palette.paper} />
     <script is:inline define:vars={{ key: THEME_KEY, colors: pageColors }}>
       let chosen = null;
@@ -34,10 +59,21 @@ const { title, description } = Astro.props;
       document.documentElement.dataset.theme = theme;
       document.querySelector('meta[name="theme-color"]').setAttribute("content", colors[theme]);
     </script>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="icon" href={withBase("/favicon.svg")} type="image/svg+xml" />
+    <link rel="preload" href={withBase("/fonts/space-grotesk.woff2")} as="font" type="font/woff2" crossorigin />
     <style is:inline set:html={rootCss()}></style>
-    <slot name="head" />
+    <script is:inline>
+      (() => {
+        const root = document.documentElement;
+        const asked = new URLSearchParams(location.search).get("motion");
+        const quiet = asked === "reduce" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+        root.dataset.js = "";
+        root.dataset.motion = quiet ? "reduce" : "full";
+        const solid = () => document.querySelector("[data-nav]")?.toggleAttribute("data-solid", scrollY > 8);
+        addEventListener("scroll", solid, { passive: true });
+        addEventListener("DOMContentLoaded", solid);
+      })();
+    </script>
   </head>
   <body>
     <slot />

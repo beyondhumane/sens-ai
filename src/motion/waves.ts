@@ -9,6 +9,10 @@ const TENSION = 0.012;
 const FRICTION = 0.9;
 const MAX_PUSH = 80;
 const LINE = 1.5;
+const CALM_FROM = 3500;
+const CALM_FOR = 1500;
+const LONGEST_FRAME = 64;
+const STILL = 0.01;
 
 interface Point {
   x: number;
@@ -75,6 +79,12 @@ function sway(point: Point, noise: (x: number, y: number) => number, time: numbe
   point.swayY = Math.sin(turn) * SWAY_Y;
 }
 
+const driftPace = (lived: number): number =>
+  lived < CALM_FROM ? 1 : Math.max(0, 1 - (lived - CALM_FROM) / CALM_FOR);
+
+const settled = (point: Point): boolean =>
+  Math.abs(point.pushX) + Math.abs(point.pushY) + Math.abs(point.speedX) + Math.abs(point.speedY) < STILL;
+
 function push(point: Point, pointer: Pointer): void {
   const reach = Math.max(REACH, pointer.pace);
   const offsetX = point.x - pointer.smoothX;
@@ -119,6 +129,7 @@ export function waves(wordmark: HTMLElement): () => void {
   let paper = paperOf();
   const themed = new MutationObserver(() => {
     paper = paperOf();
+    start();
   });
   const pointer: Pointer = { x: -1e4, y: -1e4, smoothX: -1e4, smoothY: -1e4, lastX: -1e4, lastY: -1e4, pace: 0, angle: 0 };
   let lines: Point[][] = [];
@@ -126,6 +137,10 @@ export function waves(wordmark: HTMLElement): () => void {
   let height = 0;
   let ratio = 1;
   let frame = 0;
+  let visible = false;
+  let last = 0;
+  let lived = 0;
+  let drift = 0;
 
   const size = () => {
     const box = svg.getBoundingClientRect();
@@ -135,9 +150,16 @@ export function waves(wordmark: HTMLElement): () => void {
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     lines = gridOf(width, height);
+    start();
   };
 
-  const draw = (time: number) => {
+  const draw = (now: number) => {
+    const elapsed = last ? Math.min(now - last, LONGEST_FRAME) : 0;
+    last = now;
+    lived += elapsed;
+    const pace = driftPace(lived);
+    drift += elapsed * pace;
+    let busy = pace > 0 || Math.abs(pointer.x - pointer.smoothX) + Math.abs(pointer.y - pointer.smoothY) > 0.5;
     follow(pointer);
     const scale = width / view.width;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -149,8 +171,9 @@ export function waves(wordmark: HTMLElement): () => void {
     context.beginPath();
     for (const line of lines) {
       line.forEach((point, at) => {
-        sway(point, noise, time);
+        sway(point, noise, drift);
         push(point, pointer);
+        if (!settled(point)) busy = true;
         const x = point.x + point.swayX + point.pushX;
         const y = point.y + point.swayY + point.pushY;
         if (at === 0) context.moveTo(x, y);
@@ -161,24 +184,31 @@ export function waves(wordmark: HTMLElement): () => void {
     context.lineWidth = LINE;
     context.stroke();
     context.restore();
-    frame = requestAnimationFrame(draw);
+    frame = busy ? requestAnimationFrame(draw) : 0;
+    if (!frame) last = 0;
   };
 
   const track = (event: PointerEvent) => {
     const box = canvas.getBoundingClientRect();
     pointer.x = event.clientX - box.left;
     pointer.y = event.clientY - box.top;
+    start();
   };
 
-  const start = () => {
-    if (!frame) frame = requestAnimationFrame(draw);
-  };
+  function start() {
+    if (visible && !frame) frame = requestAnimationFrame(draw);
+  }
   const pause = () => {
     cancelAnimationFrame(frame);
     frame = 0;
+    last = 0;
   };
 
-  const seen = new IntersectionObserver(([entry]) => (entry?.isIntersecting ? start() : pause()));
+  const seen = new IntersectionObserver(([entry]) => {
+    visible = Boolean(entry?.isIntersecting);
+    if (visible) start();
+    else pause();
+  });
   const resized = new ResizeObserver(size);
   size();
   resized.observe(svg);

@@ -216,3 +216,40 @@ html[data-motion="reduce"] .replay {
     transition-duration: var(--dur-confirm);
   }
 }
+
+@view-transition {
+  navigation: auto;
+}
+
+:root:not([data-theming]) .nav {
+  view-transition-name: nav;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-theming])::view-transition-old(root) {
+    animation: page-out var(--dur-medium) var(--ease-exit) both;
+  }
+
+  :root:not([data-theming])::view-transition-new(root) {
+    animation: page-in var(--dur-scene) var(--ease-enter) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}

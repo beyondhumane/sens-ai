@@ -2,6 +2,7 @@
 import Icon from "../components/Icon.astro";
 import { appIcons } from "../content/icons";
 import { changes, totalsOf } from "../content/session";
+import { withBase } from "../i18n/locales";
 import Code from "./Code.astro";
 
 interface Props {
@@ -37,7 +38,7 @@ const kinds = { " ": "", "+": "add", "−": "del" } as const;
             </span>
             <span class="state">{change.state}</span>
             <span class="glyph">
-              <img src={`/file-icons/${change.icon}.svg`} width="16" height="16" alt="" />
+              <img src={withBase(`/file-icons/${change.icon}.svg`)} width="16" height="16" alt="" />
             </span>
             <span class="name" data-part="change-name">
               {change.name}

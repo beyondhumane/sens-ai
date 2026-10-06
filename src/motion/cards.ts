@@ -42,9 +42,9 @@ function activity(crop: HTMLElement): gsap.core.Timeline {
     .fromTo(mark, { autoAlpha: 0 }, { autoAlpha: 1, ...fade }, "<");
 }
 
-function unfold(crop: HTMLElement): gsap.core.Timeline {
+const unfold = (id: string) => (crop: HTMLElement): gsap.core.Timeline => {
   const local = localTo(crop);
-  const before = one(crop, '[data-step="run-before"]');
+  const before = one(crop, `[data-step="${id}"]`);
   const body = one(before, '[data-part="step-body"]');
   const next = before.nextElementSibling;
   const row = local(rowOf(before));
@@ -59,7 +59,7 @@ function unfold(crop: HTMLElement): gsap.core.Timeline {
     .fromTo(all(before, '[data-part="output-line"]'), { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "enter", stagger: 0.04 }, 0.32);
   if (next) timeline.fromTo(next, { y: -height }, { y: 0 }, 0.2);
   return timeline;
-}
+};
 
 function relation(crop: HTMLElement, quiet: boolean): gsap.core.Timeline {
   const local = localTo(crop);
@@ -84,8 +84,9 @@ function relation(crop: HTMLElement, quiet: boolean): gsap.core.Timeline {
 
 const builders: Record<string, (crop: HTMLElement, quiet: boolean) => gsap.core.Timeline> = {
   "card-2": activity,
-  "card-3": unfold,
-  "card-4": relation,
+  "card-3": unfold("run-before"),
+  "card-4": unfold("sens-stop"),
+  "card-5": relation,
 };
 
 export function cards(root: HTMLElement, options: { quiet: boolean }): () => void {

@@ -51,3 +51,49 @@ export function releaseFrom(payload: unknown): Release | null {
 }
 
 export const megabytes = (bytes: number): string => `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+export interface Credit {
+  name: string;
+  profile: string | null;
+}
+
+export interface Notes {
+  version: string;
+  headline: string | null;
+  published: string | null;
+  page: string;
+  installer: Installer | null;
+  notes: string;
+  credits: Credit[];
+}
+
+interface GithubCommit {
+  author?: { login?: unknown; html_url?: unknown } | null;
+  commit?: { author?: { name?: unknown }; message?: unknown };
+}
+
+const COAUTHOR = /^co-authored-by:\s*(.+?)\s*<[^>]*>\s*$/gim;
+const CUT = /^(?:>\s*\[!|#{1,6}\s+install\b)/im;
+
+export function notesOf(body: string): string {
+  const cut = body.search(CUT);
+  return (cut === -1 ? body : body.slice(0, cut)).trim();
+}
+
+export function headlineOf(name: string, tag: string): string | null {
+  const headline = name.replace(tag, "").replace(/^[\s—–:-]+/, "").trim();
+  return headline.length > 0 ? headline : null;
+}
+
+export function creditsOf(commits: unknown): Credit[] {
+  if (!Array.isArray(commits)) return [];
+  const credits = new Map<string, Credit>();
+  const add = (name: string | null, profile: string | null) => {
+    if (name && !credits.has(name.toLowerCase())) credits.set(name.toLowerCase(), { name, profile });
+  };
+  for (const entry of commits as GithubCommit[]) {
+    add(text(entry.author?.login) ?? text(entry.commit?.author?.name), text(entry.author?.html_url));
+    for (const match of (text(entry.commit?.message) ?? "").matchAll(COAUTHOR)) add(match[1] ?? null, null);
+  }
+  return [...credits.values()];
+}

@@ -9,11 +9,20 @@ import Window from "../product/Window.astro";
 import Request from "../product/Request.astro";
 import Run from "../product/Run.astro";
 import Answer from "../product/Answer.astro";
+import Pieces from "../components/Pieces.astro";
+import { home } from "../i18n/home";
+import { pathFor, type Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+import headline from "../data/headline.json";
 
-const lines = [
-  ["Less", "noise."],
-  ["More", "sense."],
-];
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = home(locale);
+const common = site(locale);
+const lines = t.lines;
 ---
 
 <section class="hero" id="top" aria-labelledby="hero-title">
@@ -24,7 +33,7 @@ const lines = [
   <span class="scan" aria-hidden="true"></span>
   <div class="wrap">
     <div class="hero-copy">
-      <h1 class="display" id="hero-title">
+      <h1 class="display" id="hero-title" style={`--line-em: ${headline[locale].line}; --word-em: ${headline[locale].word}`}>
         {
           lines.map((words, line) => (
             <span class="line" style={`--line: ${line}`}>
@@ -40,19 +49,17 @@ const lines = [
           ))
         }
       </h1>
-      <p class="lead" data-settle>Claude Code, with everything in view.</p>
-      <p class="label hero-label" data-settle>Open source · MIT · Windows 10 & 11</p>
+      <p class="lead" data-settle>{t.lead}</p>
+      <p class="hero-proof" data-settle><Pieces pieces={t.proof} href={pathFor(locale, "/#engine")} /></p>
+      <p class="label hero-label" data-settle>{common.facts}</p>
       <div class="actions" data-settle>
-        <Download label="Download for Windows" />
-        <a class="link" href={links.repo}>View on GitHub <Icon paths={siteIcons.arrow} size={18} /></a>
+        <Download label={common.downloadForWindows} locale={locale} />
+        <a class="link" href={links.repo}>{t.viewOnGithub} <Icon paths={siteIcons.arrow} size={18} /></a>
       </div>
-      <p class="only-phone-note">Sens runs on Windows 10 and 11. Open this page on your PC to install it.</p>
+      <p class="only-phone-note">{t.phoneNote}</p>
     </div>
   </div>
-  <p class="sr-only">
-    Beside the headline, the Sens window shows a finished Claude Code session: the request at the top, the agent's work
-    folded into one line, the answer, and the changed files with their diff.
-  </p>
+  <p class="sr-only">{t.windowDescription}</p>
   <div class="hero-crop" aria-hidden="true" inert>
     <Crop id="hero" bar>
       <Request />

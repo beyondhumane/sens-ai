@@ -8,21 +8,23 @@ import { bezierOf, curves, type Curve } from "./tokens";
 
 const DESKTOP = "(min-width: 1024px) and (min-height: 640px)";
 
-function menu(): void {
-  const details = document.querySelector<HTMLDetailsElement>("[data-menu]");
-  if (!details) return;
-  const summary = details.querySelector("summary");
+function menus(): void {
+  const all = [...document.querySelectorAll<HTMLDetailsElement>("[data-menu]")];
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !details.open) return;
-    details.open = false;
-    summary?.focus();
+    if (event.key !== "Escape") return;
+    for (const details of all.filter((candidate) => candidate.open)) {
+      details.open = false;
+      details.querySelector("summary")?.focus();
+    }
   });
   document.addEventListener("click", (event) => {
-    if (details.open && !details.contains(event.target as Node)) details.open = false;
+    for (const details of all) if (details.open && !details.contains(event.target as Node)) details.open = false;
   });
-  details.addEventListener("click", (event) => {
-    if ((event.target as Element).closest("a")) details.open = false;
-  });
+  for (const details of all) {
+    details.addEventListener("click", (event) => {
+      if ((event.target as Element).closest("a")) details.open = false;
+    });
+  }
 }
 
 export function boot(): void {
@@ -35,7 +37,7 @@ export function boot(): void {
   const quiet = root.dataset.motion === "reduce";
   const sceneRoot = document.querySelector<HTMLElement>("[data-scene]");
 
-  menu();
+  menus();
   theme({ quiet });
 
   if (sceneRoot) {

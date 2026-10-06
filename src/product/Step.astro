@@ -11,10 +11,52 @@ interface Props {
 
 const { step, open = false } = Astro.props;
 const seconds = `${step.seconds.toFixed(1)} s`;
+const sensIcons = { found: appIcons.search, stop: appIcons.shieldAlert, pass: appIcons.shieldCheck };
 ---
 
 {
-  step.kind === "thought" ? (
+  step.kind === "sens" ? (
+    <div class="step sens" data-step={step.id} data-state="done" data-tone={step.tone} data-open={open ? "true" : "false"}>
+      <div class="step-head">
+        <span class="step-icon">
+          <Icon paths={sensIcons[step.tone]} size={16} />
+        </span>
+        <span class="step-verb">Sens</span>
+        <span class="step-target">{step.said}</span>
+        <span class="step-state" />
+      </div>
+      {(step.found || step.finding) && (
+        <div class="step-body" data-part="step-body">
+          <div class="step-inner">
+            {step.found && (
+              <div class="sens-found">
+                <code class="sens-signature">{step.found.signature}</code>
+                <span class="sens-place">{step.found.place}</span>
+                <span class="sens-uses">{step.found.uses}</span>
+              </div>
+            )}
+            {step.finding && (
+              <div class="sens-finding">
+                <p class="sens-rule" data-part="output-line">
+                  <span>{step.finding.rule}</span>
+                  <span class="sens-place">{step.finding.place}</span>
+                </p>
+                <div class="sens-target" data-part="output-line">
+                  <p class="sens-rule">
+                    <span>Already in the project</span>
+                    <span class="sens-place">{step.finding.existing.place}</span>
+                  </p>
+                  <div class="codeblock">
+                    <pre><code><Code code={step.finding.existing.code} lang="tsx" /></code></pre>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  ) : step.kind === "thought" ? (
     <div class="thought" data-step={step.id} data-live="false">
       <div class="thought-head">
         <span class="thought-icon">

@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowRight, ArrowUpRight, Menu, Moon, RotateCcw, Sun, X } from "lucide";
+import { ArrowDownToLine, ArrowRight, ArrowUpRight, Check, Languages, Menu, Moon, RotateCcw, Sun, X } from "lucide";
 
 type Node = [string, Record<string, string | number>][];
 
@@ -35,6 +35,8 @@ export const siteIcons = {
   menu: draw(Menu as Node),
   close: draw(X as Node),
   replay: draw(RotateCcw as Node),
+  languages: draw(Languages as Node),
+  check: draw(Check as Node),
   theme: sunAndMoon(),
 };
 
@@ -43,6 +45,9 @@ const brain =
 
 const folder =
   '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>';
+
+const shield =
+  '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>';
 
 export const appIcons = {
   thought: brain,
@@ -66,6 +71,8 @@ export const appIcons = {
   send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
   reload: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   shut: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  shieldAlert: `${shield}<path d="M12 8v4"/><path d="M12 16h.01"/>`,
+  shieldCheck: `${shield}<path d="m9 12 2 2 4-4"/>`,
 };
 
 export type AppIcon = keyof typeof appIcons;

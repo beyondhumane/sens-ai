@@ -13,7 +13,6 @@ interface Parts {
   shot: HTMLElement;
   focus: HTMLElement;
   mark: HTMLElement;
-  copy: HTMLElement;
   demo: HTMLElement;
   index: HTMLElement;
   wordmark: HTMLElement;
@@ -27,14 +26,19 @@ interface Reading {
 
 type Place = (reading: Reading) => gsap.TweenVars;
 
-const REFRAME = 0.45;
+const REFRAME = 1;
+const SMOOTHING = 1;
+const TOUCH = NAV + 8;
 
+const topShot: Place = ({ frame }) => ({ x: frame.hero.x, y: frame.hero.y, scale: frame.hero.s });
 const heroShot: Place = ({ frame, lift }) => ({ x: frame.hero.x, y: frame.hero.y - lift, scale: frame.hero.s });
 const stageShot: Place = ({ frame }) => ({ x: frame.stage.x, y: frame.stage.y, scale: frame.stage.s });
 const heroAcross: Place = () => ({ x: 0, scaleX: 1 });
 const stageAcross: Place = ({ frame }) => ({ x: frame.rail.x - frame.field.x, scaleX: frame.rail.width / frame.field.width });
+const topDown: Place = () => ({ y: 0, scaleY: 1 });
 const heroDown: Place = ({ lift }) => ({ y: -lift, scaleY: 1 });
 const stageDown: Place = ({ frame }) => ({ y: frame.rail.y, scaleY: frame.rail.height / frame.field.height });
+const topFocus: Place = (reading) => ({ ...heroAcross(reading), ...topDown(reading) });
 const heroFocus: Place = (reading) => ({ ...heroAcross(reading), ...heroDown(reading) });
 const stageFocus: Place = (reading) => ({ ...stageAcross(reading), ...stageDown(reading) });
 
@@ -47,7 +51,6 @@ function partsOf(scene: HTMLElement): Parts {
     shot: one(scene, "[data-shot]"),
     focus: one(scene, "[data-focus]"),
     mark: one(scene, "[data-focus-mark]"),
-    copy: one(hero, ".hero-copy"),
     demo: one(scene, ".demo"),
     index: one(scene, "[data-index]"),
     wordmark: one(hero, ".wordmark"),
@@ -55,14 +58,9 @@ function partsOf(scene: HTMLElement): Parts {
   };
 }
 
-const start = `bottom ${NAV + 8}px`;
-const length = () => `+=${Math.round(window.innerHeight * REFRAME)}`;
-
 function measure(parts: Parts): Reading {
-  return {
-    frame: frameOf({ width: parts.layer.clientWidth, height: window.innerHeight }),
-    lift: parts.copy.getBoundingClientRect().bottom + window.scrollY - (NAV + 8),
-  };
+  const frame = frameOf({ width: parts.layer.clientWidth, height: window.innerHeight });
+  return { frame, lift: Math.max(0, frame.hero.y - TOUCH) };
 }
 
 const placementsOf = (frame: Frame): Record<string, string> => ({
@@ -75,6 +73,7 @@ const placementsOf = (frame: Frame): Record<string, string> => ({
 
 function paint(parts: Parts, frame: Frame): void {
   for (const [name, value] of Object.entries(placementsOf(frame))) parts.scene.style.setProperty(name, value);
+  document.documentElement.style.setProperty("--split-x", `${frame.field.x}px`);
 }
 
 function moving(parts: Parts, active: boolean): void {
@@ -90,24 +89,25 @@ const lazy = (place: Place, read: () => Reading): gsap.TweenVars =>
   Object.fromEntries(Object.keys(place(read())).map((key) => [key, () => place(read())[key]]));
 
 function scrub(parts: Parts, read: () => Reading): void {
-  gsap
-    .timeline({
-      defaults: { ease: "none", duration: 1 },
-      scrollTrigger: {
-        trigger: parts.copy,
-        start,
-        end: length,
-        scrub: 0.4,
-        invalidateOnRefresh: true,
-        onToggle: (self) => moving(parts, self.isActive),
-        onEnter: () => staged(parts, true),
-        onLeaveBack: () => staged(parts, false),
-        onRefresh: (self) => staged(parts, self.progress > 0),
-      },
-    })
-    .fromTo(parts.shot, lazy(heroShot, read), lazy(stageShot, read), 0)
-    .fromTo(parts.focus, lazy(heroFocus, read), lazy(stageFocus, read), 0)
-    .fromTo(parts.wordmark, { autoAlpha: 1 }, { autoAlpha: 0, duration: 0.3 }, 0);
+  const travel = () => Math.round(window.innerHeight * REFRAME);
+  const climb = Math.max(1, read().lift);
+  const timeline = gsap.timeline({
+    defaults: { ease: "none" },
+    onUpdate: () => staged(parts, timeline.progress() > 0),
+    scrollTrigger: {
+      start: 0,
+      end: () => read().lift + travel(),
+      scrub: SMOOTHING,
+      invalidateOnRefresh: true,
+      onToggle: (self) => moving(parts, self.isActive),
+    },
+  });
+  timeline
+    .fromTo(parts.shot, lazy(topShot, read), { ...lazy(heroShot, read), duration: climb }, 0)
+    .fromTo(parts.focus, lazy(topFocus, read), { ...lazy(heroFocus, read), duration: climb }, 0)
+    .to(parts.shot, { ...lazy(stageShot, read), duration: travel() }, climb)
+    .to(parts.focus, { ...lazy(stageFocus, read), duration: travel() }, climb)
+    .fromTo(parts.wordmark, { autoAlpha: 1 }, { autoAlpha: 0, duration: travel() * 0.3 }, climb + travel() * 0.3);
 }
 
 function jump(parts: Parts, read: () => Reading): void {
@@ -119,8 +119,7 @@ function jump(parts: Parts, read: () => Reading): void {
     staged(parts, on);
   };
   ScrollTrigger.create({
-    trigger: parts.copy,
-    start,
+    start: () => read().lift,
     end: "max",
     onToggle: (self) => place(self.isActive),
     onRefresh: (self) => place(self.progress > 0),
@@ -165,5 +164,6 @@ export function scene(root: HTMLElement, options: { quiet: boolean }): () => voi
     moving(parts, false);
     staged(parts, false);
     for (const name of Object.keys(placementsOf(reading.frame))) parts.scene.style.removeProperty(name);
+    document.documentElement.style.removeProperty("--split-x");
   };
 }

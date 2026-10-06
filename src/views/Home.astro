@@ -1,0 +1,72 @@
+---
+import "../styles/page.css";
+import "../styles/motion.css";
+import Base from "../layouts/Base.astro";
+import Window from "../product/Window.astro";
+import Closing from "../sections/Closing.astro";
+import Demo from "../sections/Demo.astro";
+import Engine from "../sections/Engine.astro";
+import Footer from "../sections/Footer.astro";
+import Hero from "../sections/Hero.astro";
+import Nav from "../sections/Nav.astro";
+import { links } from "../content/site";
+import { home } from "../i18n/home";
+import type { Locale } from "../i18n/locales";
+import { site } from "../i18n/site";
+import release from "../data/release.json";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = home(locale);
+const structured = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Sens",
+  description: t.structured,
+  inLanguage: locale,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Windows 10, Windows 11",
+  softwareVersion: release.version,
+  downloadUrl: release.installer?.url ?? links.latest,
+  license: "https://opensource.org/licenses/MIT",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+};
+---
+
+<Base
+  title={t.title}
+  description={t.description}
+  image="home"
+  locale={locale}
+  path="/"
+  structured={structured}
+>
+  <a class="skip" href="#main">{site(locale).skip}</a>
+  <Nav locale={locale} path="/" />
+  <main id="main">
+    <div class="scene" data-scene>
+      <div class="scene-back" aria-hidden="true" data-back>
+        <span class="focus" data-focus><span class="focus-mark" data-focus-mark></span></span>
+      </div>
+      <div class="scene-layer" aria-hidden="true" inert data-layer>
+        <div class="shot" data-shot>
+          <Window id="stage" stage />
+        </div>
+      </div>
+      <Hero locale={locale} />
+      <Demo locale={locale} />
+    </div>
+    <Engine locale={locale} />
+    <Closing locale={locale} />
+  </main>
+  <Footer locale={locale} path="/" />
+</Base>
+
+<script>
+  import { boot } from "../motion/boot";
+
+  boot();
+</script>
