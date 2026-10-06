@@ -728,6 +728,12 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
       { path: "src/shared/look.ts", dependents: 3 },
     ],
     strays: [{ path: "src/market/card.tsx", area: "src" }],
+    links: [
+      { from: "src", to: "src/shared", weight: 9 },
+      { from: "src", to: "src/market", weight: 3 },
+      { from: "src/market", to: "src/shared", weight: 2 },
+    ],
+    cycles: [["src/market/rank.js", "src/market/search.js"]],
   }),
   canon_reach: ({ file }) => ({
     file: String(file),

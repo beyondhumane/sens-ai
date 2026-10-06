@@ -2,13 +2,20 @@ import { createStore } from "zustand/vanilla";
 import { panelShows } from "../../app/shell";
 import { commands } from "../../ipc/commands";
 import type { ProjectMap, Reach } from "../../ipc/types";
+import { store, stored } from "../../shared/storage.js";
 import { project } from "../project/store";
+
+const MODE = "sens.map.mode";
+
+export type MapMode = "list" | "graph";
 
 export const atlas = createStore(() => ({
   map: null as ProjectMap | null,
   fault: "",
   reach: null as Reach | null,
   unfolded: new Set<string>(),
+  mode: (stored(MODE, "list") === "graph" ? "graph" : "list") as MapMode,
+  picked: "",
 }));
 
 const set = atlas.setState;
@@ -57,6 +64,17 @@ export function unfoldRegion(name: string, open: boolean) {
   });
 }
 
+export function showMapAs(mode: MapMode) {
+  store(MODE, mode);
+  set({ mode });
+}
+
+export function pickArea(name: string) {
+  const picked = atlas.getState().picked === name ? "" : name;
+  set({ picked });
+  if (picked) unfoldRegion(picked, true);
+}
+
 export function refreshMapAfterTurn() {
   if (panelShows("map")) loadMap();
 }
@@ -64,6 +82,6 @@ export function refreshMapAfterTurn() {
 project.subscribe((now, before) => {
   if (now.work === before.work) return;
   lap += 1;
-  set({ map: null, fault: "", reach: null, unfolded: new Set() });
+  set({ map: null, fault: "", reach: null, unfolded: new Set(), picked: "" });
   if (panelShows("map")) loadMap();
 });

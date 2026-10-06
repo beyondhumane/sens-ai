@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
-import type { Reached, Region } from "../../ipc/types";
+import type { ProjectMap, Reached, Region } from "../../ipc/types";
 import { FileIcon } from "../../shared/FileIcon";
 import { parentOf, stem } from "../../shared/format.js";
 import { Icon } from "../../shared/Icon";
@@ -8,7 +8,8 @@ import { ICONS } from "../../shared/icons.js";
 import { showFile } from "../files/view";
 import { project } from "../project/store";
 import { t } from "./copy";
-import { atlas, inspect, leaveReach, unfoldRegion } from "./store";
+import { MapGraph } from "./MapGraph";
+import { atlas, inspect, leaveReach, showMapAs, unfoldRegion } from "./store";
 
 export function MapTally() {
   const map = useStore(atlas, (s) => s.map);
@@ -17,17 +18,33 @@ export function MapTally() {
   return <>{t.tally(map.regions.length, files)}</>;
 }
 
+export function MapModes() {
+  const mode = useStore(atlas, (s) => s.mode);
+  return (
+    <div className="segment">
+      <button type="button" aria-pressed={mode === "list"} onClick={() => showMapAs("list")}>
+        {t.list}
+      </button>
+      <button type="button" aria-pressed={mode === "graph"} onClick={() => showMapAs("graph")}>
+        {t.graphMode}
+      </button>
+    </div>
+  );
+}
+
 export function MapPanel() {
   const root = useStore(project, (s) => s.work);
   const map = useStore(atlas, (s) => s.map);
   const fault = useStore(atlas, (s) => s.fault);
   const reach = useStore(atlas, (s) => s.reach);
+  const mode = useStore(atlas, (s) => s.mode);
 
   if (fault) return <p className="none fault">{fault}</p>;
   if (!root) return <p className="none">{t.noFolder}</p>;
   if (!map) return <p className="none">{t.indexing}</p>;
   if (reach) return <ReachView />;
   if (!map.regions.length) return <p className="none">{t.empty}</p>;
+  if (mode === "graph") return <GraphView map={map} />;
   return (
     <>
       {map.central.length > 0 && (
@@ -49,7 +66,45 @@ export function MapPanel() {
           ))}
         </Part>
       )}
+      <Cycles map={map} />
     </>
+  );
+}
+
+function GraphView({ map }: { map: ProjectMap }) {
+  const picked = useStore(atlas, (s) => map.regions.find((region) => region.name === s.picked));
+  return (
+    <>
+      <MapGraph map={map} />
+      {picked ? (
+        <Part title={t.areas}>
+          <RegionRow region={picked} />
+        </Part>
+      ) : (
+        <p className="none">{t.pickArea}</p>
+      )}
+      <Cycles map={map} />
+    </>
+  );
+}
+
+function Cycles({ map }: { map: ProjectMap }) {
+  if (!map.cycles.length) return null;
+  return (
+    <Part title={t.cycles} said={t.cyclesSaid}>
+      {map.cycles.map((cycle) => (
+        <div className="map-cycle" key={cycle.join("~")}>
+          <span className="map-cycle-mark" aria-hidden="true">
+            <Icon svg={ICONS.cycle} />
+          </span>
+          <div className="map-cycle-files">
+            {cycle.map((path) => (
+              <FileRow key={path} path={path} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </Part>
   );
 }
 

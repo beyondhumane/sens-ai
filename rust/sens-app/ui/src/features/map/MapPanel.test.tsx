@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shell } from "../../app/shell";
 import { project } from "../project/store";
 import { MapPanel, MapTally } from "./MapPanel";
-import { atlas, loadMap } from "./store";
+import { atlas, loadMap, showMapAs } from "./store";
 
 const ipc = vi.hoisted(() => ({
   commands: { canonMap: vi.fn(), canonReach: vi.fn(), openFile: vi.fn() },
@@ -18,6 +18,8 @@ const MAP = {
   ],
   central: [{ path: "lib/format.ts", dependents: 4 }],
   strays: [{ path: "src/app.ts", area: "lib" }],
+  links: [{ from: "src", to: "lib", weight: 3 }],
+  cycles: [],
 };
 
 const REACH = {
@@ -77,6 +79,35 @@ describe("map panel", () => {
     expect(screen.getByText("Ningún test lo alcanza.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Volver al mapa" }));
     expect(screen.getByRole("region", { name: "Áreas" })).toBeTruthy();
+  });
+
+  it("draws the areas as a graph, and picking one lights its links and shows its files", async () => {
+    showMapAs("graph");
+    render(<MapPanel />);
+    await act(() => loadMap());
+    const graph = screen.getByRole("group", { name: "Grafo de las áreas" });
+    const src = within(graph).getByRole("button", { name: "src · 2 ficheros" });
+    expect(screen.getByText("Pulsa un área para ver sus ficheros y lo que usa.")).toBeTruthy();
+    fireEvent.keyDown(src, { key: "Enter" });
+    expect(src.getAttribute("aria-pressed")).toBe("true");
+    expect(graph.querySelector('.map-edge[data-lit="true"] title')?.textContent).toBe("src usa lib · 3 enlaces");
+    expect(screen.getByText("runner.ts", { selector: ".name" })).toBeTruthy();
+    fireEvent.click(src);
+    expect(src.getAttribute("aria-pressed")).toBe("false");
+    expect(JSON.parse(localStorage.getItem("sens.map.mode")!)).toBe("graph");
+    showMapAs("list");
+  });
+
+  it("marks the areas with an import cycle and lists the files in it", async () => {
+    ipc.commands.canonMap.mockResolvedValue({ ...MAP, cycles: [["src/app.ts", "src/runner.ts"]] });
+    showMapAs("graph");
+    render(<MapPanel />);
+    await act(() => loadMap());
+    expect(screen.getByRole("button", { name: "src · 2 ficheros · tiene un ciclo de imports" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "lib · 1 fichero" })).toBeTruthy();
+    const cycles = screen.getByRole("region", { name: "Ciclos de imports" });
+    expect(within(cycles).getAllByText(/\.ts$/, { selector: ".name" }).map((name) => name.textContent)).toEqual(["app.ts", "runner.ts"]);
+    showMapAs("list");
   });
 
   it("opens a file in Files and keeps the map as a tab", async () => {

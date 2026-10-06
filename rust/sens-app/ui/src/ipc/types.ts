@@ -266,10 +266,18 @@ export interface Region {
   exports: string[];
 }
 
+export interface AreaLink {
+  from: string;
+  to: string;
+  weight: number;
+}
+
 export interface ProjectMap {
   regions: Region[];
+  links: AreaLink[];
   central: { path: string; dependents: number }[];
   strays: { path: string; area: string }[];
+  cycles: string[][];
 }
 
 export interface Reached {
