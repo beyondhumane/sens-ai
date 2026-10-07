@@ -4,7 +4,7 @@ import type { ILink, ILinkProvider } from "@xterm/xterm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalAdopted, TerminalHeard } from "../../ipc/types";
 import { perform } from "../../app/acts";
-import { shell } from "../../app/shell";
+import { closeTools, panelShows, shell, showTool, toolsShown } from "../../app/shell";
 import { look } from "../../shared/look";
 import { focused } from "../panes/store";
 import { project } from "../project/store";
@@ -156,7 +156,8 @@ beforeEach(() => {
   consoles.setState(consoles.getInitialState(), true);
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   project.setState({ root: "C:/Proyectos/demo", work: "C:/Proyectos/demo" });
-  shell.setState({ ...shell.getInitialState(), toolsOpen: true, tool: "terminal" }, true);
+  shell.setState(shell.getInitialState(), true);
+  showTool("terminal");
 });
 
 afterEach(cleanup);
@@ -412,7 +413,7 @@ describe("the terminal's look", () => {
     found[0].activate(new MouseEvent("click"), found[0].text);
     expect(ipc.commands.openExternal).toHaveBeenCalledWith("https://example.com/docs");
     await act(async () => found[1].activate(new MouseEvent("click"), found[1].text));
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "files" });
+    expect(panelShows("files")).toBe(true);
     expect(ipc.commands.openFile).toHaveBeenCalledWith("C:/Proyectos/demo", "src/app.ts");
   });
 });
@@ -468,10 +469,10 @@ describe("the terminal panel", () => {
   });
 
   it("comes and goes with its shortcut", () => {
-    shell.setState({ toolsOpen: false });
+    closeTools();
     toggleConsole();
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "terminal" });
+    expect(panelShows("terminal")).toBe(true);
     toggleConsole();
-    expect(shell.getState().toolsOpen).toBe(false);
+    expect(toolsShown()).toBe(false);
   });
 });

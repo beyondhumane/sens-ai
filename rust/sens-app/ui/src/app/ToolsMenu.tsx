@@ -8,7 +8,7 @@ import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import type { Sheet } from "../shared/useSheet";
 import { t } from "./copy";
-import { panelShows, shell, showTool, TOOLS, type Tool } from "./shell";
+import { moveTool, panelShows, shell, showTool, TOOLS, type Dock, type Tool } from "./shell";
 
 export const TOOL_ICONS: Record<Tool, string> = {
   files: ICONS.files,
@@ -19,12 +19,14 @@ export const TOOL_ICONS: Record<Tool, string> = {
   tasks: ICONS.activity,
 };
 
-export function ToolsMenu({ sheet, id }: { sheet: Sheet; id: string }) {
+export const DOCK_ICONS: Record<Dock, string> = { start: ICONS.panelLeft, end: ICONS.panelRight, bottom: ICONS.panelBottom };
+
+export function ToolsMenu({ sheet, id, dock }: { sheet: Sheet; id: string; dock?: Dock }) {
   const pane = useStore(panes, () => focused());
   const dirty = useStore(pane.desk, (s) => s.repo?.dirty ?? 0);
   const running = useStore(tasks, () => runningTasks());
   const shells = useStore(consoles, () => runningConsoles());
-  useStore(shell, (s) => `${s.toolsOpen}/${s.tool}`);
+  useStore(shell, (s) => JSON.stringify([s.calm, s.open, s.shown, s.homes]));
 
   useLayoutEffect(() => {
     if (sheet.open && sheet.sheet.ref.current && sheet.anchor.current) anchorMenu(sheet.sheet.ref.current, sheet.anchor.current);
@@ -44,7 +46,8 @@ export function ToolsMenu({ sheet, id }: { sheet: Sheet; id: string }) {
           aria-checked={panelShows(tool)}
           onClick={() => {
             sheet.shut();
-            showTool(tool);
+            if (dock) moveTool(tool, dock);
+            else showTool(tool);
           }}
         >
           <span className="act-icon">

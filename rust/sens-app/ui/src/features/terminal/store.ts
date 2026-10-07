@@ -2,7 +2,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { IBufferCell, IBufferLine, ITheme, Terminal } from "@xterm/xterm";
 import { createStore } from "zustand/vanilla";
 import { answers } from "../../app/acts";
-import { closeTools, panelShows, showTool } from "../../app/shell";
+import { hideTool, panelShows, showTool } from "../../app/shell";
 import { commands, events } from "../../ipc/commands";
 import type { TerminalAdopted, TerminalHeard, TerminalReading } from "../../ipc/types";
 import { plain, tokensOf } from "../../shared/ansi";
@@ -334,7 +334,7 @@ export function enterConsole() {
 export function toggleConsole() {
   if (!panelShows("terminal")) return showTool("terminal");
   const inside = document.activeElement?.closest(".console-screen");
-  closeTools();
+  hideTool("terminal");
   if (inside) document.getElementById("task")?.focus();
 }
 

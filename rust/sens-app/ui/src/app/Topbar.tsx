@@ -14,12 +14,14 @@ import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import { Mark } from "../shared/Mark";
 import { useSheet } from "../shared/useSheet";
+import { ArrangeButton } from "./Arrangement";
 import { t } from "./copy";
 import { railFolded, shell, toggleRail } from "./shell";
 import { ToolsMenu } from "./ToolsMenu";
 
 export function Topbar() {
   const closed = useStore(shell, railFolded);
+  const end = useStore(shell, (s) => s.rail === "end");
   const label = closed ? t.showSidebar : t.hideSidebar;
   return (
     <header className="topbar">
@@ -33,7 +35,7 @@ export function Topbar() {
         aria-label={label}
         onClick={toggleRail}
       >
-        <Icon svg={closed ? ICONS.panelOpen : ICONS.panelClose} />
+        <Icon svg={end ? (closed ? ICONS.panelRightOpen : ICONS.panelRightClose) : closed ? ICONS.panelOpen : ICONS.panelClose} />
       </button>
       <div className="brand">
         <Mark size={18} micro />
@@ -88,11 +90,13 @@ export function Window({ tools = true }: { tools?: boolean }) {
     };
   }, []);
 
+  const calm = useStore(shell, (s) => s.calm);
   const grow = wide ? t.restore : t.maximize;
   return (
     <div className="win" id="win" data-max={String(wide)}>
       {tools && <FocusButton />}
-      {tools && <ToolsButton />}
+      {tools && <ArrangeButton />}
+      {tools && !calm && <ToolsButton />}
       <button id="win-min" title={t.minimize} aria-label={t.minimize} onClick={() => frame.minimize()}>
         <Icon svg={ICONS.minimize} />
       </button>

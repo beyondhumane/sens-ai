@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { shell } from "../../app/shell";
+import { panelShows, shell, showTool } from "../../app/shell";
 import { showLanguage } from "../../shared/i18n";
 import { viewer } from "../files/view";
 import { noteEdit, project } from "../project/store";
@@ -27,7 +27,6 @@ const DIFF = [
 
 let header: HTMLElement;
 
-// Each panel with its header's count, as the tool panel draws them.
 const showChanges = () => {
   render(<ChangeTotals />, { container: header });
   return render(<ChangesPanel />);
@@ -46,7 +45,8 @@ beforeEach(() => {
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.commands.changes.mockResolvedValue({ diff: DIFF, fresh: ["notes.md"] });
   ipc.commands.openFile.mockResolvedValue({ kind: "text", text: "a\nb\nc" });
-  shell.setState({ ...shell.getInitialState(), toolsOpen: true, tool: "changes" }, true);
+  shell.setState(shell.getInitialState(), true);
+  showTool("changes");
 });
 
 afterEach(() => {
@@ -115,7 +115,7 @@ describe("changes panel", () => {
     act(() => noteEdit({ path: "src/app.js", lines: [1], plus: 1, minus: 0 }));
     expect(row("app.js").dataset.touched).toBe("true");
     await act(async () => fireEvent.click(row("app.js").querySelector(".jump")!));
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "files" });
+    expect(panelShows("files")).toBe(true);
     await act(async () => {});
     expect(viewer.getState()).toMatchObject({ title: "src/app.js", opened: "src/app.js" });
   });

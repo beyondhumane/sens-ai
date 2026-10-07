@@ -14,12 +14,15 @@ import { t } from "./me.copy";
 
 const shortcuts = () => [
   ["Enter", t.send],
-  [`${t.shift}+Enter`, t.newLine],
+  [`${shared.shift}+Enter`, t.newLine],
   [`${shared.ctrl}+V`, t.paste],
   [`${shared.ctrl}+B`, t.sidebar],
   [`${shared.ctrl}+N`, shared.newSession],
   [`${shared.ctrl}+O`, t.openFolder],
   [`${shared.ctrl}+\` / ${shared.ctrl}+Ñ`, t.terminal],
+  [`${shared.ctrl}+${shared.shift}+L`, t.arrange],
+  [`${shared.ctrl}+${shared.shift}+0`, t.calm],
+  [`${shared.ctrl}+${shared.shift}+1…9`, t.kept],
   [`${shared.ctrl}+,`, t.settings],
   ["Esc", shared.close],
 ];
@@ -32,8 +35,6 @@ export const initials = (name: string) =>
     .join("")
     .toUpperCase();
 
-// The rail's foot: who uses Sens, and a menu to settings, the keyboard
-// shortcuts and what Sens is.
 export function Me() {
   const name = useStore(profile, (s) => s.person.name.trim());
   const fault = useStore(profile, (s) => s.fault);

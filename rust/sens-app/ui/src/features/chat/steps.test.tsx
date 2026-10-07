@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolDetail, ToolInput } from "../../ipc/types";
-import { shell } from "../../app/shell";
+import { panelShows, shell } from "../../app/shell";
 import { showLanguage } from "../../shared/i18n";
 import { paintCode } from "../../shared/syntax/code";
 import { paint } from "../../shared/syntax/paint";
@@ -108,7 +108,7 @@ describe("a command Claude ran", () => {
     fireEvent.click(out.querySelector("a")!);
     expect(ipc.commands.openExternal).toHaveBeenCalledWith("https://doc.rust-lang.org/error_codes");
     await act(async () => fireEvent.click(out.querySelector(".place")!));
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "files" });
+    expect(panelShows("files")).toBe(true);
     expect(ipc.commands.openFile).toHaveBeenCalledWith("C:/demo", "src/main.rs");
   });
 

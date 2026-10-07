@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createStore } from "zustand/vanilla";
 import { focusPane, openBeside } from "../../app/session";
+import { lift as liftPointer } from "../../shared/lift";
 import { holdStill } from "./motion";
 import { LEAST_WIDTH, paneOf, panes, sideOf, type Side } from "./store";
 
@@ -24,7 +25,6 @@ export const drag = createStore(() => ({
   from: { x: 0, y: 0 },
 }));
 
-const LIFT = 5;
 const SETTLE = 240;
 
 function targetAt(x: number, y: number, dragged: Dragged): Target | null {
@@ -42,11 +42,6 @@ function targetAt(x: number, y: number, dragged: Dragged): Target | null {
 
 const rest = () => drag.setState({ dragged: null, target: null, phase: "idle" });
 
-function swallow(event: MouseEvent) {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
 function drop(dragged: Dragged, target: Target) {
   drag.setState({ phase: "dropping" });
   setTimeout(rest, SETTLE);
@@ -60,49 +55,16 @@ function drop(dragged: Dragged, target: Target) {
 }
 
 export function lift(event: ReactPointerEvent<HTMLElement>, dragged: Dragged) {
-  if (event.button !== 0) return;
-  const start = { x: event.clientX, y: event.clientY };
   const origin = event.currentTarget.getBoundingClientRect();
-  let lifted = false;
-
-  const move = (moved: PointerEvent) => {
-    if (!lifted) {
-      if (Math.hypot(moved.clientX - start.x, moved.clientY - start.y) < LIFT) return;
-      lifted = true;
-      document.documentElement.dataset.dragging = "session";
-      window.addEventListener("click", swallow, true);
-      drag.setState({ dragged, phase: "dragging", from: { x: origin.left, y: origin.top } });
-    }
-    drag.setState({ x: moved.clientX, y: moved.clientY, target: targetAt(moved.clientX, moved.clientY, dragged) });
-  };
-
-  const end = (commit: boolean) => {
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", cancel);
-    window.removeEventListener("keydown", key, true);
-    window.removeEventListener("blur", cancel);
-    if (!lifted) return;
-    delete document.documentElement.dataset.dragging;
-    setTimeout(() => window.removeEventListener("click", swallow, true));
-    const { target } = drag.getState();
-    if (commit && target && target.kind !== "narrow") return drop(dragged, target);
-    drag.setState({ phase: "cancelling" });
-    setTimeout(rest, SETTLE);
-  };
-
-  const up = () => end(true);
-  const cancel = () => end(false);
-  const key = (pressed: KeyboardEvent) => {
-    if (pressed.key !== "Escape") return;
-    pressed.preventDefault();
-    pressed.stopPropagation();
-    cancel();
-  };
-
-  window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
-  window.addEventListener("pointercancel", cancel);
-  window.addEventListener("keydown", key, true);
-  window.addEventListener("blur", cancel);
+  liftPointer(event, {
+    kind: "session",
+    lifted: () => drag.setState({ dragged, phase: "dragging", from: { x: origin.left, y: origin.top } }),
+    moved: (x, y) => drag.setState({ x, y, target: targetAt(x, y, dragged) }),
+    ended: (commit) => {
+      const { target } = drag.getState();
+      if (commit && target && target.kind !== "narrow") return void drop(dragged, target);
+      drag.setState({ phase: "cancelling" });
+      setTimeout(rest, SETTLE);
+    },
+  });
 }
