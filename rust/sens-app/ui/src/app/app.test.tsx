@@ -7,7 +7,7 @@ import { App } from "./App";
 import { dialog } from "./modal";
 import { boot, draft, resume, showView } from "./session";
 import { arrangements } from "./arrangements";
-import { panelShows, readArrangement, shell, showTool } from "./shell";
+import { closeTab, moveTool, pairTool, panelShows, readArrangement, shell, showTool } from "./shell";
 
 const ipc = vi.hoisted(() => ({
   commands: new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 const body = () => document.getElementById("body")!;
-const endTabs = () => document.querySelector<HTMLElement>("#dock-end .tool-tabs")!;
+const endTabs = () => document.querySelector<HTMLElement>('#dock-end .slot[data-slot="main"]')!;
 const kept = () => JSON.parse(localStorage.getItem("sens.arrangement")!);
 
 describe("the shell", () => {
@@ -270,5 +270,42 @@ describe("the arrangement", () => {
   it("reads what an older version kept", () => {
     const arrangement = readArrangement({ railClosed: true, tabs: ["map", "nope", "map"], sizes: { "--end-width": 500, "--x": -1 }, shown: { end: "files" }, open: { end: true } });
     expect(arrangement).toMatchObject({ railClosed: true, tabs: ["map"], sizes: { "--end-width": 500 }, shown: { end: "map", bottom: null }, open: { end: true } });
+  });
+
+  it("shows two tools of one panel at once, and widens the second back to the only one", () => {
+    render(<App />);
+    act(() => showTool("map"));
+    act(() => showTool("files"));
+    fireEvent.click(within(endTabs()).getByRole("button", { name: "Ver dos a la vez" }));
+    expect(shell.getState()).toMatchObject({ shown: { end: "files" }, paired: { end: "map" } });
+    expect(panelShows("map") && panelShows("files")).toBe(true);
+    expect(tabsOf("end")).toEqual(["Ficheros"]);
+    expect(document.querySelector('#dock-end .slot[data-slot="pair"] .tool[data-tool="map"]')).toBeTruthy();
+    expect(screen.getByRole("separator", { name: "Tamaño de la división" }).getAttribute("aria-orientation")).toBe("horizontal");
+    expect(kept().paired.end).toBe("map");
+    fireEvent.click(screen.getByRole("button", { name: "Ver solo esta" }));
+    expect(shell.getState()).toMatchObject({ shown: { end: "map" }, paired: { end: null } });
+    expect(panelShows("files")).toBe(false);
+  });
+
+  it("splits the bottom panel side by side, and closing the first keeps the second", () => {
+    render(<App />);
+    act(() => showTool("terminal"));
+    act(() => pairTool("tasks", "bottom"));
+    expect(shell.getState()).toMatchObject({ shown: { bottom: "terminal" }, paired: { bottom: "tasks" }, homes: { tasks: "bottom" } });
+    expect(screen.getByRole("separator", { name: "Tamaño de la división" }).getAttribute("aria-orientation")).toBe("vertical");
+    act(() => closeTab("terminal"));
+    expect(shell.getState()).toMatchObject({ shown: { bottom: "tasks" }, paired: { bottom: null }, open: { bottom: true } });
+  });
+
+  it("forgets a pair whose tool moved away, and never pairs a tool with itself", () => {
+    act(() => showTool("map"));
+    act(() => pairTool("files", "end"));
+    act(() => moveTool("files", "start"));
+    expect(shell.getState()).toMatchObject({ shown: { end: "map", start: "files" }, paired: { end: null } });
+    act(() => pairTool("map", "end"));
+    expect(shell.getState().paired.end).toBeNull();
+    expect(readArrangement({ tabs: ["map", "files"], shown: { end: "map" }, paired: { end: "map" }, open: { end: true } }).paired.end).toBeNull();
+    expect(readArrangement({ tabs: ["map"], shown: { end: "map" }, paired: { end: "files" }, open: { end: true } }).paired.end).toBeNull();
   });
 });

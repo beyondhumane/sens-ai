@@ -99,6 +99,45 @@ describe("map panel", () => {
     showMapAs("list");
   });
 
+  it("tells what a picked area uses and what uses it, and walks to either", async () => {
+    showMapAs("graph");
+    render(<MapPanel />);
+    await act(() => loadMap());
+    fireEvent.click(screen.getByRole("button", { name: "src · 2 ficheros" }));
+    const src = screen.getByRole("region", { name: "src" });
+    expect(within(src).getByText("Usa")).toBeTruthy();
+    expect(within(src).queryByText("La usan")).toBeNull();
+    fireEvent.click(within(src).getByRole("button", { name: "src usa lib · 3 enlaces" }));
+    expect(atlas.getState().picked).toBe("lib");
+    const lib = screen.getByRole("region", { name: "lib" });
+    expect(within(lib).getByText("La usan")).toBeTruthy();
+    expect(within(lib).getByRole("button", { name: "src usa lib · 3 enlaces" })).toBeTruthy();
+    expect(document.querySelector('.map-edge[data-way="in"]')).toBeTruthy();
+    showMapAs("list");
+  });
+
+  it("zooms with its buttons and puts moved areas back", async () => {
+    showMapAs("graph");
+    render(<MapPanel />);
+    await act(() => loadMap());
+    const zoom = () => document.querySelector(".map-zoom")!.textContent;
+    const before = zoom();
+    fireEvent.click(screen.getByRole("button", { name: "Acercar" }));
+    expect(zoom()).not.toBe(before);
+    expect(screen.queryByRole("button", { name: "Recolocar las áreas" })).toBeNull();
+    const stage = document.querySelector<HTMLElement>(".map-stage")!;
+    const node = screen.getByRole("button", { name: "lib · 1 fichero" });
+    fireEvent.pointerDown(node, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+    stage.setPointerCapture = () => {};
+    fireEvent.pointerMove(stage, { clientX: 80, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(stage, { pointerId: 1 });
+    fireEvent.click(node);
+    expect(atlas.getState().picked).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Recolocar las áreas" }));
+    expect(screen.queryByRole("button", { name: "Recolocar las áreas" })).toBeNull();
+    showMapAs("list");
+  });
+
   it("marks the areas with an import cycle and lists the files in it", async () => {
     ipc.commands.canonMap.mockResolvedValue({ ...MAP, cycles: [["src/app.ts", "src/runner.ts"]] });
     showMapAs("graph");

@@ -12,6 +12,7 @@ import { useSeen } from "../../shared/useSeen";
 import { project, type Edits } from "../project/store";
 import { t } from "./copy";
 import { setMode, textOf, viewer, viewOf, type Body } from "./view";
+import { Tally } from "../../shared/Tally";
 
 export function Viewer() {
   const title = useStore(viewer, (s) => s.title);
@@ -43,12 +44,7 @@ export function ViewerHead() {
         {title}
       </span>
       <span className="marks">
-        {edits && (
-          <>
-            <span className="plus">+{edits.plus}</span>
-            <span className="minus">−{edits.minus}</span>
-          </>
-        )}
+        {edits && <Tally plus={edits.plus} minus={edits.minus} />}
       </span>
     </>
   );

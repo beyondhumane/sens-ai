@@ -310,7 +310,7 @@ describe("the chat", () => {
     expect(bash.querySelector(".terminal-output")?.textContent).toBe("1 failed\nboom");
     expect(bash.querySelector(".terminal-foot")?.textContent).toBe("Terminó con error");
 
-    expect(edit.querySelector(".step-meta")?.textContent).toBe("+1 −1");
+    expect([...edit.querySelectorAll(".step-meta :is(.plus, .minus)")].map((one) => one.textContent)).toEqual(["+1", "−1"]);
     expect(edit.querySelector(".diff")).toBeNull();
     fireEvent.click(edit.querySelector("summary")!);
     expect([...edit.querySelectorAll(".diff .row")].map((row) => row.className)).toEqual(["row", "row del", "row add"]);

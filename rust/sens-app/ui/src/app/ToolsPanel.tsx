@@ -15,40 +15,73 @@ import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import { useSheet } from "../shared/useSheet";
 import { t } from "./copy";
-import { closeDock, closeTab, shell, showTool, tabsIn, toggleTree, TOOLS, visibleIn, type Dock, type Tool } from "./shell";
+import { closeDock, closeTab, mainTabsIn, shell, showTool, splitDock, toggleTree, TOOLS, visibleIn, widenPaired, type Dock, type Tool } from "./shell";
 import { Splitter } from "./Splitter";
 import { liftTool, moveByKey, toolDrag } from "./toolDrag";
 import { TOOL_ICONS, ToolsMenu } from "./ToolsMenu";
 
-const VIEWS: Record<Tool, () => ReactNode> = { files: FilesView, changes: ChangesView, map: MapView, web: WebView, terminal: TerminalView, tasks: TasksView };
+type View = (props: { hidden: boolean }) => ReactNode;
 
-export function ToolsPanel({ dock, pane }: { dock: Dock; pane?: RefObject<HTMLElement | null> }) {
+const VIEWS: Record<Tool, View> = { files: FilesView, changes: ChangesView, map: MapView, web: WebView, terminal: TerminalView, tasks: TasksView };
+
+const PAIR_SIZES: Record<Dock, string> = { start: "--pair-start", end: "--pair-end", bottom: "--pair-bottom" };
+
+export function ToolsPanel({ dock, pane }: { dock: Dock; pane: RefObject<HTMLElement | null> }) {
   const open = useStore(shell, (s) => visibleIn(s, dock) !== null);
   const shown = useStore(shell, (s) => s.shown[dock]);
+  const paired = useStore(shell, (s) => s.paired[dock]);
   const homes = useStore(shell, (s) => s.homes);
+  const size = useStore(shell, (s) => s.sizes[PAIR_SIZES[dock]]);
+  const second = useRef<HTMLDivElement>(null);
+  const tools = TOOLS.filter((tool) => homes[tool] === dock && tool !== paired);
+  const Paired = paired && VIEWS[paired];
   return (
-    <aside className="code dock" id={`dock-${dock}`} data-dock={dock} data-tool={shown ?? undefined} aria-label={t.dock[dock]} ref={pane} inert={!open}>
-      <ToolTabs dock={dock} />
-      {TOOLS.filter((tool) => homes[tool] === dock).map((tool) => {
-        const View = VIEWS[tool];
-        return <View key={tool} />;
-      })}
+    <aside
+      className="code dock"
+      id={`dock-${dock}`}
+      data-dock={dock}
+      data-tool={shown ?? undefined}
+      data-paired={paired ?? undefined}
+      aria-label={t.dock[dock]}
+      ref={pane}
+      inert={!open}
+      style={{ [PAIR_SIZES[dock]]: size ? `${size}px` : undefined } as CSSProperties}
+    >
+      <div className="slot" data-slot="main">
+        <div className="slot-grid">
+          <ToolTabs dock={dock} />
+          <MainActs dock={dock} />
+          {tools.map((tool) => {
+            const View = VIEWS[tool];
+            return <View key={tool} hidden={tool !== shown} />;
+          })}
+        </div>
+      </div>
+      {Paired && (
+        <>
+          <Splitter id={`${dock}-pair-split`} className="seam pair-split" label={t.pairSize} name={PAIR_SIZES[dock]} host={pane} pane={second} grow={-1} axis={dock === "bottom" ? "x" : "y"} />
+          <div className="slot" data-slot="pair" ref={second}>
+            <div className="slot-grid">
+              <PairHead dock={dock} tool={paired} />
+              <Paired hidden={false} />
+            </div>
+          </div>
+        </>
+      )}
     </aside>
   );
 }
 
 function ToolTabs({ dock }: { dock: Dock }) {
-  const all = useStore(shell, (s) => s.tabs);
-  const homes = useStore(shell, (s) => s.homes);
+  const tabs = useStore(shell, (s) => mainTabsIn(s, dock).join());
   const shown = useStore(shell, (s) => s.shown[dock]);
   const lifted = useStore(toolDrag, (s) => s.tool);
-  const aimed = useStore(toolDrag, (s) => (s.on === "window" && s.target?.dock === dock ? s.target.before : undefined));
-  const tabs = tabsIn({ tabs: all, homes }, dock);
+  const aimed = useStore(toolDrag, (s) => (s.on === "window" && s.target?.dock === dock && !s.target.pair ? s.target.before : undefined));
   const sheet = useSheet();
   return (
     <div className="tool-tabs">
       <div className="tool-tab-list" role="tablist" aria-label={t.dock[dock]} data-tab-strip={dock} data-aimed={aimed === null ? "end" : undefined}>
-        {tabs.map((tool) => (
+        {(tabs ? (tabs.split(",") as Tool[]) : []).map((tool) => (
           <div className="tool-tab" key={tool} data-tab={tool} data-aimed={aimed === tool ? "true" : undefined} data-lifted={lifted === tool ? "true" : undefined}>
             <button
               type="button"
@@ -70,30 +103,73 @@ function ToolTabs({ dock }: { dock: Dock }) {
             </button>
           </div>
         ))}
-        <button type="button" className="icon-btn tool-add" ref={sheet.anchor} title={t.openTool} aria-label={t.openTool} aria-haspopup="menu" aria-expanded={sheet.open} onClick={sheet.toggle}>
+        <button type="button" className="icon-btn quiet-btn tool-add" ref={sheet.anchor} title={t.openTool} aria-label={t.openTool} aria-haspopup="menu" aria-expanded={sheet.open} onClick={sheet.toggle}>
           <Icon svg={ICONS.plus} />
         </button>
         {createPortal(<ToolsMenu sheet={sheet} id={`tab-menu-${dock}`} dock={dock} />, document.body)}
       </div>
-      <button className="icon-btn shut-tool" title={shared.close} aria-label={shared.close} onClick={() => closeDock(dock)}>
+    </div>
+  );
+}
+
+function MainActs({ dock }: { dock: Dock }) {
+  const splits = useStore(shell, (s) => !s.paired[dock] && mainTabsIn(s, dock).length > 1);
+  return (
+    <div className="slot-acts">
+      {splits && (
+        <button className="icon-btn quiet-btn split-dock" title={t.split} aria-label={t.split} onClick={() => splitDock(dock)}>
+          <Icon svg={dock === "bottom" ? ICONS.splitView : ICONS.splitRows} />
+        </button>
+      )}
+      <button className="icon-btn quiet-btn shut-tool" title={shared.close} aria-label={shared.close} onClick={() => closeDock(dock)}>
         <Icon svg={ICONS.close} />
       </button>
     </div>
   );
 }
 
+function PairHead({ dock, tool }: { dock: Dock; tool: Tool }) {
+  const lifted = useStore(toolDrag, (s) => s.tool === tool);
+  return (
+    <>
+      <div className="tool-tabs">
+        <div className="tool-tab pair-title" data-lifted={lifted ? "true" : undefined}>
+          <button
+            type="button"
+            className="tool-pick"
+            aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowDown"
+            title={t.moveHint}
+            onPointerDown={(event) => liftTool(event, tool, "window")}
+            onKeyDown={(event) => moveByKey(event, tool)}
+          >
+            <Icon svg={TOOL_ICONS[tool]} />
+            <span>{t.tool[tool]}</span>
+          </button>
+        </div>
+      </div>
+      <div className="slot-acts">
+        <button className="icon-btn quiet-btn widen-pair" title={t.widen} aria-label={t.widen} onClick={() => widenPaired(dock)}>
+          <Icon svg={ICONS.widen} />
+        </button>
+        <button className="icon-btn quiet-btn" title={t.closeTab(t.tool[tool])} aria-label={t.closeTab(t.tool[tool])} onClick={() => closeTab(tool)}>
+          <Icon svg={ICONS.close} />
+        </button>
+      </div>
+    </>
+  );
+}
+
 function Refresh({ id, then }: { id: string; then: () => unknown }) {
   return (
-    <button className="icon-btn" id={id} title={t.refresh} aria-label={t.refresh} onClick={() => void then()}>
+    <button className="icon-btn quiet-btn" id={id} title={t.refresh} aria-label={t.refresh} onClick={() => void then()}>
       <Icon svg={ICONS.refresh} />
     </button>
   );
 }
 
-function Section({ tool, head, tools, children }: { tool: Tool; head: ReactNode; tools?: ReactNode; children: ReactNode }) {
-  const shown = useStore(shell, (s) => s.shown[s.homes[tool]] === tool);
+function Section({ tool, hidden, head, tools, children }: { tool: Tool; hidden: boolean; head?: ReactNode; tools?: ReactNode; children: ReactNode }) {
   return (
-    <section className="tool" id={`tool-${tool}`} data-tool={tool} role="tabpanel" aria-label={t.tool[tool]} hidden={!shown}>
+    <section className="tool" id={`tool-${tool}`} data-tool={tool} role="tabpanel" aria-label={t.tool[tool]} hidden={hidden}>
       <div className="code-head">
         {head}
         {tools && <div className="code-tools">{tools}</div>}
@@ -103,33 +179,23 @@ function Section({ tool, head, tools, children }: { tool: Tool; head: ReactNode;
   );
 }
 
-function Named({ tool, children }: { tool: Tool; children: ReactNode }) {
+function FilesView({ hidden }: { hidden: boolean }) {
   return (
-    <>
-      <span className="tool-name">{t.tool[tool]}</span>
-      {children}
-    </>
-  );
-}
-
-function FilesView() {
-  return (
-    <Section tool="files" head={<ViewerHead />} tools={<FilesTools />}>
+    <Section tool="files" hidden={hidden} head={<ViewerHead />} tools={<FilesTools />}>
       <Files />
     </Section>
   );
 }
 
-function ChangesView() {
+function ChangesView({ hidden }: { hidden: boolean }) {
   return (
     <Section
       tool="changes"
+      hidden={hidden}
       head={
-        <Named tool="changes">
-          <span className="marks" id="change-marks">
-            <ChangeTotals />
-          </span>
-        </Named>
+        <span className="marks" id="change-marks">
+          <ChangeTotals />
+        </span>
       }
       tools={<Refresh id="changes-reload" then={loadChanges} />}
     >
@@ -140,16 +206,15 @@ function ChangesView() {
   );
 }
 
-function MapView() {
+function MapView({ hidden }: { hidden: boolean }) {
   return (
     <Section
       tool="map"
+      hidden={hidden}
       head={
-        <Named tool="map">
-          <span className="tool-tally" id="map-tally">
-            <MapTally />
-          </span>
-        </Named>
+        <span className="tool-tally" id="map-tally">
+          <MapTally />
+        </span>
       }
       tools={
         <>
@@ -158,16 +223,14 @@ function MapView() {
         </>
       }
     >
-      <div className="tool-body map" id="map" aria-live="polite">
-        <MapPanel />
-      </div>
+      <MapPanel />
     </Section>
   );
 }
 
-function WebView() {
+function WebView({ hidden }: { hidden: boolean }) {
   return (
-    <Section tool="web" head={<Address />} tools={<Outside />}>
+    <Section tool="web" hidden={hidden} head={<Address />} tools={<Outside />}>
       <div className="site" id="site">
         <Web />
       </div>
@@ -175,24 +238,23 @@ function WebView() {
   );
 }
 
-function TerminalView() {
+function TerminalView({ hidden }: { hidden: boolean }) {
   return (
-    <Section tool="terminal" head={<ConsoleTabs />} tools={<ConsoleTools />}>
+    <Section tool="terminal" hidden={hidden} head={<ConsoleTabs />} tools={<ConsoleTools />}>
       <ConsolePanel />
     </Section>
   );
 }
 
-function TasksView() {
+function TasksView({ hidden }: { hidden: boolean }) {
   return (
     <Section
       tool="tasks"
+      hidden={hidden}
       head={
-        <Named tool="tasks">
-          <span className="tool-tally" id="task-tally">
-            <TaskTally />
-          </span>
-        </Named>
+        <span className="tool-tally" id="task-tally">
+          <TaskTally />
+        </span>
       }
     >
       <div className="tool-body" id="tasks">
@@ -207,7 +269,7 @@ function FilesTools() {
   return (
     <>
       <ViewerModes />
-      <button className="icon-btn" id="toggle-tree" title={t.fileTree} aria-pressed={shown} onClick={toggleTree}>
+      <button className="icon-btn quiet-btn" id="toggle-tree" title={t.fileTree} aria-pressed={shown} onClick={toggleTree}>
         <Icon svg={ICONS.treeLines} />
       </button>
     </>

@@ -4,7 +4,7 @@ import { project } from "../features/project/store";
 import { consoles, openConsole } from "../features/terminal/store";
 import { aim, goBack, goForward, pickWidth, reloadSite, web } from "../features/web/store";
 import { answers, onScreen } from "./acts";
-import { closeTools, DOCKS, shell, showTool, visibleIn, type Dock, type Tool } from "./shell";
+import { closeTools, DOCKS, pairedIn, shell, showTool, visibleIn, type Dock, type Tool } from "./shell";
 
 interface Here {
   session: string;
@@ -87,10 +87,7 @@ function panelsOf() {
   const state = shell.getState();
   const { title } = viewer.getState();
   const said = (tool: Tool) => (tool === "files" ? `${title ? `, showing ${title}` : ", no file open"}${state.treeShown ? ", with the tree" : ""}` : "");
-  const shown = DOCKS.flatMap((dock) => {
-    const tool = visibleIn(state, dock);
-    return tool ? [`${tool} ${PLACES[dock]}${said(tool)}`] : [];
-  });
+  const shown = DOCKS.flatMap((dock) => [visibleIn(state, dock), pairedIn(state, dock)].flatMap((tool) => (tool ? [`${tool} ${PLACES[dock]}${said(tool)}`] : [])));
   if (state.calm) return "Only the conversation is on screen; the panels are hidden.";
   return shown.length ? `Panels: ${shown.join("; ")}.` : "The panels are closed.";
 }
