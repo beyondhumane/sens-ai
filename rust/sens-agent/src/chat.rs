@@ -290,6 +290,8 @@ pub struct Settings {
     pub cwd: Option<PathBuf>,
     #[serde(skip)]
     pub canon: Canon,
+    #[serde(skip)]
+    pub briefing: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -312,6 +314,7 @@ impl Default for Settings {
             env: BTreeMap::new(),
             cwd: None,
             canon: Canon::default(),
+            briefing: String::new(),
         }
     }
 }
@@ -1085,14 +1088,15 @@ pub fn arguments(settings: &Settings, id: &str, resume: bool) -> Vec<String> {
 
 pub fn greeting(settings: &Settings, card: Option<&str>) -> Value {
     let mut request = json!({ "subtype": "initialize", "hooks": null });
-    if settings.canon != Canon::Off {
-        request["appendSystemPrompt"] = json!(sens_canon::CANON);
-    }
-    if settings.canon == Canon::Full {
+    let full = settings.canon == Canon::Full;
+    if full {
         request["hooks"] = circuit::hooks();
-        if let Some(card) = card {
-            request["appendSystemPrompt"] = json!(format!("{}\n\n{card}", sens_canon::CANON));
-        }
+    }
+    let briefing = Some(settings.briefing.as_str()).filter(|briefing| !briefing.is_empty());
+    let canon = (settings.canon != Canon::Off).then_some(sens_canon::CANON);
+    let prompt: Vec<&str> = [briefing, canon, card.filter(|_| full)].into_iter().flatten().collect();
+    if !prompt.is_empty() {
+        request["appendSystemPrompt"] = json!(prompt.join("\n\n"));
     }
     json!({ "type": "control_request", "request_id": GREETING, "request": request })
 }
@@ -1817,7 +1821,7 @@ mod tests {
     }
 
     #[test]
-    fn the_canon_travels_in_the_greeting_unless_it_is_off_and_only_full_registers_the_circuit() {
+    fn the_briefing_leads_the_greeting_the_canon_follows_unless_it_is_off_and_only_full_registers_the_circuit() {
         let greeted = |canon, card| greeting(&Settings { canon, ..opus("default") }, card)["request"].clone();
         assert_eq!(greeted(Canon::Off, None)["appendSystemPrompt"], Value::Null);
         assert_eq!(greeted(Canon::Off, None)["hooks"], Value::Null);
@@ -1827,6 +1831,10 @@ mod tests {
         assert!(full["appendSystemPrompt"].as_str().unwrap().ends_with("## This project"));
         assert_eq!(full["hooks"]["Stop"][0]["hookCallbackIds"][0], circuit::CLOSE);
         assert_eq!(full["hooks"]["PreToolUse"][0]["matcher"], "Write|Edit|NotebookEdit");
+        let briefed = |canon| greeting(&Settings { canon, briefing: "## Sens's console".into(), ..opus("default") }, Some("## This project"))["request"]["appendSystemPrompt"].clone();
+        assert_eq!(briefed(Canon::Off), json!("## Sens's console"));
+        assert_eq!(briefed(Canon::Instructions), json!(format!("## Sens's console\n\n{}", sens_canon::CANON)));
+        assert_eq!(briefed(Canon::Full), json!(format!("## Sens's console\n\n{}\n\n## This project", sens_canon::CANON)));
         let barred = |canon| arguments(&Settings { canon, ..opus("default") }, "x", false).windows(2).any(|pair| pair == ["--disallowedTools", circuit::BARRED_TOOLS]);
         assert!(barred(Canon::Full) && !barred(Canon::Instructions) && !barred(Canon::Off));
     }
