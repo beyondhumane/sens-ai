@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolDetail, ToolInput } from "../../ipc/types";
@@ -173,6 +172,14 @@ describe("a step", () => {
     expect(read.className).toBe("step empty");
     fireEvent.click(read.querySelector("summary")!);
     expect(read.open).toBe(false);
+  });
+
+  it("says its state in words, not only with the dot", () => {
+    const stateOf = (state: StepPart["state"]) => closed(step("Bash", { command: "npm test" }, "", null, state)).querySelector(".step-state .spoken")?.textContent;
+    expect(stateOf("running")).toBe("En curso");
+    expect(stateOf("done")).toBe("Hecho");
+    expect(stateOf("failed")).toBe("Con error");
+    expect(stateOf("stopped")).toBe("Detenido");
   });
 });
 

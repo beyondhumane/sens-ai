@@ -71,7 +71,14 @@ function Stage() {
   const finished = useStore(welcome, (s) => s.finished);
   const busy = useStore(settings, (s) => Boolean(s.progress) || s.connecting);
   return (
-    <div className="welcome stage" role="dialog" aria-modal="true" aria-label={t.dialog} data-still={still ? "true" : undefined}>
+    <div
+      className="welcome stage"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.dialog}
+      data-still={still ? "true" : undefined}
+      onKeyDown={(event) => event.key === "Escape" && step !== "ready" && skip()}
+    >
       <header className="bar">
         <b className="wordmark">sens</b>
         <Progress step={step} />

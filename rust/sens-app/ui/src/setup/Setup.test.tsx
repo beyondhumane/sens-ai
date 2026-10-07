@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { languageNow, showLanguage } from "../shared/i18n";
@@ -290,6 +289,18 @@ describe("the installer", () => {
     expect(screen.getByRole("status").textContent).toBe("Copiando ficheros…");
     await act(async () => finish());
     await vi.waitFor(() => expect(shown()).toBe("done"), { timeout: 5000 });
+  });
+
+  it("shows the percentage as it is, without counting up to it, when Windows asks for less motion", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    await open();
+    fake.install.mockImplementation(() => new Promise<void>(() => fake.progress({ step: "extract", progress: 0.4, line: "Descomprimiendo sens-app.exe" })));
+    await press(/Continuar/);
+    await press(/Empezar/);
+    await press(/Instalar Sens/);
+    await vi.waitFor(() => expect(shown()).toBe("busy"), { timeout: 5000 });
+    expect(document.querySelector(".percent")?.textContent).toBe("40 %");
+    vi.stubGlobal("matchMedia", undefined);
   });
 
   it("stays until Sens is on screen, and says why when it cannot open it", async () => {

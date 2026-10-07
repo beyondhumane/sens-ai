@@ -1,10 +1,11 @@
+import { calm } from "../../shared/calm";
+
 const SLIDE = 260;
 
 let still = false;
 
 export const holdStill = () => void (still = true);
 
-const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const host = () => document.querySelector<HTMLElement>(".panes");
 
 export function slideShare(from: number, to: number) {

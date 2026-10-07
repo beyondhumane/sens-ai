@@ -23,6 +23,7 @@ export interface Chat {
   stopping: boolean;
   hint: string;
   replaying: boolean;
+  spoken: { said: string; nth: number } | null;
   ended: number;
   context: { used: number; window: number } | null;
   ranOn: string;
@@ -78,7 +79,7 @@ export function newPane(root = ""): Pane {
   made += 1;
   return {
     id: `pane-${made}`,
-    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, ended: 0, context: null, ranOn: "", ranWith: null })),
+    chat: createStore<Chat>(() => ({ turns: [], busy: false, stopping: false, hint: "", replaying: false, spoken: null, ended: 0, context: null, ranOn: "", ranWith: null })),
     desk: createStore<Desk>(() => ({
       root,
       session: "",

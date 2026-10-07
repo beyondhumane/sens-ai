@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ILink, ILinkProvider } from "@xterm/xterm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -390,6 +389,17 @@ describe("the terminal's look", () => {
     expect(themeNow()).toMatchObject({ brightRed: "#ff8a80", red: "#e7655f", selectionBackground: "#f0ffd0", selectionForeground: "#4e700d" });
   });
 
+  it("keeps the cursor still when Windows asks for less motion", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    opened(98);
+    await act(() => openConsole());
+    expect(last().options).toMatchObject({ cursorBlink: false });
+    vi.stubGlobal("matchMedia", undefined);
+    opened(99);
+    await act(() => openConsole());
+    expect(last().options).toMatchObject({ cursorBlink: true });
+  });
+
   it("paints every open terminal again when the look changes, and keeps contrast readable", async () => {
     opened(97);
     await act(() => openConsole());
@@ -455,6 +465,23 @@ describe("the terminal panel", () => {
     expect(ipc.commands.terminalClose).toHaveBeenCalledWith(60);
     expect(shut.disposed).toBe(true);
     expect(consoles.getState()).toMatchObject({ open: [{ id: 61 }], shown: 61 });
+  });
+
+  it("moves between tabs with the arrow keys, and lets Tab land only on the one shown", async () => {
+    opened(70);
+    await act(() => openConsole());
+    opened(71);
+    await act(() => openConsole());
+    render(<ConsoleTabs />);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0]);
+    act(() => void fireEvent.keyDown(tabs[1], { key: "ArrowLeft" }));
+    expect(consoles.getState().shown).toBe(70);
+    expect(document.activeElement).toBe(tabs[0]);
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1]);
+    act(() => void fireEvent.keyDown(tabs[0], { key: "End" }));
+    expect(consoles.getState().shown).toBe(71);
+    expect(document.activeElement).toBe(tabs[1]);
   });
 
   it("offers to open another once the last one is closed", async () => {

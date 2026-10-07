@@ -146,6 +146,9 @@ function useKeys() {
       if (key === "enter") {
         event.preventDefault();
         void handOver();
+      } else if (key === "tab") {
+        event.preventDefault();
+        cycle(event.shiftKey ? -1 : 1);
       } else if (key === "p" && !event.shiftKey) {
         event.preventDefault();
         pin();
@@ -227,10 +230,7 @@ function Row() {
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.nativeEvent.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (event.key === "Tab") {
-      event.preventDefault();
-      cycle(event.shiftKey ? -1 : 1);
-    } else if (event.key === "ArrowUp" && !text) {
+    if (event.key === "ArrowUp" && !text) {
       void resumeLast().then((resumed) => resumed && field.current?.focus());
     } else if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();

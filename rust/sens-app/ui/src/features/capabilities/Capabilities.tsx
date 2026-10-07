@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, type KeyboardEvent } from "react";
+import { useLayoutEffect } from "react";
 import { useStore } from "zustand";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
+import { roveTabs } from "../../shared/tabs";
 import { useSheet } from "../../shared/useSheet";
 import "./capabilities.css";
 import { t } from "./copy";
@@ -44,26 +45,15 @@ export function Capabilities() {
 const MODES: Mode[] = ["installed", "explore"];
 
 function ModeSwitch({ mode }: { mode: Mode }) {
-  const bar = useRef<HTMLDivElement>(null);
   const caps = useStore(capabilities, (s) => s.caps);
   const count = entriesOf(caps).length;
-
-  function onKeyDown(event: KeyboardEvent) {
-    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-    event.preventDefault();
-    const next = mode === "installed" ? "explore" : "installed";
-    showMode(next);
-    bar.current?.querySelector<HTMLElement>(`[data-mode="${next}"]`)?.focus();
-  }
-
   return (
-    <div className="segmented" id="caps-mode" role="tablist" aria-label={t.modes} ref={bar} onKeyDown={onKeyDown}>
+    <div className="segmented" id="caps-mode" role="tablist" aria-label={t.modes} onKeyDown={(event) => roveTabs(event, MODES, mode, showMode)}>
       {MODES.map((id) => (
         <button
           key={id}
           role="tab"
           id={`caps-mode-${id}`}
-          data-mode={id}
           aria-controls={`caps-${id}`}
           aria-selected={id === mode}
           tabIndex={id === mode ? 0 : -1}
@@ -77,7 +67,6 @@ function ModeSwitch({ mode }: { mode: Mode }) {
   );
 }
 
-// "Añadir" does what the tab calls for: the menu, the market, or the MCP form.
 function AddMenu({ hidden }: { hidden: boolean }) {
   const tab = useStore(capabilities, (s) => s.tab);
   const menu = useSheet();

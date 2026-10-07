@@ -10,6 +10,7 @@ import { SettingsDialog } from "../features/settings/Settings";
 import { settingsSheet } from "../features/settings/sheet";
 import { openSettings } from "../features/settings/store";
 import { toggleConsole } from "../features/terminal/store";
+import { welcome } from "../features/welcome/store";
 import { Welcome } from "../features/welcome/Welcome";
 import { sheets } from "../shared/sheets.js";
 import { applyKept, MOST_KEPT, toggleCalm } from "./arrangements";
@@ -49,6 +50,7 @@ export function App() {
   const sizes = useStore(shell, (s) => s.sizes);
   const shown = { start: useShown("start"), end: useShown("end"), bottom: useShown("bottom") };
   const view = useStore(project, (s) => s.view);
+  const welcoming = useStore(welcome, (s) => s.open);
   const body = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLElement>(null);
   const docks = { start: useRef<HTMLElement>(null), end: useRef<HTMLElement>(null), bottom: useRef<HTMLElement>(null) };
@@ -72,7 +74,7 @@ export function App() {
       const act = hotkey(event);
       if (!act) return;
       event.preventDefault();
-      if (!dialog.getState().open && !settingsSheet.getState().open) act();
+      if (!dialog.getState().open && !settingsSheet.getState().open && !welcome.getState().open) act();
     };
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", keys);
@@ -86,7 +88,7 @@ export function App() {
   const style = Object.fromEntries([["--rail-width", size("--rail-width")], ...DOCKS.map((dock) => [SIZES[dock], size(SIZES[dock])])]);
   return (
     <>
-      <div className="app">
+      <div className="app" inert={welcoming}>
         <Topbar />
         <div
           className="body"

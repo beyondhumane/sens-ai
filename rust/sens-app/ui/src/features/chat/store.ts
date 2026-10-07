@@ -7,7 +7,7 @@ import { inFolder } from "../composer/suggest";
 import { loadFiles } from "../files/store";
 import { openFile, viewer } from "../files/view";
 import { modelName, noteLimits, noteLockout } from "../models/store";
-import { tellAway } from "../notify/store";
+import { noticeOf, tellAway } from "../notify/store";
 import { focused, isolating, paneOf, workOf, worktreePending, type Pane } from "../panes/store";
 import { noteEdit, project } from "../project/store";
 import { loadRail, nameSession, noteActivity, type Activity } from "../rail/store";
@@ -205,7 +205,9 @@ export async function send({ message, shownFiles, pictures }: Outgoing, settings
     pane.chat.setState({ ranOn: settings.model, ranWith: { effort: settings.effort, thinking: settings.thinking } });
     if (!quiet) loadRail();
   } catch (reason) {
-    onReply(pane, pane.replying, (reply) => heard(reply, { kind: "failed", reason: reason instanceof Error ? reason.message : String(reason) }, false));
+    const failed: ChatEvent = { kind: "failed", reason: reason instanceof Error ? reason.message : String(reason) };
+    onReply(pane, pane.replying, (reply) => heard(reply, failed, false));
+    speak(pane, failed);
     pane.replying = null;
     idle(true, pane);
   }
@@ -277,9 +279,17 @@ async function afterTurn(pane: Pane) {
   await loadRail();
 }
 
+const faultOf = (event: ChatEvent) => (event.kind === "failed" ? event.reason : event.kind === "finished" ? event.error : "");
+
+function speak(pane: Pane, event: ChatEvent) {
+  const said = faultOf(event) || noticeOf(event);
+  if (said) pane.chat.setState(({ spoken }) => ({ spoken: { said, nth: (spoken?.nth ?? 0) + 1 } }));
+}
+
 function hear(pane: Pane, event: ChatEvent) {
   pane.replying ??= open(pane, "");
   route(pane, pane.replying, event, true);
+  speak(pane, event);
   if (!CLOSING.has(event.kind)) return;
   pane.replying = null;
   afterTurn(pane);

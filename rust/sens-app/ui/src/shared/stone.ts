@@ -1,3 +1,5 @@
+import { calm } from "./calm";
+
 export type StoneState = "idle" | "scan" | "focus" | "done" | "rest";
 
 export type Rgb = [number, number, number];
@@ -237,8 +239,6 @@ const IDLE_FPS = 20;
 const FIRST_SIGNAL: Rgb = [0.571, 1.0, 0.069];
 const FIRST_HOT: Rgb = [0.86, 1.0, 0.62];
 
-const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-
 const easeOut = (x: number) => 1 - Math.pow(1 - Math.min(Math.max(x, 0), 1), 3);
 
 function compile(gl: WebGLRenderingContext, kind: number, source: string) {
@@ -299,7 +299,7 @@ export function mountStone(canvas: HTMLCanvasElement, first: StoneState = "idle"
   let frame = 0;
   let last = 0;
   let scanning = 0;
-  let still = reduced();
+  let still = calm();
   let slowFrames = 0;
   let drawn = 0;
   let gone = false;

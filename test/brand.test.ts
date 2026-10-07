@@ -15,7 +15,6 @@ import { SLOTS } from "../rust/sens-app/ui/src/shared/ansi.js";
 const root = path.join(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(path.join(root, p), "utf8");
 
-// Everything that ships in the desktop shell: not tests, not the dev-only src/dev.
 const appSources = [
   "rust/sens-app/ui/index.html",
   ...readdirSync(path.join(root, "rust/sens-app/ui/src"), { recursive: true, encoding: "utf8" })
@@ -311,6 +310,17 @@ describe("the desktop shell", () => {
     expect(shell).toContain('.composer .box[data-busy="true"]::after');
     expect(shell).toContain("@media (prefers-reduced-motion: reduce)");
     expect(shell).toContain("data-busy={String(busy)}");
+  });
+
+  it("stills the empty chat's greeting and the welcome as they appear, when asked for less motion", () => {
+    const styles = read("rust/sens-app/ui/src/styles.css");
+    const reduced = styles.slice(styles.indexOf("@media (prefers-reduced-motion: reduce)"));
+    const stilled = reduced
+      .slice(0, reduced.search(/\r?\n {2}\}\r?\n/))
+      .split(/\r?\n/)
+      .filter((line) => line.endsWith("{ animation: none; }"))
+      .flatMap((line) => line.replace("{ animation: none; }", "").split(",").map((selector) => selector.trim()));
+    expect(stilled).toEqual(expect.arrayContaining([".hello-mark", ".hello-hint", ".welcome"]));
   });
 
   it("gives the composer an attach, a dictate and one send control", () => {

@@ -2,6 +2,7 @@ import { copy } from "../../shared/i18n";
 
 export const t = copy({
   en: {
+    state: { running: "In progress", done: "Done", failed: "Failed", stopped: "Stopped" },
     read: "Read",
     edit: "Edit",
     write: "Write",
@@ -133,6 +134,7 @@ export const t = copy({
     otherAnswer: "Another answer…",
   },
   es: {
+    state: { running: "En curso", done: "Hecho", failed: "Con error", stopped: "Detenido" },
     read: "Leer",
     edit: "Editar",
     write: "Escribir",
@@ -264,6 +266,7 @@ export const t = copy({
     otherAnswer: "Otra respuesta…",
   },
   fr: {
+    state: { running: "En cours", done: "Terminé", failed: "En échec", stopped: "Arrêté" },
     read: "Lire",
     edit: "Modifier",
     write: "Écrire",
@@ -395,6 +398,7 @@ export const t = copy({
     otherAnswer: "Autre réponse…",
   },
   de: {
+    state: { running: "Läuft", done: "Erledigt", failed: "Fehlgeschlagen", stopped: "Gestoppt" },
     read: "Lesen",
     edit: "Bearbeiten",
     write: "Schreiben",
@@ -526,6 +530,7 @@ export const t = copy({
     otherAnswer: "Andere Antwort…",
   },
   ja: {
+    state: { running: "実行中", done: "完了", failed: "失敗", stopped: "停止" },
     read: "読み取り",
     edit: "編集",
     write: "書き込み",
@@ -657,6 +662,7 @@ export const t = copy({
     otherAnswer: "その他の回答…",
   },
   zh: {
+    state: { running: "进行中", done: "已完成", failed: "失败", stopped: "已停止" },
     read: "读取",
     edit: "编辑",
     write: "写入",

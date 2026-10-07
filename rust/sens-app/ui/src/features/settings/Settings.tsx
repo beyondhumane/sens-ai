@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useStore } from "zustand";
 import { showView } from "../../app/session";
 import { looks } from "../../shared/copy";
@@ -8,6 +8,7 @@ import { LanguagePicker } from "../../shared/LanguagePicker";
 import { accentName, look, modeName, type Look } from "../../shared/look";
 import { AccentPicker, ModePicker } from "../../shared/LookPicker";
 import { Mark } from "../../shared/Mark";
+import { roveTabs } from "../../shared/tabs";
 import { chooseLook } from "../look/store";
 import { useLanguageChoice } from "../look/useLanguageChoice";
 import { setNotices } from "../notify/store";
@@ -83,25 +84,13 @@ export function Settings() {
 }
 
 function SectionTabs({ at }: { at: Section }) {
-  const bar = useRef<HTMLDivElement>(null);
-
   function go(section: Section) {
     showSection(section);
     enterSettings();
   }
 
-  function onKeyDown(event: KeyboardEvent) {
-    const from = SECTIONS.indexOf(at);
-    const to = ({ ArrowRight: from + 1, ArrowLeft: from - 1, Home: 0, End: SECTIONS.length - 1 } as Record<string, number>)[event.key];
-    if (to === undefined) return;
-    event.preventDefault();
-    const next = SECTIONS[(to + SECTIONS.length) % SECTIONS.length];
-    go(next);
-    bar.current?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
-  }
-
   return (
-    <div className="tabs settings-tabs" id="settings-tabs" role="tablist" aria-label={t.sections} ref={bar} onKeyDown={onKeyDown}>
+    <div className="tabs settings-tabs" id="settings-tabs" role="tablist" aria-label={t.sections} onKeyDown={(event) => roveTabs(event, SECTIONS, at, go)}>
       {SECTIONS.map((id) => (
         <button
           key={id}

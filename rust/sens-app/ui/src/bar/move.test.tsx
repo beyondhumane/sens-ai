@@ -53,6 +53,18 @@ describe("moving and pinning focus mode", () => {
     expect(ipc.commands.barDrag).toHaveBeenCalledTimes(1);
   });
 
+  it("switches project with Ctrl+Tab, and leaves Tab to reach its buttons", async () => {
+    bar.setState({ projects: [{ root: "C:/nitid", name: "nitid" }, { root: "C:/web", name: "web" }] });
+    render(<Bar />);
+    const field = screen.getByRole("textbox", { name: "Mensaje para Sens" });
+    expect(fireEvent.keyDown(field, { key: "Tab" })).toBe(true);
+    expect(own.desk.getState().root).toBe("C:/nitid");
+    await act(async () => fireEvent.keyDown(field, { key: "Tab", ctrlKey: true }));
+    expect(own.desk.getState().root).toBe("C:/web");
+    await act(async () => fireEvent.keyDown(field, { key: "Tab", ctrlKey: true, shiftKey: true }));
+    expect(own.desk.getState().root).toBe("C:/nitid");
+  });
+
   it("goes back to the center of its screen on a double click", async () => {
     render(<Bar />);
     fireEvent.doubleClick(handle());

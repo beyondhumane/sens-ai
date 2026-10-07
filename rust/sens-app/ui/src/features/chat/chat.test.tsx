@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEvent, SessionEntry } from "../../ipc/types";
@@ -53,6 +52,7 @@ vi.mock("../../ipc/commands", () => ({
 const SETTINGS = { provider: "claude", model: "claude-demo", effort: "", thinking: true, mode: "default" };
 const tell = (event: ChatEvent) => act(() => ipc.heard!("s1", event));
 const settle = () => act(async () => new Promise((done) => setTimeout(done, 50)));
+const spoken = () => document.querySelector(".stream > .spoken")!;
 
 function later<T>() {
   let done!: (value: T) => void;
@@ -285,7 +285,26 @@ describe("the chat", () => {
     render(<Thread />);
     await act(async () => send({ message: { text: "Otra", files: [], images: [] }, shownFiles: [], pictures: [] }, SETTINGS));
     expect(screen.getByText("Claude sigue trabajando en esta sesión.", { selector: ".reply-fault" })).toBeTruthy();
+    expect(spoken().textContent).toBe("Claude sigue trabajando en esta sesión.");
     expect(focused().chat.getState().busy).toBe(false);
+  });
+
+  it("says aloud when Claude needs an answer and how a reply ended, but not every word it streams", async () => {
+    focused().desk.setState({ session: "s1" });
+    render(<Thread />);
+    expect(spoken().getAttribute("role")).toBe("status");
+    tell({ kind: "delta", thinking: false, text: "Aquí va" });
+    expect(spoken().textContent).toBe("");
+    tell({ kind: "asking", request: "r1", tool: "Bash", input: { command: "ls" }, suggestions: null });
+    expect(spoken().textContent).toMatch(/^Necesita tu permiso: /);
+    tell({ kind: "finished", ok: true, stopped: false, millis: 1000, turns: 1, tokensIn: 1, tokensOut: 20, error: "" });
+    expect(spoken().textContent).toBe("Ha terminado.");
+    const first = spoken().firstElementChild;
+    tell({ kind: "finished", ok: true, stopped: false, millis: 1000, turns: 1, tokensIn: 1, tokensOut: 20, error: "" });
+    expect(spoken().textContent).toBe("Ha terminado.");
+    expect(spoken().firstElementChild).not.toBe(first);
+    tell({ kind: "failed", reason: "Se cerró Claude Code." });
+    expect(spoken().textContent).toBe("Se cerró Claude Code.");
   });
 
   it("shows what tools did: a command's output, an edit as a diff, results that open", async () => {
@@ -401,6 +420,7 @@ describe("the chat", () => {
     expect((document.querySelector(".ask") as HTMLElement).dataset.state).toBe("waiting");
     expect(document.querySelector(".live-said")?.textContent).toBe("Trabajando…");
     expect(focused().chat.getState().busy).toBe(true);
+    expect(spoken().textContent).toBe("");
   });
 
   it("draws a running session's history first, then what it said while being read, each thing once", async () => {

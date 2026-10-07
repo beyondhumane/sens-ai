@@ -16,6 +16,7 @@ export function Thread() {
   const turns = useStore(pane.chat, (s) => s.turns);
   const hint = useStore(pane.chat, (s) => s.hint);
   const replaying = useStore(pane.chat, (s) => s.replaying);
+  const spoken = useStore(pane.chat, (s) => s.spoken);
   const thread = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -68,6 +69,9 @@ export function Thread() {
           )}
         </div>
       </div>
+      <p className="spoken" role="status">
+        {spoken && <span key={spoken.nth}>{spoken.said}</span>}
+      </p>
       <div className="fade top" aria-hidden="true" />
       <div className="fade bottom" aria-hidden="true" />
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore } from "zustand";
+import { calm } from "../shared/calm";
 import { looks, shared } from "../shared/copy";
 import { LANGUAGES, language, localeNow } from "../shared/i18n";
 import { Icon } from "../shared/Icon";
@@ -84,13 +85,13 @@ function doneWords(info: SetupState): [string, string] {
 function useCount(target: number) {
   const [shown, setShown] = useState(0);
   useEffect(() => {
-    if (shown === target) return;
+    if (shown === target || calm()) return;
     const frame = requestAnimationFrame(() =>
       setShown((now) => (now > target ? target : Math.min(target, now + Math.max(1, Math.round((target - now) / 6))))),
     );
     return () => cancelAnimationFrame(frame);
   }, [shown, target]);
-  return shown;
+  return calm() ? target : shown;
 }
 
 type Look = "signal" | "plain" | "danger";

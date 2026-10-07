@@ -192,6 +192,7 @@ export function MapGraph({ map }: { map: ProjectMap }) {
       className="map-stage"
       ref={stage}
       tabIndex={0}
+      role="application"
       aria-label={t.graphHelp}
       data-picking={String(Boolean(focus))}
       data-gliding={gliding ? "true" : undefined}

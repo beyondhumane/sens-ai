@@ -5,6 +5,7 @@ import { onScreen, shell } from "../../app/shell";
 import { stem } from "../../shared/format.js";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
+import { roveTabs } from "../../shared/tabs";
 import { project } from "../project/store";
 import { t } from "./copy";
 import { closeConsole, consoles, nameOf, openConsole, screenOf, settle, shareConsole, showConsole, type Console } from "./store";
@@ -13,8 +14,10 @@ export function ConsoleTabs() {
   const open = useStore(consoles, (s) => s.open);
   const shown = useStore(consoles, (s) => s.shown);
   if (!open.length) return null;
+  const ids = open.map((one) => one.id);
+  const current = ids.includes(shown) ? shown : ids[0];
   return (
-    <div className="console-tabs" role="tablist" aria-label={t.terminals}>
+    <div className="console-tabs" role="tablist" aria-label={t.terminals} onKeyDown={(event) => roveTabs(event, ids, current, showConsole)}>
       {open.map((one) => (
         <div
           key={one.id}
@@ -30,6 +33,7 @@ export function ConsoleTabs() {
             id={`console-tab-${one.id}`}
             aria-selected={one.id === shown}
             aria-controls={`console-${one.id}`}
+            tabIndex={one.id === current ? 0 : -1}
             onClick={() => showConsole(one.id)}
           >
             <Icon svg={one.title ? ICONS.brain : ICONS.terminal} />

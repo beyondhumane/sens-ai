@@ -1,15 +1,11 @@
-import { useRef, type KeyboardEvent } from "react";
 import { useStore } from "zustand";
 import { project } from "../features/project/store";
 import { shared } from "./copy";
 import { stem } from "./format.js";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons.js";
+import { roveTabs } from "./tabs";
 
-// The pieces the views repeat above their lists. `prefix` names the view's ids:
-// `${prefix}-tabs`, `${prefix}-tab-<id>`, `${prefix}-list`, `${prefix}-project`.
-
-// Tabs that carry a count; the arrow keys move between them.
 export function CountTabs<T extends string>({
   prefix,
   label,
@@ -25,20 +21,9 @@ export function CountTabs<T extends string>({
   count: (tab: T) => number;
   pick: (tab: T) => void;
 }) {
-  const bar = useRef<HTMLDivElement>(null);
   const ids = tabs.map(([id]) => id);
-
-  function onKeyDown(event: KeyboardEvent) {
-    const step = ({ ArrowRight: 1, ArrowLeft: -1 } as Record<string, number>)[event.key];
-    if (!step) return;
-    event.preventDefault();
-    const next = ids[(ids.indexOf(at) + step + ids.length) % ids.length];
-    pick(next);
-    bar.current?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
-  }
-
   return (
-    <div className="tabs" id={`${prefix}-tabs`} role="tablist" aria-label={label} ref={bar} onKeyDown={onKeyDown}>
+    <div className="tabs" id={`${prefix}-tabs`} role="tablist" aria-label={label} onKeyDown={(event) => roveTabs(event, ids, at, pick)}>
       {tabs.map(([id, text]) => (
         <button
           key={id}
@@ -92,7 +77,6 @@ export function ViewSeek({
   );
 }
 
-// The open project and what the view counts in it, or what to do without one.
 export function ProjectFocus({
   prefix,
   tally,

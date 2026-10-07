@@ -37,7 +37,7 @@ export const t = copy({
     fit: "Fit to view",
     relayout: "Put the areas back",
     usedBy: "Used by",
-    graphHelp: "Drag to move around · wheel to zoom · double-click to fit",
+    graphHelp: "Arrow keys or drag to move around · + and − or the wheel to zoom · 0 or double-click to fit",
     inLoop: "part of a cycle",
   },
   es: {
@@ -76,7 +76,7 @@ export const t = copy({
     fit: "Encuadrar",
     relayout: "Recolocar las áreas",
     usedBy: "La usan",
-    graphHelp: "Arrastra para moverte · rueda para acercar · doble clic para encuadrar",
+    graphHelp: "Flechas o arrastrar para moverte · + y − o la rueda para acercar · 0 o doble clic para encuadrar",
     inLoop: "parte de un ciclo",
   },
   fr: {
@@ -115,7 +115,7 @@ export const t = copy({
     fit: "Ajuster à la vue",
     relayout: "Replacer les zones",
     usedBy: "Utilisée par",
-    graphHelp: "Glissez pour vous déplacer · molette pour zoomer · double-clic pour ajuster",
+    graphHelp: "Flèches ou glisser pour vous déplacer · + et − ou la molette pour zoomer · 0 ou double-clic pour ajuster",
     inLoop: "fait partie d’un cycle",
   },
   de: {
@@ -154,7 +154,7 @@ export const t = copy({
     fit: "Einpassen",
     relayout: "Bereiche zurücksetzen",
     usedBy: "Verwendet von",
-    graphHelp: "Ziehen zum Bewegen · Mausrad zum Zoomen · Doppelklick zum Einpassen",
+    graphHelp: "Pfeiltasten oder Ziehen zum Bewegen · + und − oder Mausrad zum Zoomen · 0 oder Doppelklick zum Einpassen",
     inLoop: "Teil eines Zyklus",
   },
   ja: {
@@ -193,7 +193,7 @@ export const t = copy({
     fit: "全体を表示",
     relayout: "エリアを元の位置に戻す",
     usedBy: "利用元",
-    graphHelp: "ドラッグで移動 · ホイールでズーム · ダブルクリックで全体表示",
+    graphHelp: "矢印キーまたはドラッグで移動 · + と − またはホイールでズーム · 0 またはダブルクリックで全体表示",
     inLoop: "循環の一部",
   },
   zh: {
@@ -232,7 +232,7 @@ export const t = copy({
     fit: "适应视图",
     relayout: "把区域放回原位",
     usedBy: "被使用于",
-    graphHelp: "拖动以移动 · 滚轮缩放 · 双击适应视图",
+    graphHelp: "方向键或拖动以移动 · + 和 − 或滚轮缩放 · 0 或双击适应视图",
     inLoop: "属于循环",
   },
 });

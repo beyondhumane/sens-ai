@@ -1,3 +1,4 @@
+import { calm } from "../../shared/calm";
 import { srgbOf, tokenOf } from "../../shared/look";
 
 const TOKENS = ["--grain-1", "--grain-2", "--grain-3"];
@@ -110,7 +111,7 @@ export function grain(canvas: HTMLCanvasElement, mark: HTMLElement): (() => void
   watcher.observe(mark);
   fit();
 
-  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const still = calm();
   const started = performance.now();
   let shown = false;
   let pending = 0;

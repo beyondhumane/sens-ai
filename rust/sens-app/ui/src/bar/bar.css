@@ -10,6 +10,7 @@ body { margin: 0; overflow: hidden; }
   background: var(--panel); border: 1px solid var(--hair-strong); border-radius: var(--r-sheet);
 }
 [data-mode="dark"] .float { border-color: var(--edge); }
+.float:has(.bar-field:focus-visible), [data-mode="dark"] .float:has(.bar-field:focus-visible) { border-color: var(--accent-line); }
 
 .bar-row { display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 10px 10px 10px 14px; }
 .bar-row, .bar-handle { cursor: grab; }

@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { focused } from "../features/panes/store";
+import { welcome } from "../features/welcome/store";
 import { project } from "../features/project/store";
 import { showLanguage } from "../shared/i18n";
 import { App } from "./App";
@@ -63,6 +64,16 @@ describe("the shell", () => {
     expect(kept().railClosed).toBe(true);
     fireEvent.keyDown(document, { key: "b", ctrlKey: true });
     expect(body().dataset.rail).toBe("open");
+  });
+
+  it("keeps the app behind the welcome out of reach, its keys included", () => {
+    render(<App />);
+    act(() => welcome.setState({ open: true }));
+    expect(document.querySelector(".app")?.hasAttribute("inert")).toBe(true);
+    fireEvent.keyDown(document, { key: "b", ctrlKey: true });
+    expect(body().dataset.rail).toBe("open");
+    act(() => welcome.setState({ open: false }));
+    expect(document.querySelector(".app")?.hasAttribute("inert")).toBe(false);
   });
 
   it("folds the rail for a tool in a narrow window, without forgetting it was open", () => {
@@ -202,6 +213,23 @@ describe("the arrangement", () => {
     expect(tabsOf("end")).toEqual(["Cambios"]);
     expect(body().dataset).toMatchObject({ start: "open", end: "open" });
     expect(kept().homes.map).toBe("start");
+  });
+
+  it("moves between a panel's tabs with the arrow keys, Home and End, and lets Tab land only on the one shown", () => {
+    render(<App />);
+    act(() => showTool("changes"));
+    act(() => showTool("map"));
+    const tab = (name: string) => within(endTabs()).getByRole("tab", { name });
+    expect([tab("Cambios").tabIndex, tab("Mapa").tabIndex]).toEqual([-1, 0]);
+    fireEvent.keyDown(tab("Mapa"), { key: "ArrowLeft" });
+    expect(tab("Cambios").getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(tab("Cambios"));
+    expect([tab("Cambios").tabIndex, tab("Mapa").tabIndex]).toEqual([0, -1]);
+    fireEvent.keyDown(tab("Cambios"), { key: "End" });
+    expect(document.activeElement).toBe(tab("Mapa"));
+    fireEvent.keyDown(tab("Mapa"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tab("Cambios"));
+    expect(tabsOf("end")).toEqual(["Cambios", "Mapa"]);
   });
 
   it("drops a dragged tab on the edge it is let go over", async () => {

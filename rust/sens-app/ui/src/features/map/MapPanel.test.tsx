@@ -125,7 +125,7 @@ describe("map panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Acercar" }));
     expect(zoom()).not.toBe(before);
     expect(screen.queryByRole("button", { name: "Recolocar las áreas" })).toBeNull();
-    const stage = document.querySelector<HTMLElement>(".map-stage")!;
+    const stage = screen.getByRole("application", { name: /^Flechas o arrastrar para moverte/ });
     const node = screen.getByRole("button", { name: "lib · 1 fichero" });
     fireEvent.pointerDown(node, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
     stage.setPointerCapture = () => {};

@@ -6,6 +6,7 @@ import { hideTool, panelShows, showTool } from "../../app/shell";
 import { commands, events } from "../../ipc/commands";
 import type { TerminalAdopted, TerminalHeard, TerminalReading } from "../../ipc/types";
 import { plain, tokensOf } from "../../shared/ansi";
+import { calm } from "../../shared/calm";
 import { stem } from "../../shared/format.js";
 import { look, tokenOf } from "../../shared/look";
 import { warn } from "../chat/state";
@@ -116,7 +117,7 @@ function makeScreen([{ Terminal }, { FitAddon }]: Xterm, id: number, cols: numbe
     fontWeight: 400,
     fontWeightBold: 600,
     lineHeight: 1.4,
-    cursorBlink: true,
+    cursorBlink: !calm(),
     scrollback: 5000,
     minimumContrastRatio: CONTRAST,
     linkHandler: webLinks,

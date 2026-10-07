@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore } from "zustand";
 import type { Card, Provider } from "../../ipc/types";
+import { calm } from "../../shared/calm";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
 import { look } from "../../shared/look";
@@ -337,7 +338,7 @@ function Pixels({ running }: { running: boolean }) {
     const board = canvas.current;
     const ctx = board?.getContext("2d");
     if (!running || !board || !ctx) return;
-    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = calm();
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--focus").trim();
     let phases: Float32Array | null = null;
     let grid = "";
@@ -369,7 +370,7 @@ function Pixels({ running }: { running: boolean }) {
         }
       }
       const time = millis / 1000;
-      const entered = calm ? 1 : Math.min((millis - start) / ENTER, 1);
+      const entered = still ? 1 : Math.min((millis - start) / ENTER, 1);
       const eased = entered * entered * (3 - 2 * entered);
       const front = (1 - eased) * (1 + FRONT_SOFT) - FRONT_SOFT;
       for (let col = 0; col < cols; col++) {
@@ -387,7 +388,7 @@ function Pixels({ running }: { running: boolean }) {
         }
       }
       ctx.globalAlpha = 1;
-      frame = calm ? 0 : requestAnimationFrame(draw);
+      frame = still ? 0 : requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);

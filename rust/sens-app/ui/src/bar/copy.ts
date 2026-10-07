@@ -1,10 +1,11 @@
+import { shared } from "../shared/copy";
 import { copy } from "../shared/i18n";
 
 export const t = copy({
   en: {
     placeholder: "Ask Sens for what you need",
     message: "Message for Sens",
-    where: (name: string, session: string) => `${name} · ${session}. Tab switches the project`,
+    where: (name: string, session: string) => `${name} · ${session}. ${shared.ctrl}+Tab switches the project`,
     newSession: "New session",
     newSessionThere: "new session",
     sessions: "Sessions",
@@ -35,7 +36,7 @@ export const t = copy({
   es: {
     placeholder: "Pide lo que necesites a Sens",
     message: "Mensaje para Sens",
-    where: (name: string, session: string) => `${name} · ${session}. Tab cambia de proyecto`,
+    where: (name: string, session: string) => `${name} · ${session}. ${shared.ctrl}+Tab cambia de proyecto`,
     newSession: "Nueva sesión",
     newSessionThere: "nueva sesión",
     sessions: "Sesiones",
@@ -66,7 +67,7 @@ export const t = copy({
   fr: {
     placeholder: "Demandez à Sens ce dont vous avez besoin",
     message: "Message pour Sens",
-    where: (name: string, session: string) => `${name} · ${session}. Tab change de projet`,
+    where: (name: string, session: string) => `${name} · ${session}. ${shared.ctrl}+Tab change de projet`,
     newSession: "Nouvelle session",
     newSessionThere: "nouvelle session",
     sessions: "Sessions",
@@ -97,7 +98,7 @@ export const t = copy({
   de: {
     placeholder: "Frag Sens, was du brauchst",
     message: "Nachricht an Sens",
-    where: (name: string, session: string) => `${name} · ${session}. Tab wechselt das Projekt`,
+    where: (name: string, session: string) => `${name} · ${session}. ${shared.ctrl}+Tab wechselt das Projekt`,
     newSession: "Neue Sitzung",
     newSessionThere: "neue Sitzung",
     sessions: "Sitzungen",
@@ -128,7 +129,7 @@ export const t = copy({
   ja: {
     placeholder: "Sens に頼みたいことを入力",
     message: "Sens へのメッセージ",
-    where: (name: string, session: string) => `${name} · ${session}。Tab でプロジェクトを切り替え`,
+    where: (name: string, session: string) => `${name} · ${session}。${shared.ctrl}+Tab でプロジェクトを切り替え`,
     newSession: "新しいセッション",
     newSessionThere: "新しいセッション",
     sessions: "セッション",
@@ -159,7 +160,7 @@ export const t = copy({
   zh: {
     placeholder: "告诉 Sens 你需要什么",
     message: "发给 Sens 的消息",
-    where: (name: string, session: string) => `${name} · ${session}。按 Tab 切换项目`,
+    where: (name: string, session: string) => `${name} · ${session}。按 ${shared.ctrl}+Tab 切换项目`,
     newSession: "新会话",
     newSessionThere: "新会话",
     sessions: "会话",

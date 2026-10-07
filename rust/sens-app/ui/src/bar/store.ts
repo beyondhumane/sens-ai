@@ -7,6 +7,7 @@ import { tally, type Work } from "../features/chat/work";
 import { canSend, forgetClips, hearDrops, pasteText, rereadSettings, send } from "../features/composer/store";
 import { adopt, newPane } from "../features/panes/store";
 import { watchVoice } from "../features/voice/store";
+import { calm } from "../shared/calm";
 import { languageOf, showLanguage } from "../shared/i18n";
 import { showLook } from "../shared/look";
 import { store, stored } from "../shared/storage.js";
@@ -133,8 +134,6 @@ export async function handOver() {
   await commands.barHandOver({ root, session, text });
   fresh(root);
 }
-
-const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function hide() {
   set({ choosing: false, leaving: true });

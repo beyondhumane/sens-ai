@@ -63,7 +63,9 @@ export const Step = memo(function Step({ part }: { part: StepPart }) {
         )}
         <Strip links={links} />
         <span className="step-meta">{shown.meta ?? look.meta ?? ""}</span>
-        <span className="step-state" />
+        <span className="step-state">
+          <span className="spoken">{t.state[state]}</span>
+        </span>
       </summary>
       <div className="step-body">{(seen || state === "failed") && body}</div>
     </details>

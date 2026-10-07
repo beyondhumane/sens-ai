@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Found, ProviderState } from "../../ipc/types";
@@ -203,12 +202,20 @@ describe("the welcome", () => {
   });
 
   it("marks itself seen and closes when skipped", async () => {
-
     openWelcome();
     render(<Welcome />);
 
     await press("Saltar la bienvenida");
 
+    expect(ipc.commands.setWelcomed).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("skips with Esc, as any dialog closes", async () => {
+    openWelcome();
+    render(<Welcome />);
+    await act(async () => fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" }));
+    await flush();
     expect(ipc.commands.setWelcomed).toHaveBeenCalledWith(true);
     expect(screen.queryByRole("dialog")).toBeNull();
   });

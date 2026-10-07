@@ -13,6 +13,7 @@ import { Address, Outside, Web } from "../features/web/Web";
 import { shared } from "../shared/copy";
 import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
+import { roveTabs } from "../shared/tabs";
 import { useSheet } from "../shared/useSheet";
 import { t } from "./copy";
 import { closeDock, closeTab, mainTabsIn, shell, showTool, splitDock, toggleTree, TOOLS, visibleIn, widenPaired, type Dock, type Tool } from "./shell";
@@ -78,10 +79,19 @@ function ToolTabs({ dock }: { dock: Dock }) {
   const lifted = useStore(toolDrag, (s) => s.tool);
   const aimed = useStore(toolDrag, (s) => (s.on === "window" && s.target?.dock === dock && !s.target.pair ? s.target.before : undefined));
   const sheet = useSheet();
+  const tools = tabs ? (tabs.split(",") as Tool[]) : [];
+  const current = shown && tools.includes(shown) ? shown : tools[0];
   return (
     <div className="tool-tabs">
-      <div className="tool-tab-list" role="tablist" aria-label={t.dock[dock]} data-tab-strip={dock} data-aimed={aimed === null ? "end" : undefined}>
-        {(tabs ? (tabs.split(",") as Tool[]) : []).map((tool) => (
+      <div
+        className="tool-tab-list"
+        role="tablist"
+        aria-label={t.dock[dock]}
+        data-tab-strip={dock}
+        data-aimed={aimed === null ? "end" : undefined}
+        onKeyDown={(event) => roveTabs(event, tools, current, showTool)}
+      >
+        {tools.map((tool) => (
           <div className="tool-tab" key={tool} data-tab={tool} data-aimed={aimed === tool ? "true" : undefined} data-lifted={lifted === tool ? "true" : undefined}>
             <button
               type="button"
@@ -89,6 +99,7 @@ function ToolTabs({ dock }: { dock: Dock }) {
               role="tab"
               aria-selected={tool === shown}
               aria-controls={`tool-${tool}`}
+              tabIndex={tool === current ? 0 : -1}
               aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowDown"
               title={t.moveHint}
               onClick={() => showTool(tool)}
