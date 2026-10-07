@@ -1,13 +1,13 @@
 import type { RefObject } from "react";
 import { keepSize, sizing } from "./shell";
 
-// Arrow keys move a splitter this much; with Shift, four times as much.
 const SIZE_STEP = 16;
 
-// A handle between two panes: dragged, or moved with the arrow keys, it sets
-// the width `name` on `host` (a CSS variable its layout clamps); a double
-// click gives the layout its own width back. The width kept is the one the
-// pane ended up with.
+const KEYS = {
+  x: { ArrowLeft: -1, ArrowRight: 1 },
+  y: { ArrowUp: -1, ArrowDown: 1 },
+} as Record<"x" | "y", Record<string, number>>;
+
 export function Splitter({
   id,
   label,
@@ -15,6 +15,8 @@ export function Splitter({
   host,
   pane,
   grow,
+  axis = "x",
+  className = "",
 }: {
   id: string;
   label: string;
@@ -22,24 +24,29 @@ export function Splitter({
   host: RefObject<HTMLElement | null>;
   pane: RefObject<HTMLElement | null>;
   grow: 1 | -1;
+  axis?: "x" | "y";
+  className?: string;
 }) {
-  const width = () => Math.round(pane.current?.getBoundingClientRect().width ?? 0);
+  const size = () => {
+    const box = pane.current?.getBoundingClientRect();
+    return Math.round((axis === "x" ? box?.width : box?.height) ?? 0);
+  };
   const set = (px: number) => host.current?.style.setProperty(name, `${Math.round(px)}px`);
   const settle = () => {
-    const now = width();
+    const now = size();
     keepSize(name, now);
     return now;
   };
 
   return (
     <div
-      className="split"
+      className={`split ${className}`.trim()}
       id={id}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
       aria-label={label}
       tabIndex={0}
-      onFocus={(event) => event.currentTarget.setAttribute("aria-valuenow", String(width()))}
+      onFocus={(event) => event.currentTarget.setAttribute("aria-valuenow", String(size()))}
       onDoubleClick={() => {
         host.current?.style.removeProperty(name);
         keepSize(name, 0);
@@ -48,12 +55,12 @@ export function Splitter({
         if (event.button !== 0) return;
         event.preventDefault();
         const handle = event.currentTarget;
-        const from = event.clientX;
-        const start = width();
+        const from = axis === "x" ? event.clientX : event.clientY;
+        const start = size();
         handle.setPointerCapture(event.pointerId);
         handle.dataset.dragging = "true";
-        sizing(true);
-        const move = (moved: PointerEvent) => set(start + (moved.clientX - from) * grow);
+        sizing(true, axis);
+        const move = (moved: PointerEvent) => set(start + ((axis === "x" ? moved.clientX : moved.clientY) - from) * grow);
         const done = () => {
           handle.removeEventListener("pointermove", move);
           handle.removeEventListener("pointerup", done);
@@ -67,11 +74,11 @@ export function Splitter({
         handle.addEventListener("pointercancel", done);
       }}
       onKeyDown={(event) => {
-        const step = ({ ArrowLeft: -1, ArrowRight: 1 } as Record<string, number>)[event.key];
+        const step = KEYS[axis][event.key];
         if (!step) return;
         event.preventDefault();
-        sizing(true);
-        set(width() + step * grow * SIZE_STEP * (event.shiftKey ? 4 : 1));
+        sizing(true, axis);
+        set(size() + step * grow * SIZE_STEP * (event.shiftKey ? 4 : 1));
         event.currentTarget.setAttribute("aria-valuenow", String(settle()));
         sizing(false);
       }}

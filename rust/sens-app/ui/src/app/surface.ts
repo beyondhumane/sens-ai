@@ -4,7 +4,7 @@ import { project } from "../features/project/store";
 import { consoles, openConsole } from "../features/terminal/store";
 import { aim, goBack, goForward, pickWidth, reloadSite, web } from "../features/web/store";
 import { answers, onScreen } from "./acts";
-import { closeTools, shell, showTool, type Tool } from "./shell";
+import { closeTools, DOCKS, shell, showTool, visibleIn, type Dock, type Tool } from "./shell";
 
 interface Here {
   session: string;
@@ -30,7 +30,7 @@ function showPane({ session, pane }: Here & { pane: Tool }) {
 function closePane({ session }: Here) {
   onScreen(session);
   closeTools();
-  return "The side pane is closed.";
+  return "The panels are closed.";
 }
 
 async function openTerminalTab({ session, root }: Here & { root: string }) {
@@ -81,16 +81,28 @@ function browserWidth({ session, width }: Here & { width: number }) {
   return width ? `The page is drawn ${width} px wide.` : "The page is drawn at the pane's own width.";
 }
 
+const PLACES: Record<Dock, string> = { start: "on the left", end: "on the right", bottom: "at the bottom" };
+
+function panelsOf() {
+  const state = shell.getState();
+  const { title } = viewer.getState();
+  const said = (tool: Tool) => (tool === "files" ? `${title ? `, showing ${title}` : ", no file open"}${state.treeShown ? ", with the tree" : ""}` : "");
+  const shown = DOCKS.flatMap((dock) => {
+    const tool = visibleIn(state, dock);
+    return tool ? [`${tool} ${PLACES[dock]}${said(tool)}`] : [];
+  });
+  if (state.calm) return "Only the conversation is on screen; the panels are hidden.";
+  return shown.length ? `Panels: ${shown.join("; ")}.` : "The panels are closed.";
+}
+
 function layoutOf({ session }: Here) {
   const { session: seen, work } = project.getState();
-  const { toolsOpen, tool, treeShown } = shell.getState();
-  const { title } = viewer.getState();
   const open = consoles.getState().open;
   const yours = open.filter((one) => one.title).length;
   const chats = panes.getState().open.length;
   return [
     seen === session ? "The person is looking at this session." : `The person is looking at another session${work ? `, in ${work}` : ""}.`,
-    toolsOpen ? `Side pane: ${tool}${tool === "files" ? `${title ? `, showing ${title}` : ", no file open"}${treeShown ? ", with the tree" : ""}` : ""}.` : "The side pane is closed.",
+    panelsOf(),
     `Terminals: ${open.length} open${yours ? `, ${yours} started by Claude` : ""}.`,
     chats > 1 ? `${chats} chats side by side.` : "One chat on screen.",
   ].join("\n");

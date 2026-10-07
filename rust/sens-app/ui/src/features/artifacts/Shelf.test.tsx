@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Artifact } from "../../ipc/types";
 import { dialog } from "../../app/modal";
 import { resume } from "../../app/session";
-import { shell } from "../../app/shell";
+import { panelShows, shell } from "../../app/shell";
 import { viewer } from "../files/view";
 import { project } from "../project/store";
 import { showSite } from "../web/store";
@@ -37,7 +37,6 @@ const artifact = (name: string, over: Partial<Artifact> = {}): Artifact => ({
   ...over,
 });
 
-// jsdom has no IntersectionObserver: this one sees every thumbnail it is given.
 class Seeing {
   constructor(private heard: IntersectionObserverCallback) {}
   observe(target: Element) {
@@ -87,7 +86,7 @@ describe("the shelf", () => {
     await open();
     await act(async () => fireEvent.click(within(card("plan.md")).getByRole("button", { name: /plan.md/ })));
     expect(viewer.getState()).toMatchObject({ title: "C:/demo/.sens/artifacts/plan.md", body: { kind: "text", text: "# Plan" }, home: "C:/demo", opened: "" });
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "files" });
+    expect(panelShows("files")).toBe(true);
 
     await act(async () => fireEvent.click(within(card("informe.html")).getByRole("button", { name: /informe.html/ })));
     expect(showSite).toHaveBeenCalledWith("C:/demo/.sens/artifacts/informe.html", "C:/demo");

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Heard } from "../../ipc/types";
-import { shell } from "../../app/shell";
+import { panelShows, shell, showTool } from "../../app/shell";
 import { focused } from "../panes/store";
 import { showLanguage } from "../../shared/i18n";
 import { sheets } from "../../shared/sheets.js";
@@ -33,7 +33,6 @@ const frame = () => new Promise((settle) => requestAnimationFrame(settle));
 
 beforeAll(() => {
   hearBrowser();
-  // jsdom has no ResizeObserver: the frame just never resizes.
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
 });
 
@@ -44,7 +43,8 @@ beforeEach(() => {
   project.setState({ root: "C:/demo", work: "C:/demo" });
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.commands.previewUrl.mockResolvedValue("http://127.0.0.1:4321/p7/docs/index.html");
-  shell.setState({ ...shell.getInitialState(), toolsOpen: true, tool: "web" }, true);
+  shell.setState(shell.getInitialState(), true);
+  showTool("web");
   focused().chat.setState({ turns: [] });
 });
 
@@ -81,7 +81,7 @@ describe("web panel", () => {
     const opened = () => ipc.commands.browserOpen.mock.calls.at(-1)?.[0];
     await type("localhost:5173");
     expect(opened()).toBe("http://localhost:5173");
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "web" });
+    expect(panelShows("web")).toBe(true);
     await type("example.com/docs");
     expect(opened()).toBe("https://example.com/docs");
     await type("cómo centrar un div");
@@ -122,7 +122,6 @@ describe("web panel", () => {
     expect(console.dataset.fault).toBe("false");
     expect(document.querySelector('#site-log p[data-level="error"]')?.textContent).toBe("x is not defined");
 
-    // A new page starts a clean console.
     act(() => ipc.heard!({ kind: "loading", url: "https://example.com/b" }));
     expect(document.querySelectorAll("#site-log p")).toHaveLength(0);
   });
@@ -143,7 +142,6 @@ describe("web panel", () => {
     expect(screen.getByRole("button", { name: "768" }).getAttribute("aria-pressed")).toBe("true");
     expect(web.getState().width).toBe(768);
 
-    // jsdom lays nothing out: the frame and a menu over it are given boxes.
     document.getElementById("site-frame")!.getBoundingClientRect = () => new DOMRect(300, 100, 400, 600);
     const sheet = document.createElement("div");
     sheet.getBoundingClientRect = () => new DOMRect(280, 80, 200, 150);

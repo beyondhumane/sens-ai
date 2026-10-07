@@ -14,6 +14,7 @@ export const shared = copy({
     noProject: "No project",
     newSession: "New session",
     ctrl: "Ctrl",
+    shift: "Shift",
   },
   es: {
     close: "Cerrar",
@@ -28,6 +29,7 @@ export const shared = copy({
     noProject: "Sin proyecto",
     newSession: "Sesión nueva",
     ctrl: "Ctrl",
+    shift: "Mayús",
   },
   fr: {
     close: "Fermer",
@@ -42,6 +44,7 @@ export const shared = copy({
     noProject: "Aucun projet",
     newSession: "Nouvelle session",
     ctrl: "Ctrl",
+    shift: "Maj",
   },
   de: {
     close: "Schließen",
@@ -56,6 +59,7 @@ export const shared = copy({
     noProject: "Kein Projekt",
     newSession: "Neue Sitzung",
     ctrl: "Strg",
+    shift: "Umschalt",
   },
   ja: {
     close: "閉じる",
@@ -70,6 +74,7 @@ export const shared = copy({
     noProject: "プロジェクトなし",
     newSession: "新しいセッション",
     ctrl: "Ctrl",
+    shift: "Shift",
   },
   zh: {
     close: "关闭",
@@ -84,6 +89,7 @@ export const shared = copy({
     noProject: "无项目",
     newSession: "新会话",
     ctrl: "Ctrl",
+    shift: "Shift",
   },
 });
 

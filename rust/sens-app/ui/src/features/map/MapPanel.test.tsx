@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { shell } from "../../app/shell";
+import { panelShows, shell, showTool } from "../../app/shell";
 import { project } from "../project/store";
 import { MapPanel, MapTally } from "./MapPanel";
 import { atlas, loadMap, showMapAs } from "./store";
@@ -39,7 +39,8 @@ beforeEach(() => {
   ipc.commands.canonMap.mockResolvedValue(MAP);
   ipc.commands.canonReach.mockResolvedValue(REACH);
   ipc.commands.openFile.mockResolvedValue({ kind: "text", text: "a" });
-  shell.setState({ ...shell.getInitialState(), toolsOpen: true, tool: "map", tabs: ["map"] }, true);
+  shell.setState(shell.getInitialState(), true);
+  showTool("map");
 });
 
 afterEach(() => {
@@ -114,6 +115,7 @@ describe("map panel", () => {
     render(<MapPanel />);
     await act(() => loadMap());
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Abrir en Ficheros: lib/format.ts" })));
-    expect(shell.getState()).toMatchObject({ tool: "files", tabs: ["map", "files"] });
+    expect(panelShows("files")).toBe(true);
+    expect(shell.getState().tabs).toEqual(["map", "files"]);
   });
 });

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEvent, SessionEntry } from "../../ipc/types";
-import { shell } from "../../app/shell";
+import { panelShows, shell } from "../../app/shell";
 import { composer } from "../composer/store";
 import { project } from "../project/store";
 import { rail } from "../rail/store";
@@ -319,7 +319,7 @@ describe("the chat", () => {
     expect(grep.querySelector(".step-meta")?.textContent).toBe("1 resultado");
     fireEvent.click(grep.querySelector("summary")!);
     fireEvent.click(within(grep).getByRole("button", { name: /src\/app.ts/ }));
-    expect(shell.getState()).toMatchObject({ toolsOpen: true, tool: "files" });
+    expect(panelShows("files")).toBe(true);
   });
 
   it("leaves what was already drawn alone while a reply streams", async () => {
