@@ -1,0 +1,41 @@
+name: Accessibility barrier
+description: Something in Sens you cannot reach, read or use with your setup.
+title: "Accessibility: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What you were trying to do
+    validations:
+      required: true
+  - type: textarea
+    id: barrier
+    attributes:
+      label: Where Sens stopped you
+      description: What happened, or did not, at that point.
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: What you use
+      description: Only what helps reproduce it — a screen reader and its version, keyboard only, voice, a contrast theme, magnification, reduced motion.
+      placeholder: NVDA 2026.2, keyboard only
+  - type: input
+    id: sens
+    attributes:
+      label: Sens version
+      description: Settings › General, under Updates.
+      placeholder: "0.34.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options:
+        - Windows 11
+        - Windows 10
+    validations:
+      required: true

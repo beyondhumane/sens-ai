@@ -1,0 +1,59 @@
+name: Bug
+description: Sens does something it should not, or does not do what it says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the [open issues](https://github.com/beyondhumane/sens-ai/issues) first. A vulnerability goes through the [security policy](https://github.com/beyondhumane/sens-ai/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What you saw, in a sentence or two.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: From opening Sens to the problem, one step per line.
+      placeholder: |
+        1. Open a project
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: sens
+    attributes:
+      label: Sens version
+      description: Settings › General, under Updates.
+      placeholder: "0.34.0"
+    validations:
+      required: true
+  - type: input
+    id: claude-code
+    attributes:
+      label: Claude Code version
+      description: Settings › Providers.
+      placeholder: "2.1.0"
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options:
+        - Windows 11
+        - Windows 10
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots and output
+      description: Drop pictures here, and paste error text as text. Remove anything private first — paths, keys, code you cannot share.

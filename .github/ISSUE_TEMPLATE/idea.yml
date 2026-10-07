@@ -1,0 +1,22 @@
+name: Idea
+description: Something Sens could do, or do differently.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What gets in the way
+      description: What you are trying to do, and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What Sens would do
+      description: The behaviour you have in mind. A sketch or a screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you work around it now

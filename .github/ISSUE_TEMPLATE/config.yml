@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Vulnerability
+    url: https://github.com/beyondhumane/sens-ai/security/advisories/new
+    about: Report it privately, through GitHub's vulnerability reporting.
+  - name: Claude Code
+    url: https://github.com/anthropics/claude-code/issues
+    about: A problem with the claude CLI itself, not with Sens around it.

@@ -246,14 +246,17 @@ serves the interface at `http://localhost:5173` to any browser, over a simulated
 ### Tests
 
 ```bash
-npm test                 # vitest: the interface, the installer, the brand
 npm run typecheck
-cargo test --manifest-path rust/sens-agent/Cargo.toml
-cargo test --manifest-path rust/sens-app/Cargo.toml
-cargo test --manifest-path rust/sens-setup/Cargo.toml
+npm test
+npm run build -w sens-app-ui
+npm run build:setup -w sens-app-ui
+for crate in sens-index sens-canon sens-agent sens-app sens-setup sens-bench; do
+  cargo clippy --manifest-path rust/$crate/Cargo.toml --all-targets -- -D warnings
+  cargo test --manifest-path rust/$crate/Cargo.toml
+done
 ```
 
-CI runs all of it on every push and pull request: the type check, the tests and both interface builds on Ubuntu; `cargo clippy -- -D warnings` and the Rust tests for the three crates on Windows.
+`npm test` runs Vitest over the interface, the installer and the brand; the two builds give `sens-app` and `sens-setup` the interface they embed. CI runs all of it on every push and pull request: the type check, the tests and both interface builds on Ubuntu, clippy and the tests of every crate on Windows, and the website's own check.
 
 ### Repository layout
 
@@ -279,13 +282,7 @@ The version is written in several places and must agree everywhere; `npm run ver
 
 ## Contributing
 
-Issues and pull requests are welcome. A few rules keep the codebase the way it is:
-
-- **No comments.** Code explains itself with names and structure, or it gets extracted until it does.
-- **Six languages.** Anything a person reads exists in all six. `copy()` refuses to compile when a language is missing a key; [Sens in six languages](docs/i18n.md) has the voice and the glossary.
-- **One identity.** Anything visual follows [the Sens visual identity](docs/brand/identity.md). Colours live in `src/brand/tokens.ts` and the mark's geometry in `src/brand/mark.ts`: import the token instead of retyping a hex, and change the generator (`npm run brand`), not the asset it wrote.
-- **Commits say what changed for the person using Sens.** `fix(app): Enter while Claude works keeps the message`, not `fix: handle keydown`.
-- **CI stays green**, and clippy has nothing to say.
+Issues and pull requests are welcome. [Contributing to Sens](CONTRIBUTING.md) has the rules that keep the codebase the way it is — no comments, six languages, one identity — and what a pull request needs. A vulnerability is reported privately, as the [security policy](SECURITY.md) says; [Accessibility](ACCESSIBILITY.md) says what Sens supports and how to report a barrier.
 
 ## FAQ
 
