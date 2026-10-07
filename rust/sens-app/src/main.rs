@@ -228,25 +228,28 @@ fn equip(app: &AppHandle, root: &str, session_id: &str, settings: &mut Settings)
     settings.cwd = worktree::work_dir(Path::new(root), session_id)?;
     let launch = capabilities::launch(&base, root)?;
     settings.extra = launch.args;
-    settings.extra.extend(bridged(app, root, session_id, settings.cwd.as_deref()));
+    if let Some(bridge) = bridged(app, root, session_id, settings.cwd.as_deref()) {
+        settings.extra.extend(bridge);
+        settings.briefing = tools::BRIEFING.into();
+    }
     settings.env = launch.env;
     settings.env.extend(providers::environment(&base));
     Ok(())
 }
 
-fn bridged(app: &AppHandle, root: &str, session_id: &str, work: Option<&Path>) -> Vec<String> {
+fn bridged(app: &AppHandle, root: &str, session_id: &str, work: Option<&Path>) -> Option<Vec<String>> {
     let within = std::iter::once(root.to_string()).chain(work.map(|work| work.to_string_lossy().into_owned())).collect();
     let scope = tools::Scope { session: session_id.to_string(), within };
     match app.state::<mcp::Bridge>().config(scope, || hands(app.clone())) {
-        Ok(config) => vec![
+        Ok(config) => Some(vec![
             "--mcp-config".into(),
             config,
             "--allowedTools".into(),
             tools::allowed(),
             "--disallowedTools".into(),
             tools::REPLACED.into(),
-        ],
-        Err(_) => Vec::new(),
+        ]),
+        Err(_) => None,
     }
 }
 

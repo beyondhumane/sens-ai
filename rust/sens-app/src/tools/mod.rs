@@ -19,6 +19,7 @@ use crate::terminal::Consoles;
 
 pub const SERVER: &str = "sens";
 pub const REPLACED: &str = "Bash,PowerShell,Monitor";
+pub const BRIEFING: &str = include_str!("briefing.md");
 const INDEX_PATIENCE: Duration = Duration::from_secs(20);
 pub const QUICK: Duration = Duration::from_secs(5);
 pub const MOST_CHARS: usize = 30_000;
@@ -303,6 +304,14 @@ mod tests {
         }
         assert!(index::NAMES.iter().all(|name| allowed.contains(&format!("mcp__{SERVER}__{name}").as_str())));
         assert!(listed().iter().all(|tool| tool["inputSchema"]["additionalProperties"] == false));
+    }
+
+    #[test]
+    fn the_briefing_names_only_tools_sens_offers() {
+        let offered: HashSet<String> = listed().iter().map(|tool| format!("mcp__{SERVER}__{}", tool["name"].as_str().unwrap())).collect();
+        let named: Vec<&str> = BRIEFING.split('`').filter(|word| word.starts_with("mcp__")).collect();
+        assert!(named.len() > 5);
+        assert!(named.iter().all(|name| offered.contains(*name)), "{named:?}");
     }
 
     #[test]
