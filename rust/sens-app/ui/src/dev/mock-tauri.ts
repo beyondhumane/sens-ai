@@ -428,7 +428,7 @@ const REPLAY = [
   agent({
     kind: "said",
     text: [
-      "Listo. Ahora `App` acepta un saludo:",
+      "Listo. Ahora `App` acepta un saludo en `src/app.tsx:12`, como pedía beyondhumane/sens-ai#17:",
       "",
       FENCE + "tsx",
       '<App title="Sens" greeting="Buenas" />',

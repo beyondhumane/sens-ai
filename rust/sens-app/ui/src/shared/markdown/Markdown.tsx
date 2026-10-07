@@ -1,22 +1,21 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { code, shared } from "../copy";
+import { FileIcon } from "../FileIcon";
 import { Icon } from "../Icon";
 import { ICONS } from "../icons.js";
 import { openOutside } from "../outside";
+import { isPullUrl, openPlace, placeOf, placesOpen, pullsIn, type Place } from "../references";
 import { colored, coloredRuns } from "../syntax/colored";
 import { useCode } from "../syntax/code";
 import { languageNamed, titleOf } from "../syntax/languages";
 import { grammarOf, sessionOf, type SessionLine, type Shell } from "../syntax/shells";
 import { parse, type Block, type Inline, type List } from "./parse";
 
-// Text that just arrived fades in: each stamp says where a new stretch began
-// (in characters of shown text) and when.
 export interface Fade {
   stamps: { from: number; time: number }[];
   now: number;
 }
 
-// Where the renderer is in the shown text, for the fade.
 interface Cursor {
   at: number;
   fade?: Fade;
@@ -83,23 +82,28 @@ function spell(nodes: (Inline | List)[], cursor: Cursor) {
 function renderInline(node: Inline | List, cursor: Cursor): ReactNode {
   switch (node.kind) {
     case "text":
-      return faded(node.text, cursor);
-    case "code":
-      return <code>{faded(node.text, cursor)}</code>;
+      return pullsIn(node.text).map((piece, at) =>
+        typeof piece === "string" ? (
+          <Fragment key={at}>{faded(piece, cursor)}</Fragment>
+        ) : (
+          <a key={at} className="ref-pull" href={piece.url} title={code.openOnline(piece.ref)} onClick={(event) => outside(event, piece.url)}>
+            <Icon svg={ICONS.pullRequest} />
+            {faded(piece.ref, cursor)}
+          </a>
+        ),
+      );
+    case "code": {
+      const place = placeOf(node.text);
+      return place ? <PlaceRef place={place}>{faded(node.text, cursor)}</PlaceRef> : <code>{faded(node.text, cursor)}</code>;
+    }
     case "strong":
       return <strong>{spell(node.children, cursor)}</strong>;
     case "em":
       return <em>{spell(node.children, cursor)}</em>;
     case "link":
       return (
-        <a
-          href={node.url}
-          title={node.url}
-          onClick={(event) => {
-            event.preventDefault();
-            openOutside(node.url);
-          }}
-        >
+        <a href={node.url} title={node.url} className={isPullUrl(node.url) ? "ref-pull" : undefined} onClick={(event) => outside(event, node.url)}>
+          {isPullUrl(node.url) && <Icon svg={ICONS.pullRequest} />}
           {spell(node.children, cursor)}
         </a>
       );
@@ -108,8 +112,26 @@ function renderInline(node: Inline | List, cursor: Cursor): ReactNode {
   }
 }
 
-// A stretch of text, cut where the fade's stamps fall inside it: what came
-// after a stamp fades in as far along as its age says.
+function outside(event: MouseEvent, url: string) {
+  event.preventDefault();
+  openOutside(url);
+}
+
+function PlaceRef({ place, children }: { place: Place; children: ReactNode }) {
+  const face = (
+    <>
+      <FileIcon path={place.path} />
+      <span>{children}</span>
+    </>
+  );
+  if (!placesOpen()) return <code className="ref-file">{face}</code>;
+  return (
+    <button type="button" className="ref-file" title={code.openPlace(place.path)} onClick={() => openPlace(place)}>
+      {face}
+    </button>
+  );
+}
+
 function faded(text: string, cursor: Cursor): ReactNode {
   const start = cursor.at;
   const end = start + text.length;
@@ -129,28 +151,8 @@ function faded(text: string, cursor: Cursor): ReactNode {
   });
 }
 
-// Longer blocks than this show folded until asked.
 const CODE_FOLD = 30;
 
-const TONGUES: Record<string, string> = {
-  js: "amber", mjs: "amber", cjs: "amber", jsx: "amber", json: "amber",
-  zig: "amber", jsonc: "amber", json5: "amber",
-  ts: "azure", tsx: "azure", mts: "azure", cts: "azure", css: "azure", scss: "azure", sass: "azure", less: "azure",
-  vue: "azure", svelte: "azure", c: "azure", h: "azure", cc: "azure", cpp: "azure", hpp: "azure", cxx: "azure",
-  lua: "azure", dart: "azure", r: "azure",
-  rs: "ember", rust: "ember", toml: "ember", sh: "ember", bash: "ember", zsh: "ember", fish: "ember",
-  shell: "ember", ps1: "ember", psm1: "ember", powershell: "ember", pwsh: "ember", ps: "ember", bat: "ember", cmd: "ember",
-  batch: "ember", dos: "ember", nu: "ember", nushell: "ember",
-  java: "ember", swift: "ember", scala: "ember", erl: "ember",
-  py: "moss", python: "moss", pyi: "moss", ipynb: "moss", go: "moss", sql: "moss", rb: "moss", ruby: "moss",
-  clj: "moss", csv: "moss", tsv: "moss",
-  html: "iris", htm: "iris", md: "iris", markdown: "iris", mdx: "iris", yaml: "iris", yml: "iris", xml: "iris", svg: "iris",
-  php: "iris", cs: "iris", kt: "iris", kts: "iris", ex: "iris", exs: "iris", hs: "iris", graphql: "iris", gql: "iris",
-  diff: "stone", patch: "stone", txt: "stone", log: "stone", ini: "stone", cfg: "stone", conf: "stone", env: "stone",
-  dockerfile: "stone", proto: "stone", lock: "stone",
-};
-
-// A fenced block: its language, a copy button, and its code colored.
 export function CodeBlock({ text, language = "" }: { text: string; language?: string }) {
   const session = useMemo(() => sessionOf(text, language), [text, language]);
   const grammar = languageNamed(language);
@@ -158,12 +160,10 @@ export function CodeBlock({ text, language = "" }: { text: string; language?: st
   const lines = text.split("\n").length;
   const [unfolded, setUnfolded] = useState(false);
   const folded = lines > CODE_FOLD && !unfolded;
-  const tongue = session || grammar === "shellsession" ? "ember" : TONGUES[language.toLowerCase()];
 
   return (
-    <div className="codeblock" data-tongue={tongue} data-session={session ? "true" : undefined} data-folded={lines > CODE_FOLD ? String(folded) : undefined}>
+    <div className="codeblock" data-session={session ? "true" : undefined} data-folded={lines > CODE_FOLD ? String(folded) : undefined}>
       <div className="codeblock-head">
-        <span className="tongue" />
         <span>{labelOf(language, Boolean(session))}</span>
         <CopyButton text={text} />
       </div>

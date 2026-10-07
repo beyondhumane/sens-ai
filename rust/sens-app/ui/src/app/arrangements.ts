@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { store, stored } from "../shared/storage.js";
-import { arrange, arrangementOf, calmDown, DOCKS, HOMES, readArrangement, shell, tabsIn, visibleIn, type Arrangement, type Dock, type Tool } from "./shell";
+import { arrange, arrangementOf, calmDown, DOCKS, HOMES, NO_PAIRS, pairedIn, readArrangement, shell, tabsIn, visibleIn, type Arrangement, type Dock, type Tool } from "./shell";
 
 const SAVED = "sens.arrangements";
 
@@ -10,7 +10,7 @@ export type Start = "conversation" | "code" | "review" | "preview" | "explore";
 
 export const STARTS: Start[] = ["conversation", "code", "review", "preview", "explore"];
 
-type Layout = Pick<Arrangement, "wide" | "calm" | "homes" | "tabs" | "shown" | "open">;
+type Layout = Pick<Arrangement, "wide" | "calm" | "homes" | "tabs" | "shown" | "paired" | "open">;
 
 function laid(docks: Partial<Record<Dock, Tool[]>>, wide = false): Layout {
   const homes = { ...HOMES };
@@ -22,6 +22,7 @@ function laid(docks: Partial<Record<Dock, Tool[]>>, wide = false): Layout {
     homes,
     tabs: DOCKS.flatMap((dock) => docks[dock] ?? []),
     shown: { start: first("start"), end: first("end"), bottom: first("bottom") },
+    paired: NO_PAIRS,
     open: { start: Boolean(first("start")), end: Boolean(first("end")), bottom: Boolean(first("bottom")) },
   };
 }
@@ -39,7 +40,7 @@ export function startFrom(start: Start, from: Arrangement = arrangementOf(shell.
 
 export function signature(arrangement: Arrangement) {
   if (arrangement.calm) return "calm";
-  return JSON.stringify([arrangement.rail, arrangement.wide, DOCKS.map((dock) => [tabsIn(arrangement, dock), visibleIn(arrangement, dock)])]);
+  return JSON.stringify([arrangement.rail, arrangement.wide, DOCKS.map((dock) => [tabsIn(arrangement, dock), visibleIn(arrangement, dock), pairedIn(arrangement, dock)])]);
 }
 
 export interface Kept {

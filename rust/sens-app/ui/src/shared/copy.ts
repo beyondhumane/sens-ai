@@ -155,6 +155,8 @@ export const looks = copy({
 
 export const code = copy({
   en: {
+    openPlace: (path: string) => `Open ${path}`,
+    openOnline: (ref: string) => `Open ${ref} on GitHub`,
     code: "code",
     console: "console",
     text: "text",
@@ -162,6 +164,8 @@ export const code = copy({
     moreLines: (count: number) => (count === 1 ? "show 1 more line" : `show ${count} more lines`),
   },
   es: {
+    openPlace: (path: string) => `Abrir ${path}`,
+    openOnline: (ref: string) => `Abrir ${ref} en GitHub`,
     code: "código",
     console: "consola",
     text: "texto",
@@ -169,6 +173,8 @@ export const code = copy({
     moreLines: (count: number) => (count === 1 ? "mostrar 1 línea más" : `mostrar ${count} líneas más`),
   },
   fr: {
+    openPlace: (path: string) => `Ouvrir ${path}`,
+    openOnline: (ref: string) => `Ouvrir ${ref} sur GitHub`,
     code: "code",
     console: "console",
     text: "texte",
@@ -176,6 +182,8 @@ export const code = copy({
     moreLines: (count: number) => (count === 1 ? "afficher 1 ligne de plus" : `afficher ${count} lignes de plus`),
   },
   de: {
+    openPlace: (path: string) => `${path} öffnen`,
+    openOnline: (ref: string) => `${ref} auf GitHub öffnen`,
     code: "Code",
     console: "Konsole",
     text: "Text",
@@ -183,6 +191,8 @@ export const code = copy({
     moreLines: (count: number) => (count === 1 ? "1 weitere Zeile anzeigen" : `${count} weitere Zeilen anzeigen`),
   },
   ja: {
+    openPlace: (path: string) => `${path} を開く`,
+    openOnline: (ref: string) => `GitHub で ${ref} を開く`,
     code: "コード",
     console: "コンソール",
     text: "テキスト",
@@ -190,6 +200,8 @@ export const code = copy({
     moreLines: (count: number) => `さらに ${count} 行を表示`,
   },
   zh: {
+    openPlace: (path: string) => `打开 ${path}`,
+    openOnline: (ref: string) => `在 GitHub 上打开 ${ref}`,
     code: "代码",
     console: "控制台",
     text: "文本",

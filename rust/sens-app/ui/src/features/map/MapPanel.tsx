@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
-import type { ProjectMap, Reached, Region } from "../../ipc/types";
+import type { AreaLink, ProjectMap, Reached, Region } from "../../ipc/types";
 import { FileIcon } from "../../shared/FileIcon";
 import { parentOf, stem } from "../../shared/format.js";
 import { Icon } from "../../shared/Icon";
@@ -8,8 +8,9 @@ import { ICONS } from "../../shared/icons.js";
 import { showFile } from "../files/view";
 import { project } from "../project/store";
 import { t } from "./copy";
+import { shortName } from "./layout";
 import { MapGraph } from "./MapGraph";
-import { atlas, inspect, leaveReach, showMapAs, unfoldRegion } from "./store";
+import { atlas, inspect, leaveReach, pickArea, showMapAs, unfoldRegion } from "./store";
 
 export function MapTally() {
   const map = useStore(atlas, (s) => s.map);
@@ -38,13 +39,25 @@ export function MapPanel() {
   const fault = useStore(atlas, (s) => s.fault);
   const reach = useStore(atlas, (s) => s.reach);
   const mode = useStore(atlas, (s) => s.mode);
+  if (root && map?.regions.length && !fault && !reach && mode === "graph") return <GraphView map={map} />;
+  return (
+    <div className="tool-body map" id="map" aria-live="polite">
+      <MapBody />
+    </div>
+  );
+}
+
+function MapBody() {
+  const root = useStore(project, (s) => s.work);
+  const map = useStore(atlas, (s) => s.map);
+  const fault = useStore(atlas, (s) => s.fault);
+  const reach = useStore(atlas, (s) => s.reach);
 
   if (fault) return <p className="none fault">{fault}</p>;
   if (!root) return <p className="none">{t.noFolder}</p>;
   if (!map) return <p className="none">{t.indexing}</p>;
   if (reach) return <ReachView />;
   if (!map.regions.length) return <p className="none">{t.empty}</p>;
-  if (mode === "graph") return <GraphView map={map} />;
   return (
     <>
       {map.central.length > 0 && (
@@ -74,17 +87,51 @@ export function MapPanel() {
 function GraphView({ map }: { map: ProjectMap }) {
   const picked = useStore(atlas, (s) => map.regions.find((region) => region.name === s.picked));
   return (
-    <>
+    <div className="map-canvas" id="map">
       <MapGraph map={map} />
-      {picked ? (
-        <Part title={t.areas}>
-          <RegionRow region={picked} />
-        </Part>
-      ) : (
-        <p className="none">{t.pickArea}</p>
-      )}
-      <Cycles map={map} />
-    </>
+      <div className="map-drawer" aria-live="polite">
+        {picked ? <AreaCard region={picked} links={map.links} /> : <p className="none">{t.pickArea}</p>}
+        <Cycles map={map} />
+      </div>
+    </div>
+  );
+}
+
+function AreaCard({ region, links }: { region: Region; links: AreaLink[] }) {
+  const uses = links.filter((link) => link.from === region.name && link.to !== region.name).map((link) => ({ name: link.to, weight: link.weight }));
+  const usedBy = links.filter((link) => link.to === region.name && link.from !== region.name).map((link) => ({ name: link.from, weight: link.weight }));
+  return (
+    <section className="map-area" aria-label={region.name}>
+      <header className="map-area-head">
+        <Icon svg={ICONS.folderSmall} />
+        <span className="map-area-name">{region.name}</span>
+        <span className="region-count">{t.files(region.files.length)}</span>
+      </header>
+      <div className="map-ways">
+        <Ways way="out" label={t.uses} areas={uses} said={(area) => t.edge(region.name, area.name, area.weight)} />
+        <Ways way="in" label={t.usedBy} areas={usedBy} said={(area) => t.edge(area.name, region.name, area.weight)} />
+      </div>
+      <RegionBody region={region} />
+    </section>
+  );
+}
+
+type Way = { name: string; weight: number };
+
+function Ways({ way, label, areas, said }: { way: "out" | "in"; label: string; areas: Way[]; said: (area: Way) => string }) {
+  if (!areas.length) return null;
+  return (
+    <div className="map-way" data-way={way}>
+      <span className="facts-label">{label}</span>
+      <span className="map-way-areas">
+        {areas.map((area) => (
+          <button key={area.name} type="button" className="map-way-area" title={said(area)} aria-label={said(area)} onClick={() => pickArea(area.name)}>
+            <span>{shortName(area.name)}</span>
+            <span className="map-way-weight">{area.weight}</span>
+          </button>
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -132,17 +179,25 @@ function RegionRow({ region }: { region: Region }) {
       </summary>
       {open && (
         <div className="region-body">
-          {region.doors.length > 0 && <Facts label={t.doors} items={region.doors.map(stem)} />}
-          {region.uses.length > 0 && <Facts label={t.uses} items={region.uses} />}
-          {region.exports.length > 0 && <Facts label={t.exports} items={region.exports} />}
-          <div className="region-files">
-            {region.files.map((path) => (
-              <FileRow key={path} path={path} door={region.doors.includes(path)} />
-            ))}
-          </div>
+          <RegionBody region={region} uses />
         </div>
       )}
     </details>
+  );
+}
+
+function RegionBody({ region, uses = false }: { region: Region; uses?: boolean }) {
+  return (
+    <>
+      {region.doors.length > 0 && <Facts label={t.doors} items={region.doors.map(stem)} />}
+      {uses && region.uses.length > 0 && <Facts label={t.uses} items={region.uses} />}
+      {region.exports.length > 0 && <Facts label={t.exports} items={region.exports} />}
+      <div className="region-files">
+        {region.files.map((path) => (
+          <FileRow key={path} path={path} door={region.doors.includes(path)} />
+        ))}
+      </div>
+    </>
   );
 }
 

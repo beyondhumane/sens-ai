@@ -23,11 +23,14 @@ export interface Arrangement {
   homes: Record<Tool, Dock>;
   tabs: Tool[];
   shown: Docked<Tool | null>;
+  paired: Docked<Tool | null>;
   open: Docked<boolean>;
   sizes: Record<string, number>;
 }
 
 export const HOMES: Record<Tool, Dock> = { files: "end", changes: "end", map: "end", web: "end", terminal: "bottom", tasks: "end" };
+
+export const NO_PAIRS: Docked<Tool | null> = { start: null, end: null, bottom: null };
 
 const ROOMY = "(min-width: 860px)";
 
@@ -37,14 +40,21 @@ const docked = <T>(each: (dock: Dock) => T) => Object.fromEntries(DOCKS.map((doc
 
 export const tabsIn = ({ tabs, homes }: Pick<Arrangement, "tabs" | "homes">, dock: Dock) => tabs.filter((tool) => homes[tool] === dock);
 
+export const mainTabsIn = (state: Pick<Arrangement, "tabs" | "homes" | "paired">, dock: Dock) => tabsIn(state, dock).filter((tool) => tool !== state.paired[dock]);
+
 export function readArrangement(value: unknown): Arrangement {
   const kept = (value && typeof value === "object" ? value : {}) as Partial<Arrangement>;
   const homes = { ...HOMES };
   for (const tool of TOOLS) if (isDock(kept.homes?.[tool])) homes[tool] = kept.homes[tool];
   const tabs = Array.isArray(kept.tabs) ? [...new Set(kept.tabs.filter(isTool))] : [];
+  const fits = (tool: unknown, dock: Dock): tool is Tool => isTool(tool) && tabs.includes(tool) && homes[tool] === dock;
   const shown = docked((dock) => {
     const tool = kept.shown?.[dock];
-    return isTool(tool) && tabs.includes(tool) && homes[tool] === dock ? tool : (tabsIn({ tabs, homes }, dock)[0] ?? null);
+    return fits(tool, dock) ? tool : (tabsIn({ tabs, homes }, dock).find((one) => one !== kept.paired?.[dock]) ?? null);
+  });
+  const paired = docked((dock) => {
+    const tool = kept.paired?.[dock];
+    return fits(tool, dock) && shown[dock] !== null && tool !== shown[dock] ? tool : null;
   });
   const sizes = Object.fromEntries(Object.entries(kept.sizes ?? {}).filter(([, size]) => Number.isFinite(size) && size > 0));
   return {
@@ -55,12 +65,13 @@ export function readArrangement(value: unknown): Arrangement {
     homes,
     tabs,
     shown,
+    paired,
     open: docked((dock) => kept.open?.[dock] === true && shown[dock] !== null),
     sizes,
   };
 }
 
-export const arrangementOf = ({ rail, railClosed, wide, calm, homes, tabs, shown, open, sizes }: Arrangement): Arrangement => ({
+export const arrangementOf = ({ rail, railClosed, wide, calm, homes, tabs, shown, paired, open, sizes }: Arrangement): Arrangement => ({
   rail,
   railClosed,
   wide,
@@ -68,6 +79,7 @@ export const arrangementOf = ({ rail, railClosed, wide, calm, homes, tabs, shown
   homes,
   tabs,
   shown,
+  paired,
   open,
   sizes,
 });
@@ -96,12 +108,16 @@ shell.subscribe((now) => {
   store(ARRANGEMENT, arrangementOf(now));
 });
 
-export const visibleIn = (state: Pick<Arrangement, "calm" | "open" | "shown">, dock: Dock) => (!state.calm && state.open[dock] ? state.shown[dock] : null);
+type Visible = Pick<Arrangement, "calm" | "open" | "shown">;
 
-export const panelShows = (tool: Tool) => {
-  const state = shell.getState();
-  return visibleIn(state, state.homes[tool]) === tool;
-};
+export const visibleIn = (state: Visible, dock: Dock) => (!state.calm && state.open[dock] ? state.shown[dock] : null);
+
+export const pairedIn = (state: Visible & Pick<Arrangement, "paired">, dock: Dock) => (visibleIn(state, dock) ? state.paired[dock] : null);
+
+export const onScreen = (state: Visible & Pick<Arrangement, "paired" | "homes">, tool: Tool) =>
+  visibleIn(state, state.homes[tool]) === tool || pairedIn(state, state.homes[tool]) === tool;
+
+export const panelShows = (tool: Tool) => onScreen(shell.getState(), tool);
 
 export const toolsShown = (state: State = shell.getState()) => DOCKS.some((dock) => visibleIn(state, dock));
 
@@ -109,37 +125,59 @@ const entering: Partial<Record<Tool, () => void>> = {};
 export const whenShown = (tool: Tool, enter: () => void) => void (entering[tool] = enter);
 
 shell.subscribe((now, before) => {
-  for (const dock of DOCKS) {
-    const tool = visibleIn(now, dock);
-    if (tool && tool !== visibleIn(before, dock)) entering[tool]?.();
-  }
+  for (const tool of TOOLS) if (onScreen(now, tool) && !onScreen(before, tool)) entering[tool]?.();
 });
 
-function nextIn(state: Pick<Arrangement, "tabs" | "homes">, dock: Dock, gone: Tool) {
-  const list = tabsIn(state, dock);
+function nextIn(state: Arrangement, dock: Dock, gone: Tool) {
+  const list = mainTabsIn(state, dock);
   const rest = list.filter((tool) => tool !== gone);
   return rest[Math.min(Math.max(0, list.indexOf(gone)), rest.length - 1)] ?? null;
 }
 
-export function moveTool(tool: Tool, dock: Dock, before?: Tool | null) {
-  const state = shell.getState();
-  const was = panelShows(tool);
+function without(state: Arrangement, dock: Dock, gone: Tool) {
+  const pair = state.paired[dock] === gone ? null : state.paired[dock];
+  const next = state.shown[dock] === gone ? nextIn(state, dock, gone) : state.shown[dock];
+  const shown = next ?? pair;
+  return { shown, paired: shown === pair ? null : pair, open: state.open[dock] && shown !== null };
+}
+
+function placed(state: Arrangement, tool: Tool, dock: Dock, tabs: Tool[], shown: Tool, paired: Tool | null) {
   const from = state.homes[tool];
-  const rest = state.tabs.filter((one) => one !== tool);
-  const at = before ? rest.indexOf(before) : -1;
-  const tabs = at < 0 ? [...rest, tool] : [...rest.slice(0, at), tool, ...rest.slice(at)];
-  const left = from !== dock && state.shown[from] === tool ? nextIn(state, from, tool) : state.shown[from];
+  const left = from !== dock ? without(state, from, tool) : null;
   set({
     calm: false,
     tabs,
     homes: { ...state.homes, [tool]: dock },
-    shown: { ...state.shown, [from]: left, [dock]: tool },
-    open: { ...state.open, [from]: state.open[from] && left !== null, [dock]: true },
+    shown: { ...state.shown, ...(left && { [from]: left.shown }), [dock]: shown },
+    paired: { ...state.paired, ...(left && { [from]: left.paired }), [dock]: paired },
+    open: { ...state.open, ...(left && { [from]: left.open }), [dock]: true },
   });
-  if (was && from === dock) entering[tool]?.();
 }
 
-export const showTool = (tool: Tool) => moveTool(tool, shell.getState().homes[tool], shell.getState().tabs.includes(tool) ? nextAfter(tool) : null);
+export function moveTool(tool: Tool, dock: Dock, before?: Tool | null) {
+  const state = shell.getState();
+  const was = panelShows(tool) && state.paired[dock] !== tool;
+  const rest = state.tabs.filter((one) => one !== tool);
+  const at = before ? rest.indexOf(before) : -1;
+  const tabs = at < 0 ? [...rest, tool] : [...rest.slice(0, at), tool, ...rest.slice(at)];
+  placed(state, tool, dock, tabs, tool, state.paired[dock] === tool ? null : state.paired[dock]);
+  if (was && state.homes[tool] === dock) entering[tool]?.();
+}
+
+export function pairTool(tool: Tool, dock: Dock) {
+  const state = shell.getState();
+  const partner = state.shown[dock] && state.shown[dock] !== tool ? state.shown[dock] : mainTabsIn(state, dock).find((one) => one !== tool);
+  if (!partner) return moveTool(tool, dock);
+  const stays = state.tabs.includes(tool) && state.homes[tool] === dock;
+  placed(state, tool, dock, stays ? state.tabs : [...state.tabs.filter((one) => one !== tool), tool], partner, tool);
+}
+
+export function showTool(tool: Tool) {
+  const state = shell.getState();
+  const dock = state.homes[tool];
+  if (state.paired[dock] === tool) return set({ calm: false, open: { ...state.open, [dock]: true } });
+  moveTool(tool, dock, state.tabs.includes(tool) ? nextAfter(tool) : null);
+}
 
 function nextAfter(tool: Tool) {
   const { tabs } = shell.getState();
@@ -150,8 +188,28 @@ export function closeTab(tool: Tool) {
   const state = shell.getState();
   if (!state.tabs.includes(tool)) return;
   const dock = state.homes[tool];
-  const shown = state.shown[dock] === tool ? nextIn(state, dock, tool) : state.shown[dock];
-  set({ tabs: state.tabs.filter((one) => one !== tool), shown: { ...state.shown, [dock]: shown }, open: { ...state.open, [dock]: state.open[dock] && shown !== null } });
+  const left = without(state, dock, tool);
+  set({
+    tabs: state.tabs.filter((one) => one !== tool),
+    shown: { ...state.shown, [dock]: left.shown },
+    paired: { ...state.paired, [dock]: left.paired },
+    open: { ...state.open, [dock]: left.open },
+  });
+}
+
+export function splitDock(dock: Dock) {
+  const state = shell.getState();
+  const list = mainTabsIn(state, dock);
+  const shown = state.shown[dock];
+  const partner = list[list.indexOf(shown!) + 1] ?? list.find((tool) => tool !== shown);
+  if (partner) pairTool(partner, dock);
+}
+
+export const unpair = (dock: Dock) => set(({ paired }) => ({ paired: { ...paired, [dock]: null } }));
+
+export function widenPaired(dock: Dock) {
+  const { shown, paired } = shell.getState();
+  if (paired[dock]) set({ shown: { ...shown, [dock]: paired[dock] }, paired: { ...paired, [dock]: null } });
 }
 
 export const closeDock = (dock: Dock) => set(({ open }) => ({ open: { ...open, [dock]: false } }));
@@ -159,14 +217,17 @@ export const closeDock = (dock: Dock) => set(({ open }) => ({ open: { ...open, [
 export const closeTools = () => set({ open: docked(() => false) });
 
 export function hideTool(tool: Tool) {
-  if (panelShows(tool)) closeDock(shell.getState().homes[tool]);
+  const state = shell.getState();
+  const dock = state.homes[tool];
+  if (pairedIn(state, dock) === tool) return unpair(dock);
+  if (panelShows(tool)) closeDock(dock);
 }
 
 export function toggleDock(dock: Dock) {
   const state = shell.getState();
   if (visibleIn(state, dock)) return closeDock(dock);
   const tool = state.shown[dock] ?? tabsIn(state, dock)[0];
-  if (tool) moveTool(tool, dock, nextAfter(tool));
+  if (tool) set({ calm: false, shown: { ...state.shown, [dock]: tool }, open: { ...state.open, [dock]: true } });
 }
 
 export const placeRail = (rail: Side) => set({ rail });

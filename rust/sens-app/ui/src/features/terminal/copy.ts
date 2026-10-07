@@ -2,7 +2,6 @@ import { copy } from "../../shared/i18n";
 
 export const t = copy({
   en: {
-    terminal: "Terminal",
     terminals: "Terminals",
     closeThis: "Close this terminal",
     closeNamed: (name: string) => `Close terminal ${name}`,
@@ -25,7 +24,6 @@ export const t = copy({
     byClaude: (title: string) => `Started by Claude · ${title}`,
   },
   es: {
-    terminal: "Terminal",
     terminals: "Terminales",
     closeThis: "Cerrar esta terminal",
     closeNamed: (name: string) => `Cerrar la terminal ${name}`,
@@ -48,7 +46,6 @@ export const t = copy({
     byClaude: (title: string) => `La lanzó Claude · ${title}`,
   },
   fr: {
-    terminal: "Terminal",
     terminals: "Terminaux",
     closeThis: "Fermer ce terminal",
     closeNamed: (name: string) => `Fermer le terminal ${name}`,
@@ -71,7 +68,6 @@ export const t = copy({
     byClaude: (title: string) => `Lancé par Claude · ${title}`,
   },
   de: {
-    terminal: "Terminal",
     terminals: "Terminals",
     closeThis: "Dieses Terminal schließen",
     closeNamed: (name: string) => `Terminal ${name} schließen`,
@@ -94,7 +90,6 @@ export const t = copy({
     byClaude: (title: string) => `Von Claude gestartet · ${title}`,
   },
   ja: {
-    terminal: "ターミナル",
     terminals: "ターミナル",
     closeThis: "このターミナルを閉じる",
     closeNamed: (name: string) => `ターミナル ${name} を閉じる`,
@@ -117,7 +112,6 @@ export const t = copy({
     byClaude: (title: string) => `Claude が起動 · ${title}`,
   },
   zh: {
-    terminal: "终端",
     terminals: "终端",
     closeThis: "关闭此终端",
     closeNamed: (name: string) => `关闭终端 ${name}`,

@@ -13,6 +13,7 @@ import { t } from "./copy";
 import type { DiffFile } from "./diff";
 import { showFile, type Body } from "../files/view";
 import { changes, unfold } from "./store";
+import { Tally } from "../../shared/Tally";
 
 const CHANGE_PREVIEW = 400;
 const CHANGE_CAP = 300;
@@ -53,7 +54,6 @@ export function ChangesPanel() {
   );
 }
 
-// What changed in all, for the panel's header.
 export function ChangeTotals() {
   const files = useStore(changes, (s) => s.changed) || [];
   if (!files.length) return null;
@@ -61,14 +61,11 @@ export function ChangeTotals() {
   return (
     <>
       <span className="files">{t.files(files.length)}</span>
-      <span className="plus">{`+${sum("plus")}`}</span>
-      <span className="minus">{`−${sum("minus")}`}</span>
+      <Tally plus={sum("plus")} minus={sum("minus")} />
     </>
   );
 }
 
-// The body is drawn while the row is open, again after each read of git, as the
-// file may have changed. A new file's lines are counted once they are read.
 function ChangeRow({ file }: { file: DiffFile }) {
   const open = useStore(changes, (s) => s.unfolded.has(file.path));
   const touched = useStore(project, (s) => s.touched.has(file.path));
@@ -122,16 +119,12 @@ function Counts({ file, plus }: { file: DiffFile; plus: number }) {
       ) : file.fresh && !plus ? (
         <span className="plus">{t.fresh}</span>
       ) : (
-        <>
-          <span className="plus">{`+${plus}`}</span>
-          <span className="minus">{`−${file.minus}`}</span>
-        </>
+        <Tally plus={plus} minus={file.minus} />
       )}
     </span>
   );
 }
 
-// A new file has no diff: its lines are read and shown as added, and counted.
 function ChangeBody({ file, counted }: { file: DiffFile; counted: (lines: number) => void }) {
   const [fresh, setFresh] = useState<Body | null>(null);
 

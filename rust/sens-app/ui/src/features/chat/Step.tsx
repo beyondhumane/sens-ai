@@ -16,17 +16,14 @@ import { aimSite } from "../web/store";
 import { EDITS, SHELLS, describe, editOf, hitsOf, hostOf, relative, searchSummary } from "./looks";
 import { t } from "./step.copy";
 import type { Step as StepPart } from "./turns";
+import { Tally } from "../../shared/Tally";
 
-// Diffs in the chat show this many rows until asked for more.
 export const DIFF_PREVIEW = 14;
-// Search results, this many.
 const RESULT_CAP = 12;
 const STRIP_CAP = 4;
 const TARGET_CAP = 400;
 const READ_TERMINAL = "mcp__sens__read_terminal";
 
-// A tool call: a line saying what it does, opening to what it did. A step with
-// nothing to show does not open; a failed one opens by itself.
 export const Step = memo(function Step({ part }: { part: StepPart }) {
   const { name, input, state, links } = part;
   const look = describe(name, input);
@@ -73,8 +70,7 @@ export const Step = memo(function Step({ part }: { part: StepPart }) {
   );
 });
 
-// What a finished call shows, by tool: a terminal, a diff, results, a page.
-function outcome({ name, input, state, output, detail }: StepPart): { nodes?: ReactNode[]; meta?: string } {
+function outcome({ name, input, state, output, detail }: StepPart): { nodes?: ReactNode[]; meta?: ReactNode } {
   if (state === "running" || state === "stopped") return {};
   const failed = state === "failed";
   if (SHELLS.has(name)) {
@@ -88,7 +84,11 @@ function outcome({ name, input, state, output, detail }: StepPart): { nodes?: Re
 
   const edit = editOf(name, input, detail);
   if (edit) {
-    const meta = detail?.type === "create" ? `+${edit.plus}` : `+${edit.plus} −${edit.minus}`;
+    const meta = (
+      <span className="marks">
+        <Tally plus={edit.plus} minus={detail?.type === "create" ? undefined : edit.minus} />
+      </span>
+    );
     return { nodes: [<LinesCard key="diff" rows={edit.rows} preview={DIFF_PREVIEW} language={languageOf(edit.path, input.content || "")} />], meta };
   }
   if (name === "Read") {
@@ -161,7 +161,6 @@ function TodoList({ todos = [] }: { todos?: Todo[] }) {
   );
 }
 
-// `path:line:text` lines open the file; anything that looks like a path does too.
 function Results({ lines }: { lines: string[] }) {
   const [all, setAll] = useState(false);
   const root = project.getState().work;
@@ -206,7 +205,6 @@ export function WebLink({ url }: { url: string }) {
   );
 }
 
-// A site's icon, or the globe until it loads (or when it never does).
 function Site({ url }: { url: string }) {
   let host = "";
   try {
@@ -221,7 +219,6 @@ function Site({ url }: { url: string }) {
   );
 }
 
-// The sites a search consulted: their icons on the line, the list inside.
 function Strip({ links }: { links: Link[] }) {
   if (!links.length) return <span className="sources" hidden />;
   return (

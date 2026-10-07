@@ -2,7 +2,7 @@ import type { CSSProperties, KeyboardEvent } from "react";
 import { useStore } from "zustand";
 import { Icon } from "../shared/Icon";
 import { t } from "./copy";
-import { closeTab, DOCKS, shell, showTool, tabsIn, toggleDock, toggleRail, TOOLS, visibleIn, type Arrangement, type Dock, type Tool } from "./shell";
+import { closeTab, DOCKS, pairedIn, shell, showTool, tabsIn, toggleDock, toggleRail, TOOLS, visibleIn, type Arrangement, type Dock, type Tool } from "./shell";
 import { liftTool, moveByKey, toolDrag } from "./toolDrag";
 import { DOCK_ICONS, TOOL_ICONS } from "./ToolsMenu";
 
@@ -64,7 +64,7 @@ export function LivePlan() {
                 <span>{t.dock[dock]}</span>
               </button>
               <span className="plan-chips">
-                {tabs.map((tool) => chip(tool, tool === arrangement.shown[dock]))}
+                {tabs.map((tool) => chip(tool, tool === arrangement.shown[dock] || tool === pairedIn(arrangement, dock)))}
                 {!tabs.length && <span className="plan-empty">{t.emptyDock}</span>}
               </span>
             </div>

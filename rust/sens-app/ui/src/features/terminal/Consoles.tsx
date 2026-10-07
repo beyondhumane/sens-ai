@@ -1,7 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useStore } from "zustand";
-import { shell, visibleIn } from "../../app/shell";
+import { onScreen, shell } from "../../app/shell";
 import { stem } from "../../shared/format.js";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
@@ -12,7 +12,7 @@ import { closeConsole, consoles, nameOf, openConsole, screenOf, settle, shareCon
 export function ConsoleTabs() {
   const open = useStore(consoles, (s) => s.open);
   const shown = useStore(consoles, (s) => s.shown);
-  if (!open.length) return <span className="tool-name">{t.terminal}</span>;
+  if (!open.length) return null;
   return (
     <div className="console-tabs" role="tablist" aria-label={t.terminals}>
       {open.map((one) => (
@@ -72,7 +72,7 @@ export function ConsolePanel() {
   const open = useStore(consoles, (s) => s.open);
   const shown = useStore(consoles, (s) => s.shown);
   const opening = useStore(consoles, (s) => s.opening);
-  const here = useStore(shell, (s) => visibleIn(s, s.homes.terminal) === "terminal");
+  const here = useStore(shell, (s) => onScreen(s, "terminal"));
   const root = useStore(project, (s) => s.work);
   const body = useRef<HTMLDivElement>(null);
 
