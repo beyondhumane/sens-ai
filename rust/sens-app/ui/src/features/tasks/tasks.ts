@@ -2,8 +2,6 @@ import type { AgentEvent } from "../../ipc/types";
 import { compact, seconds, whole } from "../../shared/format.js";
 import { t } from "./copy";
 
-// What the model runs in the background: subagents and commands it leaves
-// running, told by the agent's task events.
 export const TASK_EVENTS = new Set(["taskStarted", "taskProgress", "taskEnded"]);
 const TASK_TOOLS = new Set(["Bash", "PowerShell", "Agent", "Task"]);
 const OUTPUT_AT = /written to: (.+?\.output)\b/;
@@ -14,7 +12,6 @@ export interface Task {
   runner: string;
   description: string;
   prompt: string;
-  // The tool call that launched it, for a command's text.
   input: Record<string, unknown>;
   status: string;
   began: number;
@@ -25,7 +22,6 @@ export interface Task {
   tokens: number;
   millis: number;
   summary: string;
-  // Where a command writes what it prints.
   output: string;
 }
 
@@ -41,9 +37,6 @@ function changed(tasks: Map<string, Task>, id: string, change: Partial<Task>) {
   return new Map(tasks).set(id, { ...task, ...change });
 }
 
-// The tasks after one agent event: the same map when nothing about them
-// changed, a new one when something did. `calls` remembers the tool calls that
-// may launch one.
 export function afterEvent(tasks: Map<string, Task>, calls: Calls, event: AgentEvent, at: number): Map<string, Task> {
   switch (event.kind) {
     case "tool":
@@ -97,7 +90,6 @@ export function afterEvent(tasks: Map<string, Task>, calls: Calls, event: AgentE
   }
 }
 
-// Running ones first, then the newest.
 export const inOrder = (tasks: Map<string, Task>) =>
   [...tasks.values()].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || b.began - a.began);
 

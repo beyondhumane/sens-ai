@@ -137,7 +137,6 @@ function InstallForm({ detail }: { detail: Detail }) {
 export const skillForm = (back: HTMLElement) => openPanel(t.createSkill, <SkillForm />, back);
 export const serverForm = (back: HTMLElement) => openPanel(t.addServer, <ServerForm />, back);
 
-// Installs straight away unless it runs code or needs values.
 export function needsAsking(detail: Detail) {
   const runs = detail.listing.kind === "plugin" ? runsOf(detail) : [];
   return runs.length > 0 || detail.needs.length > 0;
@@ -160,7 +159,6 @@ export async function addListing(listing: Listing, back: HTMLElement) {
   }
 }
 
-// Once removed, the card that opened this is gone: the focus goes to "Añadir".
 export function confirmRemoval(spec: Spec, name: string, back: HTMLElement) {
   openPanel(
     shared.remove(name),

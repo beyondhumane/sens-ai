@@ -7,7 +7,6 @@ const LONG_LINES = 12;
 
 export const lengthy = (text: string) => text.length > LONG_TEXT || text.split("\n").length > LONG_LINES;
 
-// Long content shows its top until asked for the rest.
 export function Folded({ long, children }: { long: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const folded = long && !open;
@@ -23,7 +22,6 @@ export function Folded({ long, children }: { long: boolean; children: ReactNode 
   );
 }
 
-// Markdown folded when it is long: a subagent's prompt, a page the model read.
 export const FoldedText = ({ text }: { text: string }) => (
   <Folded long={lengthy(text)}>
     <Markdown text={text} />

@@ -4,7 +4,6 @@ import { panelShows } from "../../app/shell";
 import { project } from "../project/store";
 import { diffedFiles, freshFile, type DiffFile } from "./diff";
 
-// `changed` is null until git answers.
 export const changes = createStore(() => ({
   changed: null as DiffFile[] | null,
   versioned: true,
@@ -15,7 +14,6 @@ export const changes = createStore(() => ({
 const set = changes.setState;
 const home = () => project.getState().work;
 
-// Each read supersedes the ones before it.
 let lap = 0;
 let soon = 0;
 
@@ -39,7 +37,6 @@ export async function loadChanges() {
   });
 }
 
-// The agent is editing: wait for it to pause before asking git again.
 export function soonChanges() {
   clearTimeout(soon);
   soon = window.setTimeout(loadChanges, 400);

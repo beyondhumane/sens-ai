@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { copy, languageNow, languageOf, localeNow, showLanguage } from "./i18n";
 

@@ -1,6 +1,3 @@
-// A diff as the rows a card draws: removed, added and context lines with the
-// number each has in its file, and a gap between hunks.
-
 export interface Hunk {
   oldStart: number;
   newStart: number;
@@ -15,8 +12,6 @@ export interface Row {
   text: string;
 }
 
-// Context and added rows count in the file after, removed ones in the file
-// before. `added` lists the new lines, for the viewer to mark.
 export function patchRows(hunks: Hunk[]) {
   const rows: Row[] = [];
   const added: number[] = [];
@@ -45,10 +40,8 @@ export function patchRows(hunks: Hunk[]) {
   return { rows, plus, minus, added };
 }
 
-// A new file: every line added.
 export const addedRows = (text: string): Row[] => String(text).split("\n").map((line, at) => ({ kind: "add", num: at + 1, text: line }));
 
-// A replacement asked for, before it happens: no line numbers yet.
 export const replacedRows = (before: string, after: string): Row[] => [
   ...String(before).split("\n").map((text): Row => ({ kind: "del", text })),
   ...String(after).split("\n").map((text): Row => ({ kind: "add", text })),

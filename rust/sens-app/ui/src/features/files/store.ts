@@ -3,8 +3,6 @@ import { commands } from "../../ipc/commands";
 import type { Entry } from "../../ipc/types";
 import { project } from "../project/store";
 
-// The file tree: which folders are open and what each folder read holds.
-// `loads` counts reloads, so a search runs again.
 export const files = createStore(() => ({
   unfolded: new Set<string>(),
   folders: new Map<string, Entry[]>(),
@@ -15,11 +13,9 @@ export const files = createStore(() => ({
 const set = files.setState;
 const home = () => project.getState().work;
 
-// A reload or a new project makes every read in flight stale.
 let generation = 0;
 const pending = new Set<string>();
 
-// A folder opened for the first time is read on its own.
 export function loadFolder(path: string) {
   if (files.getState().folders.has(path) || pending.has(path)) return;
   const mine = generation;
@@ -33,8 +29,6 @@ export function loadFolder(path: string) {
     .finally(() => mine === generation && pending.delete(path));
 }
 
-// Every folder on screen, read again from the top and swapped in at once, so
-// the tree does not blink after each turn.
 async function readShown(root: string, path: string, into: Map<string, Entry[]>) {
   const entries = await commands.folder(root, path);
   into.set(path, entries);
@@ -58,7 +52,6 @@ export async function loadFiles() {
   if (mine === generation) set({ folders, fault: "" });
 }
 
-// A new project starts folded, with nothing read yet.
 export function forgetTree() {
   generation++;
   pending.clear();
@@ -73,7 +66,6 @@ export function toggleFolder(path: string) {
   });
 }
 
-// Opens every folder above a file, so opening it from the chat shows where it is.
 export function revealFile(path: string) {
   set(({ unfolded }) => {
     const parts = path.split("/");

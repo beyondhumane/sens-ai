@@ -12,7 +12,6 @@ import { t } from "./copy";
 import { tasks, tickTasks } from "./store";
 import { TASK_STATE, inOrder, isAgent, isRunning, isShell, shellEnding, tally, taskTime, taskUsage, type Task } from "./tasks";
 
-// How many run and how many ended, for the panel's header.
 export const TaskTally = () => tally(useStore(tasks, (s) => s.tasks));
 
 export function TasksPanel() {
@@ -70,9 +69,6 @@ function TaskCard({ task, now }: { task: Task; now: number }) {
   );
 }
 
-// While the card is open, what the command prints is read again with every
-// update, until it has ended and its output was read once more. The output
-// keeps to the bottom unless scrolled up.
 function ShellBody({ task, open, now }: { task: Task; open: boolean; now: number }) {
   const [output, setOutput] = useState("");
   const out = useRef<HTMLPreElement>(null);
@@ -138,7 +134,6 @@ function AgentBody({ task }: { task: Task }) {
   );
 }
 
-// Once asked, the button stays off: the task ends and the card says so.
 function StopTask({ task }: { task: Task }) {
   const [asked, setAsked] = useState(false);
   const [trouble, setTrouble] = useState("");

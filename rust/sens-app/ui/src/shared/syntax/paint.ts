@@ -3,10 +3,7 @@ import type { Look, Painted } from "./tokenize";
 export type { Look, Painted } from "./tokenize";
 export type Runs = [string, number][];
 
-// Past this a text stays plain: coloring it would cost more than it gives.
 const LONGEST_TEXT = 1_000_000;
-// What was colored last stays at hand, up to this much text, so drawing it
-// again (a session reopened, a file read after each turn) costs nothing.
 const KEPT_TEXT = 4_000_000;
 
 const kept = new Map<string, Painted | null>();
@@ -25,14 +22,10 @@ let tokenizer: ((text: string, language: string) => Promise<Painted | null>) | n
 
 const keyOf = (text: string, language: string) => `${language}\n${text}`;
 
-// The colors of a text, if they are at hand already.
 export function paintedNow(text: string, language: string | null) {
   return (language && kept.get(keyOf(text, language))) || null;
 }
 
-// Colors a text in the worker, one at a time. A text no longer wanted when its
-// turn comes (a block the stream already drew again) is skipped. null: no
-// grammar for it, too long, or the worker could not start.
 export function paint(text: string, language: string | null, wanted = () => true): Promise<Painted | null> {
   if (!language || text.length > LONGEST_TEXT) return Promise.resolve(null);
   const key = keyOf(text, language);
@@ -72,8 +65,6 @@ function keep(key: string, painted: Painted | null) {
   }
 }
 
-// In a worker; Vitest has none, so there it runs in the page (and the build
-// leaves that path out).
 function tokenize(text: string, language: string) {
   tokenizer ??= import.meta.env.MODE === "test" ? inPage : inWorker();
   return tokenizer(text, language);
@@ -90,7 +81,6 @@ function inWorker() {
     answers.get(data.id)?.(data.painted);
     answers.delete(data.id);
   });
-  // A worker that cannot start leaves everything plain from then on.
   worker.addEventListener("error", () => {
     tokenizer = async () => null;
     for (const answer of answers.values()) answer(null);
@@ -108,10 +98,6 @@ export interface Row {
   text: string;
 }
 
-// A diff's rows colored as their file: context and added rows read as the file
-// after, removed ones as the file before, so a string or a comment that spans
-// lines still reads right. A gap between hunks, or a row that stays plain, gets
-// null.
 export async function paintRows(rows: Row[], language: string | null, wanted = () => true) {
   const before = rows.flatMap((row, at) => (row.kind === "" || row.kind === "del" ? [at] : []));
   const after = rows.flatMap((row, at) => (row.kind === "" || row.kind === "add" ? [at] : []));

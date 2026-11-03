@@ -1,6 +1,3 @@
-// localStorage that never throws: a private window or blocked storage reads
-// the fallback and drops the write.
-
 export function stored(key, fallback) {
   try {
     return JSON.parse(localStorage.getItem(key)) ?? fallback;

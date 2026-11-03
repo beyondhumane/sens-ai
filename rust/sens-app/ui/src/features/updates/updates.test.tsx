@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Dialog } from "../../app/Dialog";

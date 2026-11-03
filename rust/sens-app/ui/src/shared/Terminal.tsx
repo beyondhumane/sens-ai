@@ -12,8 +12,6 @@ const DRAWN = 120_000;
 const MARKED_LINE = 2_000;
 const WEB = /^https?:\/\//i;
 
-// A command and what it printed, as a terminal shows it. `state` is set once
-// the command ran.
 export function Terminal({
   command,
   shell,

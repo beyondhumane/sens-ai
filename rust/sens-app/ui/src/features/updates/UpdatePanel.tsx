@@ -11,14 +11,11 @@ import { openPanel } from "../../shared/Panel";
 import { t } from "./copy";
 import { updates } from "./store";
 
-// The new version, its notes, and installing it: Sens restarts at the end.
 export function openUpdate(back: HTMLElement) {
   const { latest } = updates.getState();
   if (latest) openPanel(`Sens ${latest.version}`, <UpdatePanel />, back);
 }
 
-// Sessions still working would be stopped: the first press says so, and
-// asks again.
 function UpdatePanel() {
   const current = useStore(updates, (s) => s.current);
   const latest = useStore(updates, (s) => s.latest);

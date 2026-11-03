@@ -23,8 +23,6 @@ function ActivityMark({ activity }: { activity: Activity }) {
 
 const TITLE_LIMIT = 56;
 
-// The sidebar: where to go, the projects with their sessions, and who is
-// using Sens.
 export function Rail() {
   return (
     <>
@@ -72,8 +70,6 @@ interface Managed {
   summary: SessionSummary;
 }
 
-// Keyboard focus goes back to the row a change came from, or to "Sesión nueva"
-// when the row is gone, once the list is drawn again.
 function backToRow(id: string) {
   requestAnimationFrame(() => {
     const dots = document.querySelector<HTMLElement>(`.session-row[data-session="${CSS.escape(id)}"] .dots`);
@@ -81,7 +77,6 @@ function backToRow(id: string) {
   });
 }
 
-// One menu serves every row: it opens by the row's dots.
 function useRowMenu<T>() {
   const menu = useSheet();
   const [target, setTarget] = useState<T | null>(null);
@@ -177,7 +172,6 @@ interface ProjectProps {
   renamed: (id: string) => void;
 }
 
-// Archived sessions go last; a folded project keeps its rows, out of reach.
 function Project({ space, shut, renaming, managing, manage, beside, managingFolder, manageFolder, renamed }: ProjectProps) {
   const here = useStore(project, (s) => s.root === space.root);
   const busiest = useStore(rail, (s) => activityOf(space.sessions.map((one) => one.id), s.activity));
@@ -284,8 +278,6 @@ function SessionRow({ home, summary, renaming, managed, beside, manage, renamed 
   );
 }
 
-// Enter keeps the new name, Escape the old one; leaving the field keeps it too,
-// unless the whole window lost the focus.
 function Rename({ home, summary, done }: { home: string; summary: SessionSummary; done: () => void }) {
   const field = useRef<HTMLInputElement>(null);
   const settled = useRef(false);
@@ -349,7 +341,6 @@ function FolderMenu({ menu, root }: { menu: Sheet; root: string | null }) {
   );
 }
 
-// Deleting asks twice: the first click turns the item into "Confirmar".
 function RowMenu({ menu, managed, shown, rename }: { menu: Sheet; managed: Managed | null; shown: string[]; rename: () => void }) {
   const [armed, setArmed] = useState(false);
 

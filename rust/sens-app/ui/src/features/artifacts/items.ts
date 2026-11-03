@@ -27,8 +27,6 @@ export const pictureKey = (item: Artifact) => `${item.at}:${item.target}`;
 
 export const keptTally = (kept: number) => (kept ? t.kept(kept) : t.keptNone);
 
-// Pictures open in the dialog, text and pages in the file panel, the rest in
-// the system: links in the browser, other files with their app.
 export function howToOpen(item: Artifact): "picture" | "text" | "outside" {
   if (item.kind === "image") return "picture";
   if (item.kind === "link") return "outside";

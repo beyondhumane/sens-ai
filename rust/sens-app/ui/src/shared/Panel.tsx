@@ -1,7 +1,6 @@
 import { useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import { closeDialog, openDialog } from "../app/modal";
 
-// A form or a panel in the shared dialog; `back` takes the focus when it closes.
 export const openPanel = (title: string, content: ReactElement, back?: HTMLElement) => openDialog(title, content, back);
 
 export type Control = {
@@ -28,8 +27,6 @@ export function Pair({ id, label, note, control }: { id: string; label: string; 
   );
 }
 
-// The dialog's form: it closes once `act` succeeds, then runs `after`, and it
-// stays open saying why when `act` fails.
 export function PanelForm({
   submit,
   danger = false,

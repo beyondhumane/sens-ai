@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Capabilities as Caps, Detail, Listing, Market } from "../../ipc/types";
@@ -78,10 +77,8 @@ const detail = (id: string, over: Partial<Detail> = {}): Detail => ({
   ...over,
 });
 
-// The dialog's title while it is open.
 const shown = () => (dialog.getState().open ? { title: dialog.getState().title } : null);
 
-// jsdom has no modal dialogs: these open and close it, as the WebView does.
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
