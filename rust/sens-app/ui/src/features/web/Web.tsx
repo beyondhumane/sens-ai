@@ -8,9 +8,6 @@ import { addressOf, aim, goBack, goForward, holdFrame, pickWidth, reloadSite, sy
 
 const WIDTHS = [0, 390, 768, 1280];
 
-// The web panel's body: its bar, the frame the native page is laid over, and
-// its console. The address bar (Address) and "open outside" (Outside) go in
-// the panel's header.
 export function Web() {
   return (
     <>
@@ -21,8 +18,6 @@ export function Web() {
   );
 }
 
-// What is typed stays while the field has the focus; otherwise the bar follows
-// the page.
 export function Address() {
   const url = useStore(web, (s) => s.url);
   const base = useStore(web, (s) => s.base);
@@ -112,7 +107,6 @@ function Bar() {
   );
 }
 
-// The native page follows this box as it moves or changes size.
 function Page() {
   const shown = useStore(web, (s) => Boolean(s.url));
   const box = useRef<HTMLDivElement>(null);
@@ -140,7 +134,6 @@ function Page() {
   );
 }
 
-// The console keeps to its last line.
 function Log() {
   const log = useStore(web, (s) => s.log);
   const shown = useStore(web, (s) => s.logShown);

@@ -148,7 +148,6 @@ function Origin({ item }: { item: Artifact }) {
   );
 }
 
-// The picture is read once the thumbnail comes near the visible part of the view.
 function Thumb({ item }: { item: Artifact }) {
   const frame = useRef<HTMLSpanElement>(null);
   const [src, setSrc] = useState("");

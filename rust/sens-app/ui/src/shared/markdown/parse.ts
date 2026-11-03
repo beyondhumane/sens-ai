@@ -1,7 +1,3 @@
-// The Markdown the chat speaks, as a tree: the subset models write (headings,
-// lists, fences, tables, quotes, rules, inline code, emphasis and links),
-// nothing that would need HTML.
-
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "code"; text: string }
@@ -12,7 +8,6 @@ export interface List {
   kind: "list";
   ordered: boolean;
   start?: number;
-  // Each item: its text, and the lists nested under it, in order.
   items: (Inline | List)[][];
 }
 
@@ -35,7 +30,6 @@ const RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 const BREAK = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const QUOTE = /^\s*>\s?(.*)$/;
 
-// Only web addresses become links; any other target leaves its label as text.
 export function inline(text: string): Inline[] {
   const out: Inline[] = [];
   const plain = (piece: string) => piece && out.push({ kind: "text", text: piece });
@@ -61,8 +55,6 @@ const cells = (line: string) =>
     .split("|")
     .map((cell) => inline(cell.trim()));
 
-// Lists nest by indentation: a deeper item opens a list inside the item above
-// it, a shallower one closes lists until one is as shallow.
 function listInto(lists: { depth: number; list: List }[], page: Block[], item: RegExpMatchArray) {
   const [, indent, bullet, number, text] = item;
   const depth = indent.replace(/\t/g, "    ").length;
@@ -155,9 +147,6 @@ export function parse(source: string): Block[] {
   return page;
 }
 
-// A text being written arrives cut anywhere: a link half typed, a code span or
-// emphasis still open. Mended, it draws as it will once finished. A fence
-// still open is left as it is.
 export function mended(source: string) {
   const fences = source.split("\n").filter((line) => FENCE.test(line)).length;
   if (fences % 2) return source;
@@ -171,8 +160,6 @@ export function mended(source: string) {
   return text + closers.join("");
 }
 
-// A reply split where the page may be cut without changing how it reads:
-// at blank lines outside fences.
 export function splitBlocks(text: string) {
   const blocks: string[] = [];
   let lines: string[] = [];
@@ -191,7 +178,6 @@ export function splitBlocks(text: string) {
   return blocks;
 }
 
-// How much text a tree shows, the way the fade counts it.
 export function textLength(blocks: Block[]): number {
   const ofInline = (nodes: (Inline | List)[]): number =>
     nodes.reduce((sum, node) => sum + (node.kind === "text" || node.kind === "code" ? node.text.length : node.kind === "list" ? ofList(node) : ofInline(node.children)), 0);

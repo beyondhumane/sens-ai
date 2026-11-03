@@ -5,12 +5,9 @@ import { Icon } from "../shared/Icon";
 import { ICONS } from "../shared/icons.js";
 import { closeDialog, closed, dialog, openDialog } from "./modal";
 
-// A picture, as large as the window lets it.
 export const openPicture = (title: string, src: string, from: HTMLElement) =>
   openDialog(title, <img className="sight" alt={title} src={src} />, from, true);
 
-// The dialog is modal: its content renders before it opens, so the field
-// marked data-autofocus takes the focus. A click on the backdrop closes it.
 export function Dialog() {
   const open = useStore(dialog, (s) => s.open);
   const title = useStore(dialog, (s) => s.title);

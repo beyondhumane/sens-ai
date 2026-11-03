@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { asker } from "../dev/acting";
 import { project } from "../features/project/store";

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit && npm run typecheck -w sens-app-ui",
     "test": "vitest run",
     "test:watch": "vitest",
+    "dup": "jscpd --silent --reporters console --min-lines 10 --min-tokens 80 --threshold 1 --ignore \"**/node_modules/**,**/target/**,**/dist/**,**/*.test.*,**/locales/**,**/i18n/**\" rust/sens-app/ui/src rust/sens-agent/src rust/sens-app/src rust/sens-canon/src rust/sens-index/src src scripts",
     "app:dev": "cd rust/sens-app && tauri dev",
     "setup:dev": "cd rust/sens-setup && tauri dev",
     "app:installer": "node scripts/app-installer.mjs",

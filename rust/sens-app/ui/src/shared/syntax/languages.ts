@@ -8,11 +8,8 @@ const interpreters: Record<string, string> = table.interpreters;
 const titles: Record<string, string> = table.titles;
 const SHELL_TITLES: Record<string, string> = { bash: "Bash", zsh: "Zsh", cmd: "CMD" };
 
-// `#!/usr/bin/env python3`, `#!/bin/bash -e`: the program, without its version.
 const SHEBANG = /^#!\s*(?:\S*\/)?(?:env\s+(?:-\S+\s+)*)?([\w.+-]+)/;
 
-// The grammar VS Code would color a file with: by its name, else by the
-// program its first line runs. scripts/languages.mjs writes the table.
 export function languageOf(path: string, text = "") {
   const named = byName(path, names, extensions);
   if (named) return named;
@@ -21,7 +18,6 @@ export function languageOf(path: string, text = "") {
   return interpreters[program] ?? interpreters[program.replace(/[\d.]+$/, "")] ?? null;
 }
 
-// The grammar a code fence names: ```ts, ```python, ```console, ```ps1.
 export function languageNamed(tag: string) {
   const name = tag.trim().toLowerCase();
   if (!name) return null;

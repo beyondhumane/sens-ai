@@ -1,7 +1,3 @@
-// Writes src/shared/syntax/languages.json: which Shiki grammar each file name,
-// extension, code fence tag and shebang gets. GitHub Linguist knows which files
-// are which language; Shiki carries the grammars VS Code colors them with. Run
-// it after upgrading shiki or linguist-languages.
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -10,13 +6,10 @@ import { bundledLanguages, bundledLanguagesInfo } from "shiki/langs";
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, "$1"));
 const require = createRequire(import.meta.url);
 const { version } = JSON.parse(readFileSync(require.resolve("shiki/package.json"), "utf8"));
-// linguist-languages exports no package.json: it sits beside its index.js.
 const linguistHome = path.dirname(require.resolve("linguist-languages"));
 const linguistVersion = JSON.parse(readFileSync(path.join(linguistHome, "package.json"), "utf8")).version;
 const linguist = Object.values(require("linguist-languages"));
 
-// Where Linguist's name, aliases and TextMate scope do not lead to the grammar
-// VS Code would use.
 const CHOSEN = {
   "C++": "cpp",
   "Objective-C++": "objective-cpp",
@@ -46,8 +39,6 @@ const CHOSEN = {
   "Processing": "java",
 };
 
-// Extensions several grammars claim, settled as VS Code opens them; null
-// leaves the ones too ambiguous to guess uncolored.
 const CLAIMED = {
   cake: "csharp",
   cls: "latex",
@@ -125,15 +116,12 @@ function grammarOf(language) {
 }
 
 const grammars = new Map(linguist.map((language) => [language.name, grammarOf(language)]));
-// A language with no grammar of its own borrows its group's (Linguist's "HTML+ERB" is HTML).
 for (const language of linguist) {
   if (!grammars.get(language.name) && language.group && !(language.name in CHOSEN)) {
     grammars.set(language.name, grammars.get(language.group) ?? null);
   }
 }
 
-// An extension first listed by a language is its own; otherwise the first
-// claim, by Linguist's order, wins, unless CLAIMED settles it.
 const extensions = {};
 const primary = {};
 const names = {};

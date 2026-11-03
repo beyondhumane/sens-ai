@@ -12,8 +12,6 @@ import { SHELF_TABS, howToOpen, pictureKey, type ShelfTab } from "./items";
 const TAB_KEY = "sens.artifacts.tab";
 const kept = stored(TAB_KEY, "all");
 
-// `loadFault` replaces the list; `listFault` sits on top of it until the next
-// thing opened from there.
 export const artifacts = createStore(() => ({
   items: [] as Artifact[],
   loadFault: "",
@@ -23,8 +21,6 @@ export const artifacts = createStore(() => ({
 
 const set = artifacts.setState;
 
-// Each picture is read once, for its thumbnail and its preview alike, and
-// forgotten once the artifact is gone.
 const pictures = new Map<string, Promise<string>>();
 
 export function picture(item: Artifact) {

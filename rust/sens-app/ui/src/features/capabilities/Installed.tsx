@@ -154,7 +154,6 @@ function CapRow({ spec, item, caps, listing }: Entry & { caps: Capabilities; lis
   );
 }
 
-// A second click while Rust is still answering the first is ignored.
 export function CapSwitch({ spec, item, where }: { spec: Spec; item: Item; where?: Where }) {
   const root = useStore(project, (s) => s.root);
   const waiting = useRef(false);

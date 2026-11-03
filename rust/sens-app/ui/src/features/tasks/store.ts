@@ -2,8 +2,6 @@ import { createStore } from "zustand/vanilla";
 import type { AgentEvent } from "../../ipc/types";
 import { afterEvent, isRunning, type Calls, type Task } from "./tasks";
 
-// The open session's background tasks. `now` is the clock the running ones are
-// timed with; it moves once a second while one runs and the panel is on screen.
 export const tasks = createStore(() => ({
   tasks: new Map<string, Task>(),
   now: Date.now(),
@@ -40,7 +38,6 @@ export function forgetTasks(session = shown) {
   if (session === shown) tasks.setState({ tasks: of(session).tasks });
 }
 
-// Whatever Rust no longer runs, after a replay, was stopped.
 export function settleTasks(alive: string[], session = shown) {
   const live = new Set(alive);
   const before = of(session).tasks;

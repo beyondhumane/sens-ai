@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { codeNow, paintCode } from "./code";
 import { languageNamed, languageOf, titleOf } from "./languages";

@@ -1,0 +1,27 @@
+name: claude-drift
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flags:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm install -g @anthropic-ai/claude-code@latest
+      - run: claude --version
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/sens-agent
+      - run: cargo test --manifest-path rust/sens-agent/Cargo.toml --test live_claude -- --ignored still_accepts

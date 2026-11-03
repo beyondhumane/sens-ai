@@ -24,6 +24,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run dup
       - run: npm run build -w sens-app-ui
       - run: npm run build:setup -w sens-app-ui
 

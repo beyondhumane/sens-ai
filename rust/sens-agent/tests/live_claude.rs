@@ -46,3 +46,29 @@ fn haiku_names_a_session_after_its_first_exchange() {
     assert_eq!(session::list(&root)[0].title, title);
     assert!(sens_agent::title::suggest(&root, &id).unwrap().is_none());
 }
+
+#[test]
+#[ignore]
+fn the_installed_claude_still_accepts_every_flag_sens_passes() {
+    use sens_agent::chat::{arguments, Canon, Settings};
+
+    let variants = [
+        Settings { model: "claude-sonnet-5".into(), effort: "high".into(), ..Settings::default() },
+        Settings { model: "claude-opus-4-7".into(), effort: "max".into(), thinking: false, canon: Canon::Full, ..Settings::default() },
+    ];
+    let flags: std::collections::BTreeSet<String> = variants
+        .iter()
+        .flat_map(|settings| [arguments(settings, "x", false), arguments(settings, "x", true)].concat())
+        .filter(|argument| argument.starts_with("--"))
+        .collect();
+
+    let unknown: Vec<&String> = flags
+        .iter()
+        .filter(|flag| {
+            let probe = sens_agent::process::claude().arg(flag.as_str()).args(["auth", "status"]).output().expect("sondear Claude Code");
+            String::from_utf8_lossy(&probe.stderr).contains("unknown option")
+        })
+        .collect();
+
+    assert!(unknown.is_empty(), "Claude Code ya no reconoce estos flags: {unknown:?}");
+}

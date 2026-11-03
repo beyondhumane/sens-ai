@@ -5,8 +5,6 @@ import { paintRows, type Look, type Runs } from "./syntax/paint";
 
 const MARKS = { add: "+", del: "−", "": " ", gap: "⋯" };
 
-// A diff's rows, the first `preview` of them until asked for the rest,
-// colored as the file's language once its grammar has run.
 export function LinesCard({ rows, preview, language }: { rows: Row[]; preview: number; language: string | null }) {
   const [all, setAll] = useState(false);
   const [colored, setColored] = useState<({ runs: Runs; looks: Look[] } | null)[]>([]);

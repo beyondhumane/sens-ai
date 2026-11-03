@@ -72,8 +72,6 @@ function Folders() {
   return rows.map(([entry, depth]) => <FileRow key={entry.path} entry={entry} depth={depth} />);
 }
 
-// The last results stay until the next ones arrive, and a reload of the tree
-// searches again.
 function Found({ query }: { query: string }) {
   const root = useStore(project, (s) => s.work);
   const loads = useStore(files, (s) => s.loads);
@@ -111,7 +109,6 @@ function Fault({ reason }: { reason: string }) {
   );
 }
 
-// A folder is touched when the agent edited something inside it.
 function FileRow({ entry, depth, found = false }: { entry: Entry; depth: number; found?: boolean }) {
   const open = useStore(files, (s) => entry.dir && s.unfolded.has(entry.path));
   const opened = useStore(viewer, (s) => s.opened === entry.path);

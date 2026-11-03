@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dialog } from "../../app/modal";
@@ -140,7 +139,6 @@ describe("file viewer", () => {
     expect(document.querySelector(".reading")?.hasAttribute("hidden")).toBe(true);
     expect(lines()[0]).toBe("---");
 
-    // Opening it again as code keeps it as code.
     await act(async () => openFile("README.md"));
     expect(button("Código").getAttribute("aria-pressed")).toBe("true");
   });

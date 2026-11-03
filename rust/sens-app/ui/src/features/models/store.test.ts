@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account, Card, Provider } from "../../ipc/types";
 import { accountLine, models, readAccount, refreshModels } from "./store";

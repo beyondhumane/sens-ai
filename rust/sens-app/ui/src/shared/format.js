@@ -8,7 +8,6 @@ export const MARKDOWN = /\.(md|markdown)$/i;
 export const TEXTUAL = /\.(md|markdown|txt|json|csv|log|js|mjs|cjs|ts|tsx|jsx|rs|py|rb|go|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh|ps1|bat|toml|ya?ml|xml|css|scss|sql|lua|vue|svelte|ini|diff|patch)$/i;
 export const PAGE = /\.html?$/i;
 export const PICTURE = /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp)$/i;
-// The YAML head of a skill or a Markdown page, which reading it leaves out.
 export const FRONT_MATTER = /^﻿?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
 
 export const whole = (millis) => Math.floor(millis / 1000) * 1000;

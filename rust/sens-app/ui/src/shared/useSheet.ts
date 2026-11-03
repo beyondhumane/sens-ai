@@ -2,13 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type Key
 import { syncBrowser } from "../features/web/store";
 import { sheets } from "./sheets.js";
 
-// How close to the window's side a sheet may open.
 const EDGE = 8;
 
-// A menu over the shell: one open at a time, a click outside or Escape shuts
-// it (the app listens for both, over the list every sheet joins), arrows move
-// between its items, and focus leaving shuts it. One that opens past a side of
-// the window moves back inside it.
 export function useSheet<Anchor extends HTMLElement = HTMLButtonElement>() {
   const [open, setOpen] = useState(false);
   const sheet = useRef<HTMLDivElement>(null);
@@ -73,5 +68,4 @@ export function useSheet<Anchor extends HTMLElement = HTMLButtonElement>() {
   };
 }
 
-// A sheet opened from a button, as components pass it along.
 export type Sheet = ReturnType<typeof useSheet<HTMLButtonElement>>;

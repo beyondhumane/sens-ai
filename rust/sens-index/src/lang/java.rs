@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use tree_sitter::Node;
 
 use super::treesitter::{
-    declare, field, named, never_qualified, resolve_suffix, text, Emitted, Extra, Options, Scope,
+    declare, field, named, resolve_suffix, text, Emitted, Extra, Options, Scope,
 };
 
 fn type_kind(kind: &str) -> Option<&'static str> {
@@ -111,6 +111,18 @@ pub fn extract(root: &Node, source: &str, file: &str, rel_set: &HashSet<String>,
     }
 }
 
+fn is_qualified_use(leaf: &Node, _source: &str) -> bool {
+    let Some(parent) = leaf.parent() else { return false };
+    let (member, needs_object) = match parent.kind() {
+        "method_invocation" => ("name", true),
+        "field_access" => ("field", false),
+        "scoped_identifier" => ("name", false),
+        _ => return false,
+    };
+    let has_object = !needs_object || parent.child_by_field_name("object").is_some();
+    has_object && field(&parent, member).is_some_and(|found| found.start_byte() == leaf.start_byte())
+}
+
 pub fn options() -> Options {
-    Options { scope: Scope::Name, qualified_use: never_qualified }
+    Options { scope: Scope::Package, qualified_use: is_qualified_use }
 }

@@ -20,7 +20,6 @@ export interface Spec {
   words: (item: Item) => unknown[];
   detail: (item: Item) => string;
   mono?: boolean;
-  // A skill opens its SKILL.md in the file panel.
   readable?: boolean;
   gone: () => string;
 }
@@ -33,7 +32,6 @@ export interface Entry {
 const commandLine = (server: Server) => [server.command, ...server.args].join(" ");
 export const launchLine = (server: Server) => server.url || commandLine(server);
 
-// In this order on screen: plugins, skills, then MCP servers.
 export const CAP_KINDS: Record<List, Spec> = {
   plugins: {
     list: "plugins",
@@ -107,7 +105,6 @@ export const listed = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 
-// KEY=value, one per line. The message is what the form shows.
 export function envOf(text: string) {
   const env = new Map<string, string>();
   text.split(/\r?\n/).forEach((line, at) => {
@@ -123,7 +120,6 @@ export function envOf(text: string) {
 
 export type Origin = Provenance & { kind: CapabilityKind; name: string };
 
-// What the market installed from this listing, if anything.
 export function originFor(caps: Capabilities, listingId: string): Origin | null {
   const found = Object.entries(caps.origins || {}).find(([, origin]) => origin.listing === listingId);
   if (!found) return null;
@@ -144,7 +140,6 @@ export const firstLine = (text: string) =>
     .map((line) => line.replace(/^#+\s*/, "").trim())
     .find(Boolean) || "";
 
-// What a plugin runs on this machine, asked before installing it.
 export function runsOf(detail: Detail): [string, string][] {
   const { hooks, servers, bin } = detail.parts;
   return [
@@ -180,12 +175,9 @@ export const SOURCE_GROUPS: Record<SourceFilter, (listing: Pick<Listing, "badge"
   skillsSh: (listing) => listing.badge === "skillsSh",
 };
 
-// skills.sh only has skills, so it is only searched when they can show up.
 export const searchesSkillsSh = (kind: KindFilter, source: SourceFilter) =>
   SOURCE_GROUPS[source]({ badge: "skillsSh" }) && (kind === "all" || kind === "skill");
 
-// The catalogue plus the skills.sh hits it does not already list, filtered and,
-// when there is a search, ranked.
 export function exploreList(
   listings: Listing[],
   hits: Listing[],

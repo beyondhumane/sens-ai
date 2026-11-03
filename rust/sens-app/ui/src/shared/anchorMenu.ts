@@ -1,6 +1,3 @@
-// Places a menu that floats over the shell by what opened it: below it and
-// flush with its right edge, above it when there is no room below, always
-// inside the window.
 export function anchorMenu(menu: HTMLElement, anchor: Element) {
   menu.hidden = false;
   menu.style.visibility = "hidden";

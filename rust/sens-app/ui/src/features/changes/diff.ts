@@ -1,5 +1,3 @@
-// What `git diff` says, file by file, as the changes panel lists it.
-
 import type { Hunk } from "../../shared/rows";
 
 export type { Hunk };
@@ -12,7 +10,6 @@ export interface DiffFile {
   plus: number;
   minus: number;
   binary: boolean;
-  // Untracked: git has no diff for it, so its lines are read when unfolded.
   fresh: boolean;
 }
 
@@ -21,7 +18,6 @@ function diffPath(text: string) {
   return clean === "/dev/null" ? "" : clean.replace(/^[ab]\//, "");
 }
 
-// `a/x b/x` from the `diff --git` line: the path is the first half.
 function diffedFile(pair: string): DiffFile {
   return {
     path: pair.slice(2, 2 + Math.floor((pair.length - 5) / 2)),

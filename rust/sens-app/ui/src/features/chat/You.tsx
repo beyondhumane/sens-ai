@@ -33,7 +33,6 @@ export const You = memo(function You({ turn }: { turn: YouTurn }) {
   );
 });
 
-// A picture sent with a message, larger on click; gone if it cannot be read.
 function Sent({ picture }: { picture: Picture }) {
   const [src, setSrc] = useState(typeof picture === "string" ? picture : "");
   const [gone, setGone] = useState(false);

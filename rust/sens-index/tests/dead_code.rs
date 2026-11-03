@@ -172,3 +172,10 @@ fn rust_keeps_entry_points_methods_and_scoped_twins() {
     assert!(in_file(&found, "helper", "alpha.rs").is_none());
     assert!(in_file(&found, "helper", "beta.rs").is_some_and(|dead| dead.tier == Tier::High));
 }
+
+#[test]
+fn java_scopes_twins_by_package() {
+    let found = candidates("javascope");
+    assert!(in_file(&found, "Util", "com/app/Util.java").is_none());
+    assert!(in_file(&found, "Util", "com/other/Util.java").is_some());
+}

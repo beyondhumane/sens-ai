@@ -59,9 +59,6 @@ export interface Detailing {
 
 export type Where = "listFault" | "detailFault" | "exploreFault";
 
-// `loadFault` replaces the installed list; `listFault` and `detailFault` sit on
-// top of what they failed on, until the next try there. `scrollTo` is where
-// the view scrolls once the next screen has painted.
 export const capabilities = createStore(() => ({
   caps: NO_CAPS as Capabilities,
   loadFault: "",
@@ -137,7 +134,6 @@ function flip(spec: Spec, name: string) {
   }));
 }
 
-// Flips the switch at once and puts it back if Rust refuses.
 export async function toggle(spec: Spec, name: string, where: Where = "listFault") {
   const root = home();
   if (!root) return;

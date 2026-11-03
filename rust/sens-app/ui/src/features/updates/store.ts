@@ -7,8 +7,6 @@ import { t } from "./copy";
 
 const UPDATE_EVERY = 12 * 60 * 60 * 1000;
 
-// What Sens knows about its own updates. The title bar pill, the update panel
-// and the settings block all paint from here.
 export const updates = createStore(() => ({
   current: "",
   latest: null as Release | null,
@@ -16,7 +14,6 @@ export const updates = createStore(() => ({
   checked: false,
   checking: false,
   fault: "",
-  // Where an install is, while one runs.
   stage: null as UpdateStage | null,
 }));
 
