@@ -1,8 +1,8 @@
 pub mod build;
 pub mod entries;
 pub mod fingerprint;
-#[cfg(test)]
-mod fixture;
+#[cfg(any(test, feature = "fixture"))]
+pub mod fixture;
 pub mod format;
 pub mod index;
 pub mod lang;

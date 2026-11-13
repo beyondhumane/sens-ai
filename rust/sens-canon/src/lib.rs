@@ -2,6 +2,7 @@ pub mod card;
 pub mod comments;
 pub mod copies;
 pub mod dependencies;
+pub mod design;
 pub mod integrity;
 pub mod judge;
 pub mod orphans;
@@ -10,6 +11,7 @@ pub mod rank;
 pub mod relevant;
 pub mod review;
 pub mod shape;
+pub mod slug;
 pub mod verdict;
 
 pub const CANON: &str = include_str!("canon.md");

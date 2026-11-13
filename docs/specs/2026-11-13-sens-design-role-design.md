@@ -77,7 +77,9 @@ Cada pilar es un encabezado `##` de `pillars.md`, y su identificador es el
 slug de ese encabezado. Bajo el encabezado va una frase y una sección
 `### Descarta`. Un pilar que no descarta nada no sirve para decidir, y esa es
 la diferencia entre un pilar de verdad y un eslogan. El lector de `Design/`
-avisa de un pilar sin `Descarta`; no lo rechaza.
+avisa de un pilar sin `Descarta`; no lo rechaza. El encabezado se reconoce en
+los seis idiomas de Sens: `Descarta`, `Rules out`, `Exclut`, `Schließt aus`,
+`除外` y `排除`.
 
 ### Mecánicas
 

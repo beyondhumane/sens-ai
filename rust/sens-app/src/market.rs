@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use sens_agent::sens_canon::slug::slug;
 use sens_agent::sens_index::entries::leaves;
 use sens_agent::{said, session};
 use serde::{Deserialize, Serialize};
@@ -445,27 +446,6 @@ fn fetch_connectors() -> Result<Cached, String> {
         ));
     }
     Ok(Cached { fetched_at: 0, repo: String::new(), sha: String::new(), items })
-}
-
-pub fn slug(title: &str) -> String {
-    let mut out = String::new();
-    for letter in title.to_lowercase().chars() {
-        let plain = match letter {
-            'á' | 'à' | 'ä' | 'â' => 'a',
-            'é' | 'è' | 'ë' | 'ê' => 'e',
-            'í' | 'ì' | 'ï' | 'î' => 'i',
-            'ó' | 'ò' | 'ö' | 'ô' => 'o',
-            'ú' | 'ù' | 'ü' | 'û' => 'u',
-            'ñ' => 'n',
-            other => other,
-        };
-        if plain.is_ascii_alphanumeric() {
-            out.push(plain);
-        } else if !out.is_empty() && !out.ends_with('-') {
-            out.push('-');
-        }
-    }
-    out.trim_end_matches('-').chars().take(64).collect()
 }
 
 fn remote_of(server: &Value) -> Option<&Value> {
@@ -1270,13 +1250,6 @@ mod tests {
         let mut old = connector(true, json!([{ "type": "sse", "url": "https://x/sse" }]));
         old["_meta"]["io.modelcontextprotocol.registry/official"]["isLatest"] = json!(false);
         assert!(connector_item(&old).is_none());
-    }
-
-    #[test]
-    fn a_name_for_a_connector_is_a_plain_slug() {
-        assert_eq!(slug("Ticket Tailor"), "ticket-tailor");
-        assert_eq!(slug("  Atlassian Rovo (beta)!"), "atlassian-rovo-beta");
-        assert_eq!(slug("Cañón"), "canon");
     }
 
     #[test]
