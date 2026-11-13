@@ -56,11 +56,15 @@ impl Guide {
         self.corpus.score(at, groups, FLATTEN) + TITLE_BONUS * titled as f32
     }
 
+    pub fn pillars(&self) -> String {
+        self.design.sections.iter().filter(|section| is_pillars(section)).map(|section| format!("**{}**\n{}", section.title, section.text)).collect::<Vec<_>>().join("\n\n")
+    }
+
     pub fn briefing(&self) -> String {
         let mut said = vec![CANON.trim_end().to_string()];
-        let pillars: Vec<String> = self.design.sections.iter().filter(|section| is_pillars(section)).map(|section| format!("**{}**\n{}", section.title, section.text)).collect();
+        let pillars = self.pillars();
         if !pillars.is_empty() {
-            said.push(format!("The pillars of this game, from {PILLARS}:\n\n{}", pillars.join("\n\n")));
+            said.push(format!("The pillars of this game, from {PILLARS}:\n\n{pillars}"));
         }
         if !self.design.subgenres.is_empty() {
             said.push(format!("Subgenres: {}.", self.design.subgenres.join(", ")));

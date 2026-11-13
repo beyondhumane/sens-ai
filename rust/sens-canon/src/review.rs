@@ -20,7 +20,7 @@ const DIFF_CAP: usize = 80_000;
 const KEY_CAP: usize = 80;
 static RAISES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bthrow\b|\braise\b|panic!|\bbail!|\bErr\(").expect("a valid pattern"));
 
-const RULES: [(&str, Rule); 7] = [("S1", Rule::S1), ("S2", Rule::S2), ("S3", Rule::S3), ("S4", Rule::S4), ("S5", Rule::S5), ("S6", Rule::S6), ("S7", Rule::S7)];
+const RULES: [(&str, Rule); 8] = [("S1", Rule::S1), ("S2", Rule::S2), ("S3", Rule::S3), ("S4", Rule::S4), ("S5", Rule::S5), ("S6", Rule::S6), ("S7", Rule::S7), ("S8", Rule::S8)];
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Sides {
@@ -52,6 +52,7 @@ pub struct Review {
     pub sides: BTreeMap<String, Sides>,
     pub candidates: BTreeMap<String, Vec<Candidate>>,
     pub installed: Vec<String>,
+    pub pillars: String,
 }
 
 pub fn schema() -> String {
@@ -70,7 +71,8 @@ pub fn schema() -> String {
                         "why": { "type": "string" },
                         "fix": { "type": "string" },
                         "confidence": { "type": "string", "enum": ["high", "medium"] },
-                        "cites": { "type": "string" }
+                        "cites": { "type": "string" },
+                        "pillar": { "type": "string" }
                     },
                     "required": ["rule", "file", "quote", "why", "fix", "confidence"]
                 }
@@ -194,7 +196,7 @@ fn candidates(index: &Index, catalog: &Catalog, file: &str, side: &Sides) -> Vec
 }
 
 impl Review {
-    pub fn of(index: &Index, catalog: &Catalog, request: &str, diff: &str) -> Review {
+    pub fn of(index: &Index, catalog: &Catalog, request: &str, diff: &str, pillars: &str) -> Review {
         let sides = sides(diff);
         let candidates = sides
             .iter()
@@ -202,7 +204,7 @@ impl Review {
             .map(|(file, side)| (file.clone(), candidates(index, catalog, file, side)))
             .filter(|(_, found)| !found.is_empty())
             .collect();
-        Review { request: request.to_string(), diff: diff.to_string(), sides, candidates, installed: installed(index) }
+        Review { request: request.to_string(), diff: diff.to_string(), sides, candidates, installed: installed(index), pillars: pillars.to_string() }
     }
 
     pub fn prompt(&self, tongue: &str) -> String {
@@ -227,6 +229,9 @@ impl Review {
                 let _ = writeln!(out, "- `{}` at {} ({reach}, used {} times)\n~~~\n{}\n~~~", candidate.signature.trim(), candidate.cited(), candidate.uses, candidate.excerpt);
             }
             let _ = writeln!(out);
+        }
+        if !self.pillars.trim().is_empty() {
+            let _ = writeln!(out, "# The game's pillars\n\nFor S8, copy `pillar` from here exactly as it is.\n\n~~~markdown\n{}\n~~~\n", self.pillars.trim());
         }
         let diff = match self.diff.char_indices().nth(DIFF_CAP) {
             Some((cut, _)) => format!("{}\n[the rest of the diff is left out]", &self.diff[..cut]),
@@ -270,6 +275,10 @@ impl Review {
                 let severity = if candidate.exported { severity } else { Severity::Note };
                 (Some(Target { symbol: candidate.name.clone(), file: candidate.file.clone(), line: candidate.line, signature: candidate.signature.clone(), excerpt: candidate.excerpt.clone() }), severity)
             }
+            Rule::S8 => {
+                let pillar = squeezed(item["pillar"].as_str()?);
+                (!pillar.is_empty() && squeezed(&self.pillars).contains(&pillar)).then_some((None, Severity::Note))?
+            }
             _ => (None, severity),
         };
         let said = |field: &str| item[field].as_str().unwrap_or_default().trim().to_string();
@@ -310,10 +319,30 @@ deleted file mode 100644
 -save(user);
 ";
 
+    const PILLARS: &str = "**Avanzar siempre**
+El jugador recupera vida atacando, nunca esperando.
+
+### Descarta
+- Vida que se regenera sola.";
+    const REGENERATES: &str = "diff --git a/Assets/Scripts/Health.cs b/Assets/Scripts/Health.cs
+--- a/Assets/Scripts/Health.cs
++++ b/Assets/Scripts/Health.cs
+@@ -10,2 +10,5 @@
+     public float current;
++    void Update() {
++        current = Mathf.Min(max, current + regeneration * Time.deltaTime);
++    }
+ }
+";
+
+    fn designed() -> Review {
+        Review { request: "Que la vida se recupere sola.".into(), diff: REGENERATES.into(), sides: sides(REGENERATES), pillars: PILLARS.into(), ..Review::default() }
+    }
+
     fn review() -> Review {
         let candidate = Candidate { name: "plain".into(), file: "src/market/search.js".into(), line: 3, signature: "export const plain = (text) =>".into(), uses: 9, exported: true, excerpt: "export const plain = (text) => text".into() };
         let private = Candidate { name: "folded".into(), file: "src/clip.ts".into(), line: 7, signature: "const folded = (text) =>".into(), uses: 2, exported: false, excerpt: "const folded = (text) => text".into() };
-        Review { request: "Find sessions without accents.".into(), diff: DIFF.into(), sides: sides(DIFF), candidates: BTreeMap::from([("src/bar.ts".to_string(), vec![candidate, private])]), installed: vec!["dayjs (package.json)".into()] }
+        Review { request: "Find sessions without accents.".into(), diff: DIFF.into(), sides: sides(DIFF), candidates: BTreeMap::from([("src/bar.ts".to_string(), vec![candidate, private])]), installed: vec!["dayjs (package.json)".into()], pillars: String::new() }
     }
 
     #[test]
@@ -368,6 +397,31 @@ deleted file mode 100644
             assert!(prompt.contains(part), "{part} missing in:\n{prompt}");
         }
         assert!(schema().contains("\"S7\""));
+        assert!(!prompt.contains("# The game's pillars"), "{prompt}");
+        let designed = designed().prompt("Spanish as spoken in Spain");
+        for part in ["# The game's pillars", "copy `pillar` from here exactly as it is", "- Vida que se regenera sola.", "+        current = Mathf.Min"] {
+            assert!(designed.contains(part), "{part} missing in:
+{designed}");
+        }
+        assert!(schema().contains("\"S8\"") && schema().contains("\"pillar\""));
+    }
+
+    #[test]
+    fn a_turn_against_a_pillar_needs_both_quotes_and_is_only_ever_a_note() {
+        let review = designed();
+        let quote = "current = Mathf.Min(max, current + regeneration * Time.deltaTime);";
+        let against = |quote: &str, pillar: Value| json!({ "findings": [{ "rule": "S8", "file": "Assets/Scripts/Health.cs", "quote": quote, "pillar": pillar, "why": "Avanzar siempre descarta la vida que se regenera sola.", "fix": "Quita la regeneración.", "confidence": "high" }] });
+        let found = review.findings(&against(quote, json!("- Vida que se regenera  sola.")));
+        let seen: Vec<(Rule, Severity, u32)> = found.iter().map(|finding| (finding.rule, finding.severity, finding.line)).collect();
+        assert_eq!(seen, [(Rule::S8, Severity::Note, 12)]);
+        assert_eq!(found[0].message, "Avanzar siempre descarta la vida que se regenera sola. Quita la regeneración.");
+        assert!(found[0].key.starts_with("S8:Assets/Scripts/Health.cs:current = Mathf.Min"), "{}", found[0].key);
+        for pillar in [json!("El jugador nunca se cura."), json!(""), Value::Null] {
+            assert!(review.findings(&against(quote, pillar.clone())).is_empty(), "{pillar}");
+        }
+        assert!(review.findings(&against("current = max;", json!("Vida que se regenera sola."))).is_empty());
+        let undesigned = Review { pillars: String::new(), ..review };
+        assert!(undesigned.findings(&against(quote, json!("Vida que se regenera sola."))).is_empty());
     }
 
     #[test]
@@ -414,7 +468,7 @@ export const projectOf = (item: Item) => item.project;
 +++ b/src/shelf.ts
 @@ -0,0 +1,6 @@
 {added}");
-        let review = Review::of(&index, &catalog, "Show the size.", &diff);
+        let review = Review::of(&index, &catalog, "Show the size.", &diff, "");
         let named: Vec<&str> = review.candidates.get("src/shelf.ts").into_iter().flatten().map(|candidate| candidate.name.as_str()).collect();
         assert!(named.contains(&"weigh"), "{named:?}");
     }
@@ -423,7 +477,7 @@ export const projectOf = (item: Item) => item.project;
     fn a_check_that_stops_bad_input_is_never_speculation() {
         let diff = "diff --git a/src/add.ts b/src/add.ts\n--- a/src/add.ts\n+++ b/src/add.ts\n@@ -1 +1,3 @@\n+export const add = (category: string, limit = 10) => {\n+  if (category.includes(\",\")) throw new Error(`Categoría no válida: ${category}`);\n+};\n";
         let index = Index::default();
-        let review = Review::of(&index, &Catalog::of(&index), "Add expenses.", diff);
+        let review = Review::of(&index, &Catalog::of(&index), "Add expenses.", diff, "");
         let found = review.findings(&json!({ "findings": [
             { "rule": "S4", "file": "src/add.ts", "quote": "if (category.includes(\",\")) throw new Error(`Categoría no válida: ${category}`);", "why": "x", "fix": "y", "confidence": "high" },
             { "rule": "S4", "file": "src/add.ts", "quote": "export const add = (category: string, limit = 10) => {", "why": "x", "fix": "y", "confidence": "high" }
@@ -437,6 +491,7 @@ export const projectOf = (item: Item) => item.project;
         assert!(BRIEF.contains("A plain function that gives a name to a piece of logic is not an abstraction"));
         assert!(BRIEF.contains("keeps bad input from breaking the data or the file format"));
         assert!(BRIEF.contains("You see only the diff. The rest of the project exists"));
+        assert!(BRIEF.contains("never about how the code is written"));
     }
 
     #[test]
@@ -457,7 +512,7 @@ export const projectOf = (item: Item) => item.project;
         let catalog = Catalog::of(&index);
         let diff = "diff --git a/src/bar.ts b/src/bar.ts\n--- a/src/bar.ts\n+++ b/src/bar.ts\n@@ -1 +1,2 @@\n+const lower = (text: string) => text.normalize(\"NFD\").replace(/\\p{M}/gu, \"\").toLocaleLowerCase();\n export const pick = (all: string[]) => all;\n";
         std::fs::write(root.join("src/bar.ts"), "const lower = (text: string) => text.normalize(\"NFD\").replace(/\\p{M}/gu, \"\").toLocaleLowerCase();\nexport const pick = (all: string[]) => all;\n").unwrap();
-        let review = Review::of(&index, &catalog, "Ignore accents.", diff);
+        let review = Review::of(&index, &catalog, "Ignore accents.", diff, "");
         let named: Vec<&str> = review.candidates.get("src/bar.ts").into_iter().flatten().map(|candidate| candidate.name.as_str()).collect();
         assert_eq!(named.first(), Some(&"plain"), "{named:?}");
         assert!(review.candidates["src/bar.ts"][0].excerpt.contains("normalize"));

@@ -21,6 +21,7 @@ pub enum Rule {
     S5,
     S6,
     S7,
+    S8,
     D1,
 }
 

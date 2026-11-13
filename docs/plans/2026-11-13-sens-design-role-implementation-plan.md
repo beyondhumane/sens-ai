@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 9 hechos. Las revisiones de los manuales las hizo el agente a petición de la persona, no alguien que haya publicado un juego del género. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código.
+- **Estado:** Hitos 1 a 10 hechos. Las revisiones de los manuales las hizo el agente a petición de la persona, no alguien que haya publicado un juego del género. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código. Del 10 falta pasar una vez la prueba en vivo de S8 contra el revisor real (`live_review`, ignorada por defecto): en esta máquina la sesión del CLI de `claude` había caducado.
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,

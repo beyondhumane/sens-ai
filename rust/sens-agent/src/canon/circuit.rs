@@ -585,7 +585,8 @@ impl Circuit {
             return Ok(Judged::default());
         };
         let diff = checkpoints.diff(approved, now)?;
-        let review = Review::of(&project.index, &project.catalog, request, &diff);
+        let pillars = project.guide.as_ref().map(Guide::pillars).unwrap_or_default();
+        let review = Review::of(&project.index, &project.catalog, request, &diff, &pillars);
         let reviewed = reviewer.review(&review.prompt(language::now().tongue()))?;
         self.logged("reviewed", vec![Entry { at: log::now(), decision: Some(Decision::Reviewed), cost: reviewed.cost, ..Entry::default() }]);
         let findings = review.findings(&reviewed.answer);
@@ -1122,8 +1123,8 @@ test('plain again', () => {{
         }
     }
 
-    fn reviewed(name: &str, answer: Result<Value, String>) -> (PathBuf, Circuit, Ear) {
-        let (root, keeper) = project(name);
+    fn reviewed(name: &str, more: &[(&str, &str)], answer: Result<Value, String>) -> (PathBuf, Circuit, Ear) {
+        let (root, keeper) = project_with(name, more);
         let circuit = Circuit::new(&root, "s1", keeper, false).reviewed_by(Arc::new(Scripted(answer)));
         let ear = Ear::default();
         circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
@@ -1133,7 +1134,7 @@ test('plain again', () => {{
 
     #[test]
     fn a_reviewer_that_cannot_answer_holds_the_turn_for_the_person() {
-        let (root, circuit, ear) = reviewed("review-down", Err("no network".into()));
+        let (root, circuit, ear) = reviewed("review-down", &[], Err("no network".into()));
         assert_eq!(circuit.answer(&ear, CLOSE, &close()), json!({}));
         assert_eq!(ear.stages(), ["held"]);
         let state = State::load(&root);
@@ -1143,7 +1144,7 @@ test('plain again', () => {{
     #[test]
     fn a_medium_finding_is_told_and_the_turn_is_approved() {
         let medium = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "medium" }] });
-        let (root, circuit, ear) = reviewed("review-medium", Ok(medium));
+        let (root, circuit, ear) = reviewed("review-medium", &[], Ok(medium));
         let told = circuit.answer(&ear, CLOSE, &close());
         assert_eq!(decision(&told), "allow", "{told}");
         assert_eq!(ear.stages(), ["reviewed", "passed"]);
@@ -1152,9 +1153,38 @@ test('plain again', () => {{
     }
 
     #[test]
+    fn a_turn_against_a_pillar_of_the_game_is_told_without_stopping_it() {
+        let pillars = "# Pilares
+
+## Cuentas claras
+
+El informe suma todo lo del día.
+
+### Descarta
+
+- Ningún informe con límites fijos.
+";
+        let against = json!({ "findings": [{ "rule": "S8", "file": "src/report.ts", "quote": "totals([], 2)", "pillar": "Ningún informe con límites fijos.", "why": "Cuentas claras descarta los límites fijos.", "fix": "Pasa el límite.", "confidence": "high" }] });
+        let (_, circuit, ear) = reviewed("review-pillar", &[("Design/pillars.md", pillars)], Ok(against));
+        assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "allow");
+        let told: Vec<(Rule, Severity)> = ear
+            .said
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Event::Canon { stage, findings, .. } if stage == "reviewed" => Some(findings.iter().map(|finding| (finding.rule, finding.severity)).collect::<Vec<_>>()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert_eq!(told, [(Rule::S8, Severity::Note)]);
+    }
+
+    #[test]
     fn a_high_finding_the_person_accepted_before_no_longer_stops() {
         let high = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "high" }] });
-        let (root, circuit, ear) = reviewed("review-high", Ok(high));
+        let (root, circuit, ear) = reviewed("review-high", &[], Ok(high));
         assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "block");
         let key = "S4:src/report.ts:totals([], 2)".to_string();
         state::save_exceptions(&root, &sens_canon::verdict::Exceptions { keys: [key].into() }).unwrap();
