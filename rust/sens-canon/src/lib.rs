@@ -6,6 +6,7 @@ pub mod integrity;
 pub mod judge;
 pub mod orphans;
 pub mod protected;
+pub mod rank;
 pub mod relevant;
 pub mod review;
 pub mod shape;

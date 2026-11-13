@@ -4,9 +4,9 @@ use std::sync::OnceLock;
 use sens_index::index::Index;
 use sens_index::testfile::is_test_file;
 
-const GLOSSARY: &str = include_str!("glossary.toml");
+use crate::rank::{self, words, Corpus};
+
 const LIMIT: usize = 8;
-const K1: f32 = 1.2;
 const B: f32 = 0.75;
 const B_CODE: f32 = 0.3;
 const NAME_WEIGHT: usize = 3;
@@ -17,17 +17,12 @@ const BODY_WEIGHT: usize = 1;
 const PATH_WEIGHT: usize = 1;
 const CALLERS_READ: usize = 24;
 const CALLER_CAP: usize = 3;
-const SUFFIX: usize = 3;
 const CODE_WORDS: [&str; 40] = [
     "const", "let", "var", "function", "return", "if", "else", "for", "while", "new", "this", "self", "fn", "pub", "def", "class", "true", "false", "null", "undefined",
     "await", "async", "import", "export", "from", "type", "void", "mut", "impl", "use", "match", "none", "some", "ok", "err", "string", "of", "in", "is", "as",
 ];
-const MIN_SCORE: f32 = 0.1;
-const KEEP_SHARE: f32 = 0.3;
-const PREFIX: usize = 4;
 const POPULARITY: f32 = 0.2;
 const KINDS: [&str; 10] = ["function", "method", "class", "interface", "type", "enum", "struct", "trait", "const", "component"];
-const STOP: [&str; 24] = ["the", "and", "for", "with", "that", "this", "from", "each", "into", "when", "los", "las", "del", "que", "una", "para", "con", "por", "cada", "como", "sus", "les", "des", "und"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Suggestion {
@@ -40,99 +35,12 @@ struct Doc {
     symbol: usize,
     file: String,
     name: String,
-    terms: HashMap<String, usize>,
-    length: usize,
     uses: usize,
 }
 
 pub struct Catalog {
     docs: Vec<Doc>,
-    frequency: HashMap<String, usize>,
-    average: f32,
-}
-
-fn glossary() -> &'static Vec<(String, Vec<String>)> {
-    static TERMS: OnceLock<Vec<(String, Vec<String>)>> = OnceLock::new();
-    TERMS.get_or_init(|| {
-        let parsed: toml::Table = GLOSSARY.parse().unwrap_or_default();
-        parsed
-            .into_iter()
-            .map(|(english, forms)| (english, forms.as_array().into_iter().flatten().filter_map(|form| form.as_str()).map(str::to_lowercase).collect()))
-            .collect()
-    })
-}
-
-fn stem(word: &str) -> String {
-    if let Some(root) = word.strip_suffix("ies").filter(|root| root.len() >= 3) {
-        return format!("{root}y");
-    }
-    match word.strip_suffix('s') {
-        Some(root) if root.len() >= 3 && !root.ends_with('s') => root.to_string(),
-        _ => word.to_string(),
-    }
-}
-
-pub fn words(text: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    let mut current = String::new();
-    let mut previous: Option<char> = None;
-    for c in text.chars() {
-        let boundary = !c.is_alphanumeric() || (c.is_uppercase() && previous.is_some_and(|p| p.is_lowercase() || p.is_ascii_digit()));
-        if boundary && !current.is_empty() {
-            found.push(stem(&current.to_lowercase()));
-            current.clear();
-        }
-        if c.is_alphanumeric() {
-            current.push(c);
-        }
-        previous = Some(c);
-    }
-    if !current.is_empty() {
-        found.push(stem(&current.to_lowercase()));
-    }
-    found
-}
-
-fn cjk(form: &str) -> bool {
-    form.chars().any(|c| c as u32 >= 0x2E80)
-}
-
-fn shared_prefix(a: &str, b: &str) -> usize {
-    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
-}
-
-fn related(word: &str, form: &str) -> bool {
-    let (word_length, form_length) = (word.chars().count(), form.chars().count());
-    if form_length < PREFIX || word_length < PREFIX {
-        return word == form;
-    }
-    let shorter = word_length.min(form_length);
-    shared_prefix(word, form) >= PREFIX.max((shorter * 3).div_ceil(4))
-}
-
-fn translated(word: &str) -> impl Iterator<Item = String> + '_ {
-    glossary().iter().filter(move |(_, forms)| forms.iter().any(|form| !cjk(form) && !form.contains(' ') && related(word, form))).map(|(english, _)| stem(english))
-}
-
-fn concepts(prompt: &str) -> Vec<HashSet<String>> {
-    let lower = prompt.to_lowercase();
-    let mut found: Vec<HashSet<String>> = Vec::new();
-    let mut heard: HashSet<&str> = HashSet::new();
-    for word in lower.split(|c: char| !c.is_alphanumeric()).filter(|word| word.chars().count() >= 2 && !STOP.contains(word)) {
-        if !heard.insert(word) {
-            continue;
-        }
-        let meant: HashSet<String> = translated(word).collect();
-        if word.chars().count() >= 3 || !meant.is_empty() {
-            found.push(words(word).into_iter().chain(meant).collect());
-        }
-    }
-    for (english, forms) in glossary() {
-        if forms.iter().any(|form| (cjk(form) || form.contains(' ')) && lower.contains(form.as_str())) {
-            found.push(HashSet::from([stem(english)]));
-        }
-    }
-    found
+    corpus: Corpus,
 }
 
 fn quoted() -> &'static regex::Regex {
@@ -227,54 +135,17 @@ impl Catalog {
     pub fn of(index: &Index) -> Catalog {
         let tested: HashSet<&str> = index.units.iter().filter(|unit| unit.whole && unit.test).map(|unit| unit.symbol.as_str()).collect();
         let mut sources = Sources { root: index.root.clone(), read: HashMap::new() };
-        let docs: Vec<Doc> = index
+        let (docs, terms): (Vec<Doc>, Vec<HashMap<String, usize>>) = index
             .symbols
             .iter()
             .enumerate()
             .filter(|(_, symbol)| KINDS.contains(&symbol.kind.as_str()) && !is_test_file(&symbol.file) && !tested.contains(symbol.id.as_str()))
-            .map(|(at, _)| {
-                let terms = described(index, &mut sources, at);
-                let length = terms.values().sum();
-                Doc { symbol: at, file: index.symbols[at].file.clone(), name: index.symbols[at].name.clone(), terms, length, uses: index.raw_references(at).len() }
+            .map(|(at, symbol)| {
+                let doc = Doc { symbol: at, file: symbol.file.clone(), name: symbol.name.clone(), uses: index.raw_references(at).len() };
+                (doc, described(index, &mut sources, at))
             })
-            .collect();
-        let mut frequency: HashMap<String, usize> = HashMap::new();
-        for doc in &docs {
-            for term in doc.terms.keys() {
-                *frequency.entry(term.clone()).or_default() += 1;
-            }
-        }
-        let average = docs.iter().map(|doc| doc.length).sum::<usize>() as f32 / docs.len().max(1) as f32;
-        Catalog { docs, frequency, average }
-    }
-
-    fn matches(&self, terms: &HashSet<String>) -> HashSet<String> {
-        self.frequency
-            .keys()
-            .filter(|known| terms.iter().any(|term| *known == term || (term.chars().count() >= PREFIX && known.starts_with(term.as_str()) && known.len() - term.len() <= SUFFIX)))
-            .cloned()
-            .collect()
-    }
-
-    fn wanted(&self, prompt: &str) -> Vec<HashSet<String>> {
-        let mut groups: Vec<HashSet<String>> = Vec::new();
-        for concept in concepts(prompt) {
-            let matched = self.matches(&concept);
-            if !matched.is_empty() && !groups.contains(&matched) {
-                groups.push(matched);
-            }
-        }
-        groups
-    }
-
-    fn weighed(&self, doc: &Doc, term: &str, flatten: f32) -> f32 {
-        let Some(&count) = doc.terms.get(term) else {
-            return 0.0;
-        };
-        let seen = self.frequency[term] as f32;
-        let rarity = (1.0 + (self.docs.len() as f32 - seen + 0.5) / (seen + 0.5)).ln();
-        let count = count as f32;
-        rarity * count * (K1 + 1.0) / (count + K1 * (1.0 - flatten + flatten * doc.length as f32 / self.average))
+            .unzip();
+        Catalog { docs, corpus: Corpus::of(terms) }
     }
 
     fn ranked(&self, groups: &[HashSet<String>], flatten: f32, keep: impl Fn(&Doc) -> bool) -> Vec<Suggestion> {
@@ -284,31 +155,22 @@ impl Catalog {
         let mut scored: Vec<Suggestion> = self
             .docs
             .iter()
-            .filter(|doc| keep(doc))
-            .map(|doc| {
-                let matched: f32 = groups.iter().map(|group| group.iter().map(|term| self.weighed(doc, term, flatten)).fold(0.0, f32::max)).sum();
-                Suggestion { symbol: doc.symbol, score: matched * (1.0 + POPULARITY * (1.0 + doc.uses as f32).ln()), uses: doc.uses }
-            })
+            .enumerate()
+            .filter(|(_, doc)| keep(doc))
+            .map(|(at, doc)| Suggestion { symbol: doc.symbol, score: self.corpus.score(at, groups, flatten) * (1.0 + POPULARITY * (1.0 + doc.uses as f32).ln()), uses: doc.uses })
             .collect();
         scored.sort_by(|a, b| b.score.total_cmp(&a.score).then(b.uses.cmp(&a.uses)).then(a.symbol.cmp(&b.symbol)));
-        let best = scored.first().map_or(0.0, |top| top.score);
-        scored.into_iter().filter(|found| found.score >= MIN_SCORE && found.score >= best * KEEP_SHARE).take(LIMIT).collect()
+        rank::kept(scored, |found| found.score, LIMIT)
     }
 
     pub fn relevant(&self, prompt: &str) -> Vec<Suggestion> {
-        self.ranked(&self.wanted(prompt), B, |_| true)
+        self.ranked(&self.corpus.wanted(prompt), B, |_| true)
     }
 
     pub fn like_code(&self, code: &str, file: &str) -> Vec<Suggestion> {
         let spoken = spoken_code(code);
         let named: HashSet<&str> = spoken.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).filter(|name| !name.is_empty()).collect();
-        let mut groups: Vec<HashSet<String>> = Vec::new();
-        for word in meaningful(&spoken).collect::<HashSet<String>>() {
-            let matched = self.matches(&HashSet::from([word]));
-            if !matched.is_empty() && !groups.contains(&matched) {
-                groups.push(matched);
-            }
-        }
+        let groups = self.corpus.groups(meaningful(&spoken).collect::<HashSet<String>>().into_iter().map(|word| HashSet::from([word])));
         self.ranked(&groups, B_CODE, |doc| doc.file != file && !named.contains(doc.name.as_str()))
     }
 }
@@ -385,13 +247,5 @@ mod tests {
         let rewritten = r#"const lower = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();"#;
         assert_eq!(named(rewritten).first().map(String::as_str), Some("plain"));
         assert!(!named("const wanted = plain(filter.trim()).normalize(\"NFD\");").contains(&"plain".to_string()));
-    }
-
-    #[test]
-    fn identifiers_split_into_stemmed_words() {
-        assert_eq!(words("formatBytes"), ["format", "byte"]);
-        assert_eq!(words("delete_user_entries"), ["delete", "user", "entry"]);
-        assert_eq!(words("src/lib/format.ts"), ["src", "lib", "format", "ts"]);
-        assert!(related("adjuntos", "adjunto") && related("salude", "saludar") && !related("carta", "carpeta") && !related("día", "dial"));
     }
 }
