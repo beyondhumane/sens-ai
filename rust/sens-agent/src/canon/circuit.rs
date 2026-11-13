@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use sens_canon::card;
+use sens_canon::design::Guide;
 use sens_canon::judge::{judge_command, judge_since, judge_turn};
 use sens_canon::orphans;
 use sens_canon::shape;
@@ -47,6 +48,13 @@ pub struct Suggested {
     pub line: u32,
     pub signature: String,
     pub uses: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Anticipated {
+    pub title: String,
+    pub file: String,
+    pub line: u32,
 }
 
 pub trait Voice: Send + Sync {
@@ -127,11 +135,12 @@ pub struct Circuit {
     checkpoints: Option<Checkpoints>,
     reviewer: Option<Arc<dyn Reviewer>>,
     seen: Mutex<Option<BTreeMap<String, String>>>,
+    briefed: Mutex<Option<String>>,
 }
 
 impl Circuit {
     pub fn new(work: &Path, session: &str, keeper: Arc<Keeper>, resumed: bool) -> Circuit {
-        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None, seen: Mutex::default() };
+        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None, seen: Mutex::default(), briefed: Mutex::default() };
         if !resumed {
             circuit.keeper.exclusive(&circuit.work, || {
                 let mut state = State::load(&circuit.work);
@@ -150,8 +159,18 @@ impl Circuit {
         *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(project.map.placement(&project.index));
     }
 
-    pub fn forget_map(&self) {
+    pub fn forget(&self) {
         *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *self.briefed.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
+    fn briefed(&self, guide: &Guide) -> Option<String> {
+        let now = guide.briefing();
+        let mut told = self.briefed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        (told.as_deref() != Some(now.as_str())).then(|| {
+            *told = Some(now.clone());
+            now
+        })
     }
 
     fn mapped(&self, project: &Project) -> Option<String> {
@@ -265,7 +284,7 @@ impl Circuit {
     }
 
     fn reply(&self, voice: &dyn Voice, stage: &str, judged: &Judged, event: &str) -> Value {
-        voice.say(Event::Canon { stage: stage.to_string(), findings: judged.blocks.iter().chain(&judged.notes).cloned().collect(), suggestions: Vec::new() });
+        voice.say(Event::canon(stage, judged.blocks.iter().chain(&judged.notes).cloned().collect()));
         if !judged.blocks.is_empty() {
             let mut text = format!("Sens stopped this:\n{}", listed(&judged.blocks.iter().collect::<Vec<_>>()));
             if !judged.restored.is_empty() {
@@ -309,6 +328,9 @@ impl Circuit {
             context.push(told);
         }
         if let Some(project) = &project {
+            if let Some(briefing) = project.guide.as_ref().and_then(|guide| self.briefed(guide)) {
+                context.push(briefing);
+            }
             let found: Vec<Suggested> = project
                 .catalog
                 .relevant(&state.request)
@@ -321,7 +343,14 @@ impl Circuit {
             if !found.is_empty() {
                 let lines: Vec<String> = found.iter().map(|found| format!("- `{}` — {}:{} · used {} times", found.signature, found.file, found.line, found.uses)).collect();
                 context.push(format!("Already in this project and related to the request (reuse before writing new code):\n{}", lines.join("\n")));
-                voice.say(Event::Canon { stage: "anticipated".into(), findings: Vec::new(), suggestions: found });
+            }
+            let mut design = Vec::new();
+            if let Some(told) = project.guide.as_ref().and_then(|guide| guide.relevant(&state.request)) {
+                design = told.sections.iter().map(|section| Anticipated { title: section.title.clone(), file: section.file.clone(), line: section.line }).collect();
+                context.push(told.text);
+            }
+            if !found.is_empty() || !design.is_empty() {
+                voice.say(Event::Canon { stage: "anticipated".into(), findings: Vec::new(), suggestions: found, design });
             }
         }
         let _ = state.save(&self.work);
@@ -365,7 +394,7 @@ impl Circuit {
         match self.audit(voice, false, None) {
             Audited::Untouched | Audited::Clean | Audited::Pending => json!({}),
             Audited::Blocked(judged) | Audited::Held(judged) => {
-                voice.say(Event::Canon { stage: "commit".into(), findings: judged.blocks.clone(), suggestions: Vec::new() });
+                voice.say(Event::canon("commit", judged.blocks.clone()));
                 denied(format!("Sens has not approved these changes, so they cannot be committed yet:\n{}", listed(&judged.blocks.iter().collect::<Vec<_>>())))
             }
             Audited::Unjudged(reason) => denied(reason),
@@ -430,11 +459,11 @@ impl Circuit {
         match self.audit(voice, helper.is_some() || running, helper.as_deref()) {
             Audited::Untouched => json!({}),
             Audited::Clean => {
-                voice.say(Event::Canon { stage: "passed".into(), findings: Vec::new(), suggestions: Vec::new() });
+                voice.say(Event::canon("passed", Vec::new()));
                 json!({})
             }
             Audited::Pending => {
-                voice.say(Event::Canon { stage: "pending".into(), findings: Vec::new(), suggestions: Vec::new() });
+                voice.say(Event::canon("pending", Vec::new()));
                 json!({})
             }
             Audited::Blocked(judged) => self.reply(voice, "blocked", &judged, "Stop"),
@@ -558,7 +587,7 @@ impl Circuit {
         let reviewed = reviewer.review(&review.prompt(language::now().tongue()))?;
         self.logged("reviewed", vec![Entry { at: log::now(), decision: Some(Decision::Reviewed), cost: reviewed.cost, ..Entry::default() }]);
         let findings = review.findings(&reviewed.answer);
-        voice.say(Event::Canon { stage: "reviewed".into(), findings: findings.clone(), suggestions: Vec::new() });
+        voice.say(Event::canon("reviewed", findings.clone()));
         let verdict = state::exceptions(&self.work).filter(Verdict { findings });
         Ok(self.weigh(voice, "reviewed", verdict, |_| false))
     }
@@ -733,6 +762,10 @@ mod tests {
     }
 
     fn project(name: &str) -> (PathBuf, Arc<Keeper>) {
+        project_with(name, &[])
+    }
+
+    fn project_with(name: &str, more: &[(&str, &str)]) -> (PathBuf, Arc<Keeper>) {
         let root = std::env::temp_dir().join("sens-circuit").join(name);
         let _ = std::fs::remove_dir_all(&root);
         let files = [
@@ -741,7 +774,7 @@ mod tests {
             ("src/lib/totals.ts", TOTALS),
             ("src/lib/text.ts", PLAIN),
         ];
-        for (path, content) in files {
+        for &(path, content) in files.iter().chain(more) {
             let file = root.join(path);
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
             std::fs::write(file, content).unwrap();
@@ -792,6 +825,44 @@ mod tests {
         assert_eq!(old.answer(&ear, PROMPT, &json!({ "prompt": "hola" })), json!({}));
     }
 
+    const PILLARS: (&str, &str) = ("Design/pillars.md", "## Movimiento preciso\n\nEl jugador siempre sabe por qué falló un salto.\n\n### Descarta\n\nAleatoriedad en el control.\n");
+    const DASH: (&str, &str) = ("Design/mechanics/dash.md", "---\npillars: [movimiento-preciso]\nstatus: prototype\n---\n# Dash\n\nUn impulso corto en el aire que se recarga al tocar el suelo.\n");
+
+    #[test]
+    fn the_design_travels_once_with_its_pillars_and_each_request_brings_the_sections_it_is_about() {
+        let (root, keeper) = project_with("design", &[PILLARS, DASH]);
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        let told = |prompt: &str| circuit.answer(&ear, PROMPT, &json!({ "prompt": prompt }))["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default().to_string();
+        let first = told("haz que el dash se recargue en el aire");
+        assert!(first.contains("## This game's design") && first.contains("**Movimiento preciso**") && first.contains("Aleatoriedad en el control."), "{first}");
+        assert!(first.contains("### Dash — Design/mechanics/dash.md:5\nUn impulso corto"), "{first}");
+        let anticipated = ear.said.lock().unwrap().iter().find_map(|event| match event {
+            Event::Canon { stage, design, .. } if stage == "anticipated" => Some(design.clone()),
+            _ => None,
+        });
+        assert_eq!(anticipated, Some(vec![Anticipated { title: "Dash".into(), file: "Design/mechanics/dash.md".into(), line: 5 }]));
+        let again = told("haz que el dash se recargue");
+        assert!(!again.contains("## This game's design") && again.contains("### Dash"), "{again}");
+        std::fs::write(root.join("Design/pillars.md"), format!("{}\n## Riesgo\n\nArriesgar paga.\n\n### Descarta\n\nJugar a lo seguro.\n", PILLARS.1)).unwrap();
+        let changed = told("hola");
+        assert!(changed.contains("**Riesgo**") && changed.contains("**Movimiento preciso**"), "{changed}");
+        assert!(!told("hola").contains("## This game's design"));
+        circuit.forget();
+        assert!(told("hola").contains("## This game's design"));
+    }
+
+    #[test]
+    fn a_project_without_a_design_is_told_nothing_about_one() {
+        let (root, keeper) = project("no-design");
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        let told = circuit.answer(&ear, PROMPT, &json!({ "prompt": "haz que el dash se recargue" }));
+        let context = told["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default();
+        assert!(!context.contains("game's design") && !context.contains("Design/"), "{context}");
+        assert!(ear.said.lock().unwrap().iter().all(|event| !matches!(event, Event::Canon { design, .. } if !design.is_empty())));
+    }
+
     #[test]
     fn the_map_travels_once_then_only_what_changed_and_again_after_it_is_forgotten() {
         let (root, keeper) = project("map");
@@ -804,7 +875,7 @@ mod tests {
         let changed = told(&circuit);
         assert!(changed.contains("+ src/lib/round.ts (src)") && !changed.contains("## This project"), "{changed}");
         assert_eq!(told(&circuit), "");
-        circuit.forget_map();
+        circuit.forget();
         assert!(told(&circuit).contains("## This project, as Sens indexed it"));
     }
 

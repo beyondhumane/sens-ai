@@ -37,7 +37,7 @@ const copy: Finding = {
   key: "R1:src/report.ts:summarize~src/lib/totals.ts:totals",
 };
 
-const sens = (stage: string, findings: Finding[] = [], suggestions: Sens["suggestions"] = []): Sens => ({ kind: "sens", key: Math.random(), stage, findings, suggestions });
+const sens = (stage: string, findings: Finding[] = [], suggestions: Sens["suggestions"] = [], design: Sens["design"] = []): Sens => ({ kind: "sens", key: Math.random(), stage, findings, suggestions, design });
 
 const edit = (content: string): Step => ({
   kind: "step",
@@ -74,6 +74,19 @@ describe("what Sens does in a reply", () => {
     reply = heard(reply, { kind: "held", findings: [copy] }, true);
     expect(reply.parts.map((part) => part.kind)).toEqual(["sens", "step", "sens", "held"]);
     expect(grouped(reply.parts).map((piece) => piece.kind)).toEqual(["run", "held"]);
+    expect((reply.parts[0] as Sens).design).toEqual([]);
+  });
+
+  it("names the parts of the game's design it put in front of the agent, beside the code it already has", () => {
+    const step = (part: Sens) => render(<SensStep part={part} />).container.querySelector("details.step.sens") as HTMLElement;
+    const dash = { title: "Dash", file: "Design/mechanics/dash.md", line: 5 };
+    const both = step(sens("anticipated", [], [{ name: "weigh", file: "src/format.js", line: 3, signature: "export const weigh = (bytes)", uses: 7 }], [dash]));
+    expect(both.querySelector(".step-target")?.textContent).toBe("ya tiene weigh · diseño: Dash");
+    fireEvent.click(both.querySelector("summary")!);
+    expect(both.querySelector(".sens-title")?.textContent).toBe("Dash");
+    expect([...both.querySelectorAll(".sens-place")].map((place) => place.textContent)).toEqual(["src/format.js:3", "Design/mechanics/dash.md:5"]);
+    const designOnly = step(sens("anticipated", [], [], [dash]));
+    expect([designOnly.className, designOnly.querySelector(".step-target")?.textContent]).toEqual(["step sens", "diseño: Dash"]);
   });
 
   it("shows a write Sens stopped as stopped, not failed, and leaves out a review with nothing to say", () => {

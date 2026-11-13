@@ -90,7 +90,7 @@ fn settle(engine: &Engine, id: &str, turn: &mut Turn, event: Event, allowed: &[S
             turn.held = true;
             turn.circuit.push("held".into());
         }
-        Event::Canon { stage, findings, suggestions } => {
+        Event::Canon { stage, findings, suggestions, .. } => {
             turn.circuit.extend(heard(&stage, &findings, suggestions.len()));
             for finding in findings {
                 if !turn.findings.iter().any(|known| known.key == finding.key) {

@@ -480,7 +480,7 @@ const wrote = (id: string, path: string, content: string) => [
 const CANON_REPLAY = [
   { kind: "task", text: "Muestra el tamaño de cada artefacto en su tarjeta", files: [], images: [], at: now - HOUR },
   agent({ kind: "started", model: "claude-sonnet-5" }),
-  agent({ kind: "canon", stage: "anticipated", findings: [], suggestions: offered }),
+  agent({ kind: "canon", stage: "anticipated", findings: [], suggestions: offered, design: [{ title: "Artefactos › Tarjeta", file: "Design/artifacts.md", line: 8 }] }),
   agent({ kind: "tool", id: "c1", name: "Read", input: { file_path: `${ROOT}/src/shelf.tsx` } }),
   agent({ kind: "toolDone", id: "c1", output: "", error: false, detail: { file: { numLines: 120 } } }),
   agent({ kind: "tool", id: "c2", name: "Write", input: { file_path: `${ROOT}/src/shelf.tsx`, content: "const sizeOf = (bytes) => ..." } }),

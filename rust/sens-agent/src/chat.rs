@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use sens_canon::verdict::{Finding, Rule};
 
-use crate::canon::circuit::{self, Circuit, Suggested, Voice};
+use crate::canon::circuit::{self, Anticipated, Circuit, Suggested, Voice};
 use crate::canon::keeper::Keeper;
 use crate::canon::review::{Haiku, Reviewer};
 use crate::catalog::{self, Thinking};
@@ -147,6 +147,8 @@ pub enum Event {
         findings: Vec<Finding>,
         #[serde(default)]
         suggestions: Vec<Suggested>,
+        #[serde(default)]
+        design: Vec<Anticipated>,
     },
     Held {
         findings: Vec<Finding>,
@@ -254,6 +256,10 @@ pub struct Link {
 }
 
 impl Event {
+    pub fn canon(stage: &str, findings: Vec<Finding>) -> Event {
+        Event::Canon { stage: stage.to_string(), findings, suggestions: Vec::new(), design: Vec::new() }
+    }
+
     pub fn lasting(&self) -> bool {
         !matches!(
             self,
@@ -611,7 +617,7 @@ impl Live {
             Event::Compacted { .. } => {
                 self.compacted.store(true, Ordering::SeqCst);
                 if let Some(circuit) = &self.circuit {
-                    circuit.forget_map();
+                    circuit.forget();
                 }
                 event
             }
@@ -1014,7 +1020,7 @@ fn listen(live: Arc<Live>, output: ChildStdout, heard: Arc<Mutex<String>>, lives
             continue;
         }
         if message["type"] == "assistant" && live.unheard() {
-            live.say(Event::Canon { stage: "detached".into(), findings: Vec::new(), suggestions: Vec::new() });
+            live.say(Event::canon("detached", Vec::new()));
         }
         for event in interpret(&message) {
             let event = live.settle(event);

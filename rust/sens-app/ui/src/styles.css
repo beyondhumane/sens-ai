@@ -989,7 +989,8 @@
   .step.sens[data-tone="pass"] .step-icon { color: var(--accent-text); }
   .step.sens[data-tone="quiet"] .step-target, .step.sens[data-tone="note"] .step-target { color: var(--dim); }
   .sens-found { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 12px; color: var(--faint); }
-  .sens-signature { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: var(--text); }
+  .sens-signature, .sens-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .sens-signature { font-family: var(--mono); }
   .sens-uses { flex: none; margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ghost); }
   .sens-place { flex: none; padding: 0; font-family: var(--mono); font-size: 12px; color: var(--dim); text-align: left; }
   .sens-place:hover { text-decoration: underline; text-underline-offset: 3px; }

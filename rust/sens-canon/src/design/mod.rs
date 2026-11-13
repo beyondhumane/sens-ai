@@ -1,5 +1,8 @@
 mod frontmatter;
+mod guide;
 mod markdown;
+
+pub use guide::{Guide, Told};
 
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 

@@ -1,4 +1,4 @@
-import type { Answers, Asking, ChatEvent, Finding, Finished, Link, Suggested, ToolDetail, ToolInput } from "../../ipc/types";
+import type { Anticipated, Answers, Asking, ChatEvent, Finding, Finished, Link, Suggested, ToolDetail, ToolInput } from "../../ipc/types";
 import { SILENT } from "./looks";
 
 
@@ -71,6 +71,7 @@ export interface Sens {
   stage: string;
   findings: Finding[];
   suggestions: Suggested[];
+  design: Anticipated[];
 }
 
 export interface Held {
@@ -242,7 +243,7 @@ export function heard(reply: Reply, event: ChatEvent, live: boolean): Reply {
     case "canon": {
       if (event.stage === "reviewed" && event.findings.length === 0) return reply;
       const left = leave(reply, now);
-      return { ...left, open: null, parts: [...left.parts, { kind: "sens", key: nextKey(), stage: event.stage, findings: event.findings, suggestions: event.suggestions }] };
+      return { ...left, open: null, parts: [...left.parts, { kind: "sens", key: nextKey(), stage: event.stage, findings: event.findings, suggestions: event.suggestions, design: event.design ?? [] }] };
     }
     case "held": {
       const left = leave(reply, now);

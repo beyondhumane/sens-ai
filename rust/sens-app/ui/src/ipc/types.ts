@@ -539,11 +539,18 @@ export interface Suggested {
   uses: number;
 }
 
+export interface Anticipated {
+  title: string;
+  file: string;
+  line: number;
+}
+
 export interface Canon {
   kind: "canon";
   stage: string;
   findings: Finding[];
   suggestions: Suggested[];
+  design?: Anticipated[];
 }
 
 export interface Held {

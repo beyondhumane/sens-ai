@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 3 hechos
+- **Estado:** Hitos 1 a 4 hechos
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,
@@ -25,7 +25,7 @@ entrevista lo usa.
 | Frontmatter de `Design/` | Se lee a mano: `clave: valor` y `clave: [a, b]`, y nada más. El lector avisa de cualquier otra forma | No hay ningún crate de YAML en el proyecto, y tres claves no justifican una dependencia |
 | Lo anticipado en el chat | `Event::Canon` gana un campo `design` con título y fichero de cada sección. `suggestions` sigue siendo solo de símbolos | `Suggested` tiene forma de símbolo (firma, usos); meter ahí una sección de texto sería forzarlo |
 | Dónde va el texto de diseño del Canon | En el hook de cada mensaje, junto a los pilares, y no en el saludo de `chat.rs` | Los dos dependen de que exista `Design/`, y el hook ya conoce el proyecto; el saludo no |
-| Pilares repetidos | Se guarda el hash de `pillars.md` en el estado de la sesión, igual que hoy se guarda la versión del Canon | Si `pillars.md` cambia a mitad de sesión, el agente tiene que verlo |
+| Pilares repetidos | El circuito recuerda en memoria el último texto de diseño que mandó, igual que hace con el mapa, y lo olvida al compactar (`forget`) | Si `pillars.md` cambia a mitad de sesión el agente tiene que verlo, y después de compactar ya no lo tiene delante |
 
 ---
 

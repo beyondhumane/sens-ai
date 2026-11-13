@@ -4,6 +4,7 @@ export const t = copy({
   en: {
     sens: "Sens",
     found: (names: string) => `already has ${names}`,
+    designed: (titles: string) => `design: ${titles}`,
     stopped: {
       write: "stopped a write",
       shell: "stopped a command",
@@ -67,6 +68,7 @@ export const t = copy({
   es: {
     sens: "Sens",
     found: (names: string) => `ya tiene ${names}`,
+    designed: (titles: string) => `diseño: ${titles}`,
     stopped: {
       write: "paró una escritura",
       shell: "paró un comando",
@@ -130,6 +132,7 @@ export const t = copy({
   fr: {
     sens: "Sens",
     found: (names: string) => `a déjà ${names}`,
+    designed: (titles: string) => `conception : ${titles}`,
     stopped: {
       write: "a arrêté une écriture",
       shell: "a arrêté une commande",
@@ -193,6 +196,7 @@ export const t = copy({
   de: {
     sens: "Sens",
     found: (names: string) => `hat schon ${names}`,
+    designed: (titles: string) => `Design: ${titles}`,
     stopped: {
       write: "hat einen Schreibvorgang gestoppt",
       shell: "hat einen Befehl gestoppt",
@@ -256,6 +260,7 @@ export const t = copy({
   ja: {
     sens: "Sens",
     found: (names: string) => `既に ${names} があります`,
+    designed: (titles: string) => `設計: ${titles}`,
     stopped: {
       write: "書き込みを止めました",
       shell: "コマンドを止めました",
@@ -319,6 +324,7 @@ export const t = copy({
   zh: {
     sens: "Sens",
     found: (names: string) => `已有 ${names}`,
+    designed: (titles: string) => `设计：${titles}`,
     stopped: {
       write: "阻止了一次写入",
       shell: "阻止了一条命令",
