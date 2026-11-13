@@ -5,10 +5,11 @@ struct Playbook {
     text: &'static str,
 }
 
-const PLAYBOOKS: [Playbook; 3] = [
+const PLAYBOOKS: [Playbook; 4] = [
     Playbook { subgenres: &["platformer", "metroidvania", "action-2d"], text: include_str!("genres/action-2d.md") },
     Playbook { subgenres: &["roguelike", "roguelite", "deckbuilder"], text: include_str!("genres/roguelike.md") },
     Playbook { subgenres: &["fps", "tps", "action-3d"], text: include_str!("genres/action-3d.md") },
+    Playbook { subgenres: &["rpg", "action-rpg", "tactics", "strategy"], text: include_str!("genres/rpg-strategy.md") },
 ];
 const ONLY_FOR: &str = "Subgenres:";
 
@@ -70,6 +71,14 @@ mod tests {
                     assert!(bullet.contains("](http"), "{}: a number without its source: {bullet}", topic.title);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn every_subgenre_the_reader_knows_has_exactly_one_playbook() {
+        for subgenre in SUBGENRES {
+            let owners = PLAYBOOKS.iter().filter(|playbook| playbook.subgenres.contains(&subgenre)).count();
+            assert_eq!(owners, 1, "{subgenre}");
         }
     }
 

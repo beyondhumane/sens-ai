@@ -238,6 +238,20 @@ mod tests {
     }
 
     #[test]
+    fn a_request_in_spanish_reaches_the_rpg_and_strategy_topic_it_is_about() {
+        let missed = missed_in_spanish(
+            "rpg, tactics, strategy",
+            &[
+                ("el jugador no sabe qué va a atacar el enemigo el próximo turno", "Readable threats"),
+                ("los jugadores recargan la partida cuando fallan una tirada con buena probabilidad", "Odds the player trusts"),
+                ("hay una estrategia dominante que todos repiten", "Dominant strategies"),
+                ("nadie sube el atributo de fuerza, todos lo sacrifican", "Attributes and builds"),
+            ],
+        );
+        assert!(missed.is_empty(), "{}", missed.join("\n"));
+    }
+
+    #[test]
     fn never_more_than_three_sections_nor_more_than_eighty_lines() {
         let long = |name: &str| format!("# Dash {name}\n\n{}", "El dash cruza el hueco.\n".repeat(50));
         let files: Vec<(String, String)> = ["a", "b", "c", "d", "e"].iter().map(|name| (format!("Design/mechanics/{name}.md"), long(name))).collect();
