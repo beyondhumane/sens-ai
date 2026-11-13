@@ -434,6 +434,7 @@ impl Voice for Live {
         let tool = match finding.rule {
             Rule::R3 => "sens.dependency",
             Rule::R8 => "sens.tests",
+            Rule::D1 => "sens.design",
             _ => "sens.canon",
         };
         self.say(Event::Asking {

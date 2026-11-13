@@ -179,4 +179,22 @@ describe("a question from Sens", () => {
     await act(async () => void fireEvent.click(screen.getByText("Rechazar")));
     expect(ipc.commands.chatAnswer).toHaveBeenCalledWith("s1", "sens-canon-0", { allow: false });
   });
+
+  it("asks whether a new component is a mechanic, with answers that say what each one does", async () => {
+    const asking = { kind: "asking" as const, request: "sens-canon-1", tool: "sens.design", input: { message: "`Dash` is new", file: "Assets/Scripts/Dash.cs", key: "D1:Dash" }, suggestions: [] };
+    const part = { kind: "ask" as const, key: 1, active: true, state: "waiting" as const, answers: null, event: asking };
+    const drawn = render(<Ask part={part} reply={1} />);
+    expect(screen.getByText("Sens pregunta si esto es una mecánica")).toBeTruthy();
+    expect(screen.getByText("Dash")).toBeTruthy();
+    expect(screen.getByText("Claude añadió un componente o ScriptableObject que Design/ todavía no describe.")).toBeTruthy();
+    expect([...drawn.container.querySelectorAll(".ask-actions button")].map((button) => [button.textContent, button.className])).toEqual([
+      ["Es una mecánica: descríbela", "primary"],
+      ["No es una mecánica", "quiet"],
+    ]);
+    await act(async () => void fireEvent.click(screen.getByText("Es una mecánica: descríbela")));
+    expect(ipc.commands.chatAnswer).toHaveBeenCalledWith("s1", "sens-canon-1", { allow: false });
+    cleanup();
+    render(<Ask part={{ ...part, active: false, state: "allowed" as const }} reply={1} />);
+    expect(screen.getByText("No es una mecánica")).toBeTruthy();
+  });
 });

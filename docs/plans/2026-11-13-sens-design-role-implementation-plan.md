@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 5 hechos
+- **Estado:** Hitos 1 a 6 hechos
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,

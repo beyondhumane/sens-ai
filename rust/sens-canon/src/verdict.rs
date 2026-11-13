@@ -21,6 +21,7 @@ pub enum Rule {
     S5,
     S6,
     S7,
+    D1,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

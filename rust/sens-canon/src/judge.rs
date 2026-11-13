@@ -6,7 +6,7 @@ use sens_index::index::Index;
 use crate::orphans::{self, Dead};
 use crate::shape::{self, Shape};
 use crate::verdict::{Change, Exceptions, Finding, ProjectRules, Rule, TurnStats, Verdict};
-use crate::{comments, copies, dependencies, integrity, protected};
+use crate::{comments, copies, dependencies, design, integrity, protected};
 
 pub fn judge_change(index: &Index, change: &Change, rules: &ProjectRules, exceptions: &Exceptions) -> Verdict {
     judge_since(index, change, change.before.as_deref(), rules, exceptions)
@@ -73,7 +73,7 @@ pub fn judge_turn(index: &Index, changes: &[Change], dead_before: &Dead, shape_b
         let found = judge_change(index, change, rules, exceptions).findings.into_iter().filter(|finding| pair(finding).is_none_or(|pair| seen.insert(pair)));
         verdict = verdict.with(found);
     }
-    let mut whole = Verdict::default().with(orphans::findings(index, dead_before));
+    let mut whole = Verdict::default().with(orphans::findings(index, dead_before)).with(design::undescribed(index, changes));
     if let Some(before) = shape_before {
         whole = whole.with(shape::findings(index, before));
     }

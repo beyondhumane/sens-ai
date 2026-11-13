@@ -1,8 +1,10 @@
 mod frontmatter;
 mod guide;
 mod markdown;
+mod undescribed;
 
 pub use guide::{Guide, Told};
+pub use undescribed::undescribed;
 
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 

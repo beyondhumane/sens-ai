@@ -261,10 +261,12 @@ impl Circuit {
                     exceptions.keys.insert(finding.key.clone());
                 }
                 Severity::Ask => {
-                    if undo(&finding) {
+                    let mechanic = finding.rule == Rule::D1;
+                    if !mechanic && undo(&finding) {
                         judged.restored.push(finding.file.clone());
                     }
-                    judged.blocks.push(Finding { message: format!("The person said no. {}", finding.message), severity: Severity::Block, ..finding });
+                    let answered = if mechanic { "The person says it is a mechanic of the game." } else { "The person said no." };
+                    judged.blocks.push(Finding { message: format!("{answered} {}", finding.message), severity: Severity::Block, ..finding });
                 }
                 Severity::Consider if considered.contains(&finding.key) => {
                     judged.notes.push(Finding { message: format!("Kept after Sens showed it. {}", finding.message), severity: Severity::Note, ..finding });
@@ -850,6 +852,28 @@ mod tests {
         assert!(!told("hola").contains("## This game's design"));
         circuit.forget();
         assert!(told("hola").contains("## This game's design"));
+    }
+
+    #[test]
+    fn a_new_component_asks_whether_it_is_a_mechanic_and_a_no_keeps_the_code_and_holds_the_turn() {
+        let dash = "using UnityEngine;\n\npublic class Dash : MonoBehaviour\n{\n    void Update() { }\n}\n";
+        let (root, keeper) = project_with("mechanic", &[PILLARS]);
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        circuit.answer(&Ear::default(), PROMPT, &json!({ "prompt": "añade un dash" }));
+        let file = root.join("Assets/Scripts/Dash.cs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, dash).unwrap();
+        let no = Ear::answering(&[false]);
+        let closed = circuit.answer(&no, CLOSE, &close());
+        assert_eq!(decision(&closed), "block");
+        let reason = closed["reason"].as_str().unwrap();
+        assert!(reason.contains("The person says it is a mechanic of the game.") && reason.contains("describe it in `Design/mechanics/`"), "{reason}");
+        assert_eq!(no.asked.lock().unwrap()[0].key, "D1:Dash");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), dash);
+        let yes = Ear::answering(&[true]);
+        assert_eq!(circuit.answer(&yes, CLOSE, &close()), json!({}));
+        assert!(state::exceptions(&root).keys.contains("D1:Dash"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), dash);
     }
 
     #[test]
