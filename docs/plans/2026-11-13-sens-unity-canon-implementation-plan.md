@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hitos 0 a 3 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. U1 a U8 no se han medido todavía sobre un proyecto de Unity real.
+- **Estado:** Hitos 0 a 4 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. Las quince reglas U siguen en `Note`: no se han medido todavía sobre un proyecto de Unity real.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -164,6 +164,22 @@ esperado, ni uno más. Las dos afirmaciones son el test, no un comentario.
 - U12 distingue `tag ==` de `CompareTag`.
 - U14 calla si U4 ya saltó en esa línea: un hallazgo por problema.
 - U15 señala `OnGUI` como declaración, no como llamada.
+- Decisiones al construirlo:
+  - U10 solo cuenta `Instantiate` y `Destroy` de Unity, no el método de una
+    clase propia que se llame igual, y nombra el pool del proyecto si hay una
+    clase que acabe en `Pool`; si no, `ObjectPool<T>` desde 2021.1.
+  - U12 sugiere la llamada exacta, con el objeto y el `!` si hacía falta.
+  - U13 solo cuenta campos que Unity serializa: públicos, no `static`,
+    `const`, `readonly` ni `[NonSerialized]`, en un `MonoBehaviour` o un
+    `ScriptableObject`.
+  - U14 se gradúa por el camino caliente como U4, y no cuenta el log guardado
+    por `#if UNITY_EDITOR`, `DEVELOPMENT_BUILD` o `DEBUG`, por `if
+    (Debug.isDebugBuild)` o dentro de un método `[Conditional]`. `LogError`
+    no cuenta: un error se registra también en la build.
+  - U15 no cuenta el `OnGUI` de una `EditorWindow`, que es la forma de dibujar
+    del editor.
+  - Ninguna regla U mira las carpetas `Editor` ni `Tests`, que no viajan en la
+    build; D1 usa la misma comprobación.
 
 **Se prueba:** un componente con `Resources.Load` en un proyecto sin el paquete
 no produce U9, y en uno con el paquete sí. Un `Debug.Log($"{x}")` dentro de

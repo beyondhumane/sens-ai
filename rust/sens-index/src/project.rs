@@ -12,6 +12,11 @@ pub fn is_unity(root: &Path) -> bool {
     unity_version(root).is_some()
 }
 
+pub fn addressables(root: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(root.join("Packages").join("manifest.json")) else { return false };
+    serde_json::from_str::<serde_json::Value>(&text).is_ok_and(|manifest| manifest["dependencies"].get("com.unity.addressables").is_some())
+}
+
 fn generated(root: &Path) -> &'static [&'static str] {
     if is_unity(root) { &UNITY_GENERATED } else { &[] }
 }
@@ -54,6 +59,15 @@ mod tests {
         assert!(!is_unity(&plain));
         let empty = project("empty-version", &[("ProjectSettings/ProjectVersion.txt", "m_EditorVersion:\n")]);
         assert!(!is_unity(&empty));
+    }
+
+    #[test]
+    fn addressables_count_only_when_the_manifest_depends_on_them() {
+        let with = project("addressables", &[VERSION, ("Packages/manifest.json", r#"{ "dependencies": { "com.unity.addressables": "1.21.19", "com.unity.ugui": "1.0.0" } }"#)]);
+        assert!(addressables(&with));
+        let named_elsewhere = project("addressables-elsewhere", &[VERSION, ("Packages/manifest.json", r#"{ "dependencies": { "com.unity.ugui": "1.0.0" }, "testables": ["com.unity.addressables"] }"#)]);
+        assert!(!addressables(&named_elsewhere));
+        assert!(!addressables(&project("addressables-none", &[VERSION])));
     }
 
     #[test]

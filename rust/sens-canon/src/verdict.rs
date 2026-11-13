@@ -31,6 +31,13 @@ pub enum Rule {
     U6,
     U7,
     U8,
+    U9,
+    U10,
+    U11,
+    U12,
+    U13,
+    U14,
+    U15,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -117,6 +124,8 @@ pub struct ProjectRules {
     pub unity: Option<bool>,
     #[serde(skip)]
     pub editor: Option<String>,
+    #[serde(skip)]
+    pub addressables: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

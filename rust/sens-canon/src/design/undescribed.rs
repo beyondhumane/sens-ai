@@ -4,17 +4,17 @@ use sens_index::build;
 use sens_index::index::Index;
 
 use super::FOLDER;
+use crate::unity;
 use crate::verdict::{Change, Finding, Rule, Severity};
 
 const GAMEPLAY: [&str; 2] = ["MonoBehaviour", "ScriptableObject"];
-const SET_ASIDE: [&str; 2] = ["editor", "tests"];
 
 fn touches_design(path: &str) -> bool {
     path.split('/').next().is_some_and(|top| top.eq_ignore_ascii_case(FOLDER))
 }
 
 fn in_play(path: &str) -> bool {
-    path.starts_with("Assets/") && path.ends_with(".cs") && !path.split('/').any(|folder| SET_ASIDE.contains(&folder.to_lowercase().as_str()))
+    path.starts_with("Assets/") && path.ends_with(".cs") && unity::ships(path)
 }
 
 fn classes(path: &str, source: &str) -> Vec<(String, u32)> {

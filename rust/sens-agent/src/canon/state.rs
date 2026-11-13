@@ -76,7 +76,7 @@ pub fn save_considered(work: &Path, keys: &BTreeSet<String>) -> Result<(), Strin
 pub fn rules(work: &Path) -> ProjectRules {
     let stored: ProjectRules = load(work, "rules.json");
     let editor = project::unity_version(work);
-    ProjectRules { unity: stored.unity.or(Some(editor.is_some())), editor, ..stored }
+    ProjectRules { unity: stored.unity.or(Some(editor.is_some())), editor, addressables: project::addressables(work), ..stored }
 }
 
 pub fn save_rules(work: &Path, rules: &ProjectRules) -> Result<(), String> {
@@ -115,7 +115,10 @@ mod tests {
         std::fs::create_dir_all(root.join("ProjectSettings")).unwrap();
         std::fs::write(root.join("ProjectSettings/ProjectVersion.txt"), "m_EditorVersion: 2022.3.10f1
 ").unwrap();
-        assert_eq!((rules(&root).unity, rules(&root).editor.as_deref()), (Some(true), Some("2022.3.10f1")));
+        assert_eq!((rules(&root).unity, rules(&root).editor.as_deref(), rules(&root).addressables), (Some(true), Some("2022.3.10f1"), false));
+        std::fs::create_dir_all(root.join("Packages")).unwrap();
+        std::fs::write(root.join("Packages/manifest.json"), r#"{ "dependencies": { "com.unity.addressables": "1.21.19" } }"#).unwrap();
+        assert!(rules(&root).addressables);
         save_rules(&root, &ProjectRules { no_comments: true, ..ProjectRules::default() }).unwrap();
         assert_eq!(rules(&root).unity, Some(true));
         save_rules(&root, &ProjectRules { unity: Some(false), editor: Some("1.0".into()), ..ProjectRules::default() }).unwrap();
