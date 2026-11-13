@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hitos 0 a 5 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. Las quince reglas U siguen en `Note`: no se han medido todavía sobre un proyecto de Unity real.
+- **Estado:** Hitos 0 a 6 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. Las quince reglas U siguen en `Note`: no se han medido todavía sobre un proyecto de Unity real.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -217,6 +217,10 @@ es de Unity recibe exactamente el texto que recibía antes.
 - `rust/sens-app/ui/src/features/settings/project.copy.ts`: copy en los seis
   idiomas. La casilla solo se dibuja si se ha detectado Unity.
 - `rust/sens-app/ui/src/dev/mock-tauri.ts`: el mock devuelve los campos nuevos.
+- Que el proyecto sea de Unity y que la persona quiera las reglas son dos cosas
+  distintas: la casilla se dibuja si existe `ProjectSettings/ProjectVersion.txt`,
+  la misma comprobación que decide si se ofrece la entrevista de diseño, y no
+  desaparece al apagarla.
 
 **Se prueba:** los tests de jsdom que ya cubren el panel de proyecto, más uno
 que afirma que la casilla no está cuando el proyecto no es de Unity.

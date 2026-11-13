@@ -5,7 +5,7 @@ import { project } from "../project/store";
 import { ProjectSection } from "./ProjectSection";
 
 const ipc = vi.hoisted(() => ({
-  commands: { canonRules: vi.fn(), canonSetRules: vi.fn(), canonExceptions: vi.fn(), canonRetract: vi.fn(), canonAvoided: vi.fn() },
+  commands: { canonRules: vi.fn(), canonSetRules: vi.fn(), canonExceptions: vi.fn(), canonRetract: vi.fn(), canonAvoided: vi.fn(), folder: vi.fn() },
 }));
 
 vi.mock("../../ipc/commands", () => ({ commands: ipc.commands, events: {} }));
@@ -16,6 +16,7 @@ beforeEach(() => {
   project.setState({ root: "C:/demo", work: "C:/demo/.sens/worktrees/ab12" });
   for (const command of Object.values(ipc.commands)) command.mockReset().mockResolvedValue(undefined);
   ipc.commands.canonRules.mockResolvedValue({ noComments: false });
+  ipc.commands.folder.mockResolvedValue([]);
   ipc.commands.canonExceptions.mockResolvedValue([{ key: "R1:src/a.ts:a~src/b.ts:b", rule: "R1", file: "src/a.ts", since: Date.UTC(2026, 8, 30, 10) }]);
   ipc.commands.canonAvoided.mockResolvedValue({ ...nothing, copies: 3, dependencies: 1, cycles: 2, reviews: 2, reviewerCost: 0.012 });
 });
@@ -49,6 +50,22 @@ describe("the project section", () => {
     await act(async () => void fireEvent.click(screen.getByText("Retirar")));
     expect(ipc.commands.canonRetract).toHaveBeenCalledWith("C:/demo/.sens/worktrees/ab12", "R1:src/a.ts:a~src/b.ts:b");
     expect(screen.getByText("Sin excepciones.")).toBeTruthy();
+  });
+
+  it("draws the Unity switch only in a Unity project, on until the person turns it off", async () => {
+    await shown();
+    expect(screen.queryByText("Reglas de Unity")).toBeNull();
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    cleanup();
+    ipc.commands.folder.mockImplementation(async (_root: string, folder: string) => (folder === "ProjectSettings" ? [{ name: "ProjectVersion.txt", kind: "file" }] : []));
+    ipc.commands.canonRules.mockResolvedValue({ noComments: false, unity: true });
+    await shown();
+    expect(ipc.commands.folder).toHaveBeenCalledWith("C:/demo/.sens/worktrees/ab12", "ProjectSettings");
+    const unity = screen.getByRole("switch", { name: "Reglas de Unity" });
+    expect(unity.getAttribute("aria-checked")).toBe("true");
+    await act(async () => void fireEvent.click(unity));
+    expect(ipc.commands.canonSetRules).toHaveBeenCalledWith("C:/demo/.sens/worktrees/ab12", { noComments: false, unity: false });
+    expect(screen.getByRole("switch", { name: "Reglas de Unity" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("says so when nothing has been stopped or no project is open", async () => {

@@ -4,6 +4,7 @@ import { commands } from "../../ipc/commands";
 import type { Avoided, Excepted, ProjectRules } from "../../ipc/types";
 import { when } from "../../shared/format.js";
 import { t as sens } from "../chat/canon.copy";
+import { isUnity } from "../project/folders";
 import { project } from "../project/store";
 import { t } from "./project.copy";
 import { Switch } from "./Switch";
@@ -30,6 +31,7 @@ export function ProjectSection() {
   const [rules, setRules] = useState<ProjectRules | null>(null);
   const [excepted, setExcepted] = useState<Excepted[]>([]);
   const [avoided, setAvoided] = useState<Avoided | null>(null);
+  const [unity, setUnity] = useState(false);
   const [fault, setFault] = useState("");
 
   useEffect(() => {
@@ -37,12 +39,13 @@ export function ProjectSection() {
     commands.canonRules(work).then(setRules, (reason) => setFault(String(reason)));
     commands.canonExceptions(work).then(setExcepted, () => {});
     commands.canonAvoided(work, Date.now() - MONTH).then(setAvoided, () => {});
+    void isUnity(work).then(setUnity);
   }, [work]);
 
   if (!work) return <p className="note">{t.noProject}</p>;
 
-  async function strict(noComments: boolean) {
-    const chosen = { ...(rules ?? { noComments: false }), noComments };
+  async function save(change: Partial<ProjectRules>) {
+    const chosen = { ...(rules ?? { noComments: false }), ...change };
     await commands.canonSetRules(work, chosen);
     setRules(chosen);
   }
@@ -63,10 +66,18 @@ export function ProjectSection() {
     <>
       <div className="pair">
         <span className="label">{t.rules}</span>
-        <Switch id="settings-no-comments" on={rules?.noComments ?? false} save={strict}>
+        <Switch id="settings-no-comments" on={rules?.noComments ?? false} save={(noComments) => save({ noComments })}>
           {t.noComments}
         </Switch>
         <p className="note">{t.noCommentsNote}</p>
+        {unity && (
+          <>
+            <Switch id="settings-unity" on={rules?.unity ?? true} save={(on) => save({ unity: on })}>
+              {t.unity}
+            </Switch>
+            <p className="note">{t.unityNote}</p>
+          </>
+        )}
       </div>
       <div className="pair">
         <span className="label">{t.exceptions}</span>

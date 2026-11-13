@@ -506,6 +506,7 @@ const CANON_REPLAY = [
 ];
 let held: unknown[] | null = [oneUse];
 let noComments = true;
+let unityRules = true;
 let exceptions = [{ key: "R3:dayjs", rule: "R3", file: "package.json", since: now - 3 * DAY }];
 
 const SPACES = [
@@ -761,8 +762,12 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   canon_retry: () => undefined,
   canon_exceptions: () => exceptions,
   canon_retract: ({ key }) => void (exceptions = exceptions.filter((one) => one.key !== key)),
-  canon_rules: () => ({ noComments }),
-  canon_set_rules: ({ rules }) => void (noComments = Boolean((rules as { noComments: boolean }).noComments)),
+  canon_rules: () => ({ noComments, unity: unityRules }),
+  canon_set_rules: ({ rules }) => {
+    const chosen = rules as { noComments: boolean; unity?: boolean | null };
+    noComments = Boolean(chosen.noComments);
+    unityRules = chosen.unity ?? unityRules;
+  },
   canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, cycles: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
   new_session_id: () => "demo-new",
   open_session: ({ id }) => id ?? "demo-new",
