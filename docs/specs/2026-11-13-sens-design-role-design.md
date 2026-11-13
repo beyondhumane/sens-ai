@@ -100,9 +100,12 @@ Si el proyecto ya tiene código, la entrevista empieza al revés: el agente lee
 lo construido, propone un borrador del diseño que se deduce de ahí y pide a la
 persona que confirme o corrija los pilares antes de escribir nada.
 
-Es una sesión con un briefing propio. `settings.briefing` ya se añade al
-prompt de sistema en `chat.rs`; la entrevista es otro texto en ese mismo
-campo, con su propio presupuesto de líneas y su test.
+Es una sesión marcada como entrevista: `Settings.interview`, que la app manda
+en todos los mensajes de esa sesión y que `greeting` traduce en el texto de la
+entrevista al final del prompt de sistema. No va en `settings.briefing`
+porque ese campo lo rellena la app con su propio briefing. El texto tiene su
+presupuesto de líneas y un test que lo ata a lo que el lector espera:
+subgéneros, estados y ficheros.
 
 ## Los manuales de género
 

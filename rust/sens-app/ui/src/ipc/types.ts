@@ -643,6 +643,7 @@ export interface Settings {
   effort: string;
   thinking: boolean;
   mode: string;
+  interview?: boolean;
 }
 
 export interface Provider {

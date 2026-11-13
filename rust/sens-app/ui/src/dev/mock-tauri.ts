@@ -303,11 +303,13 @@ const DIFF = [
   "rename to new.txt",
 ].join("\n");
 
+const UNITY = asking.has("unity");
 const FOLDERS: Record<string, string[]> = {
-  "": ["src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
+  "": [...(UNITY ? ["Assets/", "ProjectSettings/"] : []), "src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
   src: ["components/", "app.tsx", "index.ts", "types.d.ts", "lib.rs", "styles.css", "query.sql", "build.ps1"],
   "src/components": ["Button.tsx", "Button.test.tsx"],
   docs: ["guia.md", "api.yaml", "config.toml"],
+  ...(UNITY ? { Assets: ["Player.cs"], ProjectSettings: ["ProjectVersion.txt"] } : {}),
 };
 
 const SAMPLES: Record<string, string> = {

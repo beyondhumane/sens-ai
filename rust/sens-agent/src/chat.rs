@@ -288,6 +288,7 @@ pub struct Settings {
     pub effort: String,
     pub thinking: bool,
     pub mode: String,
+    pub interview: bool,
     #[serde(skip)]
     pub extra: Vec<String>,
     #[serde(skip)]
@@ -316,6 +317,7 @@ impl Default for Settings {
             effort: String::new(),
             thinking: true,
             mode: "default".into(),
+            interview: false,
             extra: Vec::new(),
             env: BTreeMap::new(),
             cwd: None,
@@ -1101,7 +1103,8 @@ pub fn greeting(settings: &Settings, card: Option<&str>) -> Value {
     }
     let briefing = Some(settings.briefing.as_str()).filter(|briefing| !briefing.is_empty());
     let canon = (settings.canon != Canon::Off).then_some(sens_canon::CANON);
-    let prompt: Vec<&str> = [briefing, canon, card.filter(|_| full)].into_iter().flatten().collect();
+    let interview = settings.interview.then_some(sens_canon::design::INTERVIEW);
+    let prompt: Vec<&str> = [briefing, canon, card.filter(|_| full), interview].into_iter().flatten().collect();
     if !prompt.is_empty() {
         request["appendSystemPrompt"] = json!(prompt.join("\n\n"));
     }
@@ -1844,6 +1847,17 @@ mod tests {
         assert_eq!(briefed(Canon::Full), json!(format!("## Sens's console\n\n{}\n\n## This project", sens_canon::CANON)));
         let barred = |canon| arguments(&Settings { canon, ..opus("default") }, "x", false).windows(2).any(|pair| pair == ["--disallowedTools", circuit::BARRED_TOOLS]);
         assert!(barred(Canon::Full) && !barred(Canon::Instructions) && !barred(Canon::Off));
+    }
+
+    #[test]
+    fn a_design_interview_closes_the_greeting_whatever_the_canon_and_a_plain_session_has_none() {
+        let interviewed = |canon| greeting(&Settings { canon, interview: true, briefing: "## Sens's console".into(), ..opus("default") }, Some("## This project"))["request"]["appendSystemPrompt"].as_str().unwrap().to_string();
+        assert!(interviewed(Canon::Full).ends_with(sens_canon::design::INTERVIEW));
+        assert_eq!(interviewed(Canon::Off), format!("## Sens's console\n\n{}", sens_canon::design::INTERVIEW));
+        let plain = greeting(&opus("default"), None)["request"]["appendSystemPrompt"].clone();
+        assert!(!plain.as_str().unwrap_or_default().contains("## Design interview"));
+        let sent: Settings = serde_json::from_value(json!({ "provider": "claude", "model": "claude-opus-5-5", "interview": true })).unwrap();
+        assert!(sent.interview && !serde_json::from_value::<Settings>(json!({ "provider": "claude" })).unwrap().interview);
     }
 
     #[test]

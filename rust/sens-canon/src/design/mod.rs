@@ -6,6 +6,8 @@ mod undescribed;
 pub use guide::{Guide, Told};
 pub use undescribed::undescribed;
 
+pub const INTERVIEW: &str = include_str!("interview.md");
+
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use crate::slug::slug;
@@ -292,6 +294,21 @@ mod tests {
         assert!(said.contains("Design/mechanics/wall.md: it serves the pillar `ritmo`, which Design/pillars.md does not have."), "{said}");
         assert!(said.contains("Design/mechanics/hook.md has no `status:`"), "{said}");
         assert!(said.contains("Design/mechanics/hook.md:3: a frontmatter line must be"), "{said}");
+    }
+
+    #[test]
+    fn the_interview_is_short_and_asks_for_exactly_what_the_reader_reads() {
+        assert!(INTERVIEW.lines().count() <= 25, "{} lines", INTERVIEW.lines().count());
+        for subgenre in SUBGENRES {
+            assert!(INTERVIEW.contains(subgenre), "{subgenre}");
+        }
+        for status in Status::ALL {
+            assert!(INTERVIEW.contains(status.name()), "{}", status.name());
+        }
+        for part in ["`Design/README.md`", "`Design/pillars.md`", "`Design/loop.md`", "`Design/mechanics/", "subgenres:", "pillars:", "status:", "### Descarta"] {
+            assert!(INTERVIEW.contains(part), "{part}");
+        }
+        assert!(RULES_OUT.contains(&"descarta"));
     }
 
     #[test]

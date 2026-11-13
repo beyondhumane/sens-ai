@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 6 hechos
+- **Estado:** Hitos 1 a 7 hechos. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código.
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,
@@ -162,10 +162,13 @@ el disco y retiene el turno.
   líneas. Cubre los dos modos (proyecto nuevo y proyecto con código), las
   preguntas de una en una, la estructura exacta de `Design/` y los
   identificadores de subgénero válidos.
-- En `sens-app`: al abrir un proyecto en el que `is_unity` es cierto y no hay
-  `Design/`, la pantalla de nueva sesión ofrece la entrevista, con texto en
-  los seis idiomas. Al aceptarla se abre una sesión cuyo briefing es el de
-  siempre más el de la entrevista.
+- En la UI de `sens-app`: la pantalla de nueva sesión ofrece la entrevista
+  cuando el proyecto tiene `ProjectSettings/ProjectVersion.txt` y no tiene
+  `Design/`, comprobado con el comando `folder` que ya existe, y con texto en
+  los seis idiomas. Al aceptarla, el panel queda marcado como entrevista, sus
+  `Settings` llevan `interview: true` en cada mensaje y `greeting` añade el
+  texto al prompt de sistema. La marca se borra al cambiar de sesión. La Rust
+  de `sens-app` no se toca.
 
 **Se prueba:** el presupuesto del texto; que la app solo la ofrece en un
 proyecto de Unity sin `Design/` (jsdom); que la sesión arranca con los dos

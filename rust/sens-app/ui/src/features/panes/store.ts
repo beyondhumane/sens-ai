@@ -44,6 +44,7 @@ export interface Desk {
   choice: { provider: string; model: string };
   effort: string;
   thinking: boolean;
+  interview: boolean;
 }
 
 export interface Pane {
@@ -91,6 +92,7 @@ export function newPane(root = ""): Pane {
       repo: null,
       trusted: "",
       slashes: [],
+      interview: false,
       ...storedKnobs(),
     })),
     replying: null,
