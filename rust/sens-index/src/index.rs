@@ -21,6 +21,8 @@ pub struct SymbolInfo {
     pub end_byte: usize,
     pub signature: String,
     pub exported: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bases: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -52,6 +54,7 @@ pub struct Index {
     pub symbols: Vec<SymbolInfo>,
     pub imports: Vec<ImportEdge>,
     pub entry_points: Vec<String>,
+    pub unity: HashMap<String, &'static str>,
     pub units: Vec<Unit>,
     clones: Clones,
     sites: Vec<Vec<(u32, u32, u32)>>,
@@ -88,7 +91,7 @@ impl Index {
             }
         }
         let clones = Clones::of(&units);
-        Index { root, files, symbols, imports, entry_points: Vec::new(), units, clones, sites, by_id }
+        Index { root, files, symbols, imports, entry_points: Vec::new(), unity: HashMap::new(), units, clones, sites, by_id }
     }
 
     pub fn similar(&self, print: &Print) -> Vec<Match> {

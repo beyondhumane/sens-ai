@@ -50,6 +50,11 @@ Se añaden como puntos de entrada:
 Es una corrección, no una función nueva, y se verifica sola: un componente
 idiomático y limpio no debe producir ni un huérfano.
 
+El propio tipo también es punto de entrada, no solo sus mensajes: lo
+instancia una escena o un prefab, y el índice no ve eso hasta que exista el
+grafo de assets. La lista completa de bases, mensajes y atributos vive en
+`rust/sens-index/src/unity.rs`; aquí está la forma, y allí el detalle.
+
 Los métodos que una escena o un prefab conectan por `UnityEvent` quedan fuera:
 eso vive en el grafo de assets, que queda para más adelante.
 

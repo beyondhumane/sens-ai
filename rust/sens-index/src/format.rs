@@ -183,6 +183,7 @@ mod tests {
             end_byte: 0,
             signature: format!("{name}()"),
             exported,
+            bases: Vec::new(),
         }
     }
 

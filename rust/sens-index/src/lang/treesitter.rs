@@ -27,6 +27,7 @@ pub struct EmitSymbol {
     pub exported: bool,
     pub simple_name: Option<String>,
     pub entry: bool,
+    pub bases: Vec<String>,
 }
 
 #[derive(Default)]
@@ -277,6 +278,7 @@ pub fn build(
                 end_byte: s.end,
                 signature: s.signature,
                 exported: s.exported,
+                bases: s.bases,
             });
         }
         contribution.imports.extend(emitted.imports);
@@ -381,6 +383,7 @@ pub struct Extra {
     pub signature: Option<String>,
     pub simple_name: Option<String>,
     pub entry: bool,
+    pub bases: Vec<String>,
 }
 
 pub fn declare(
@@ -404,6 +407,7 @@ pub fn declare(
         exported: extra.exported,
         simple_name: extra.simple_name,
         entry: extra.entry,
+        bases: extra.bases,
     });
 }
 

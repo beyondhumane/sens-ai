@@ -282,18 +282,10 @@ pub fn moved(before: &BTreeMap<String, String>, after: &BTreeMap<String, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build;
-    use std::path::PathBuf;
+    use crate::fixture;
 
     fn project(name: &str, files: &[(&str, &str)]) -> Index {
-        let root: PathBuf = std::env::temp_dir().join("sens-map").join(name);
-        let _ = std::fs::remove_dir_all(&root);
-        for (path, content) in files {
-            let file = root.join(path);
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(file, content).unwrap();
-        }
-        build::build(&root)
+        fixture::indexed("sens-map", name, files)
     }
 
     fn names(map: &Map) -> Vec<&str> {

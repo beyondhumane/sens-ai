@@ -4,6 +4,7 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use crate::entries;
 use crate::fingerprint::{self, Unit};
 use crate::project;
+use crate::unity;
 use crate::lang::treesitter::Emitted;
 use crate::testfile::is_test_file;
 use crate::index::Index;
@@ -109,6 +110,7 @@ pub fn build(root: &Path) -> Index {
     }
     files.sort_by(|a: &crate::index::FileInfo, b| a.path.cmp(&b.path));
     let mut index = Index::assemble(root.to_path_buf(), files, symbols, imports, references, units);
+    unity::mark(&mut index);
     index.entry_points = entries::find(root, &index);
     index
 }

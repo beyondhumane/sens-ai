@@ -32,15 +32,7 @@ mod tests {
     use super::*;
 
     fn project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join("sens-index-project").join(name);
-        let _ = std::fs::remove_dir_all(&root);
-        for (path, content) in files {
-            let file = root.join(path);
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(file, content).unwrap();
-        }
-        std::fs::create_dir_all(&root).unwrap();
-        root
+        crate::fixture::written("sens-index-project", name, files)
     }
 
     const VERSION: (&str, &str) = ("ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000.0.23f1\nm_EditorVersionWithRevision: 6000.0.23f1 (abc123)\n");

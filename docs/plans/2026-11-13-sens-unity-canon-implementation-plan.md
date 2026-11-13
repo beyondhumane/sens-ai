@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hito 0 hecho. El hito 1 se hace dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md); del 2 al 7, después de ese plan.
+- **Estado:** Hitos 0 y 1 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 al 7, después de ese plan.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
