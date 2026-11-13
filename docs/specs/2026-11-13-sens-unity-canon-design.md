@@ -1,25 +1,20 @@
 # El Canon aprende Unity
 
-Entrega 1 de 3 del giro de Sens a desarrollo de videojuegos. Las otras dos,
-que este documento no cubre, son el grafo de assets por GUID y el lazo con el
-editor.
+El rol de dirección técnica del giro de Sens a desarrollo de videojuegos. La
+visión del giro, y el rol de diseño, que se construye antes que este, están en
+`2026-11-13-sens-design-role-design.md`. El grafo de assets por GUID y el lazo
+con el editor quedan para más adelante.
 
-## La visión
+## Lo que este rol aporta a la visión
 
-Sens deja de ser *un circuito que obliga a un agente de código a reutilizar y
-a escribir menos* y pasa a ser **el único entorno en el que un agente no puede
-dejar un proyecto de Unity peor de lo que estaba**.
-
-La naturaleza del argumento no cambia: sigue siendo un circuito determinista,
-que el modelo no puede apagar ni rodear, que juzga lo que llega al disco y
-retiene el turno que no pasa. Cambia su jurisdicción. Hasta hoy juzgaba el
-código en abstracto — duplicación, reutilización, tamaño, forma. A partir de
-aquí sabe además qué cuesta un frame, qué significa el ciclo de vida de un
+De la visión, a este rol le toca la parte de "programa con criterio de Unity".
+Sigue siendo un circuito determinista que el modelo no puede apagar ni rodear,
+que juzga lo que llega al disco y retiene el turno que no pasa. Lo que gana es
+que además sabe qué cuesta un frame, qué significa el ciclo de vida de un
 MonoBehaviour y cuándo unos datos no son un componente.
 
-Esa frase es la fuente de verdad para el README, la web, la identidad y el
-paper cuando toque reescribirlos. No se reescriben en esta entrega: mientras
-las reglas no existan, sería vender algo que no está hecho.
+El README, la web, la identidad y el paper no se reescriben mientras las
+reglas no existan: sería vender algo que no está hecho.
 
 ## Para qué
 
@@ -56,7 +51,7 @@ Es una corrección, no una función nueva, y se verifica sola: un componente
 idiomático y limpio no debe producir ni un huérfano.
 
 Los métodos que una escena o un prefab conectan por `UnityEvent` quedan fuera:
-eso vive en el grafo de assets, que es la entrega 2.
+eso vive en el grafo de assets, que queda para más adelante.
 
 ## Detección del proyecto
 
@@ -192,5 +187,5 @@ distintas.
 
 `sens-bench` no tiene tareas de Unity. Sin ellas no se puede medir que el brazo
 con Sens gane, que es el método con el que el proyecto sostiene todo lo demás.
-Es la entrega inmediatamente posterior a esta, antes del grafo de assets y del
+Es lo inmediatamente posterior a este rol, antes del grafo de assets y del
 lazo con el editor.
