@@ -58,7 +58,7 @@ export function idle(on: boolean, pane: Pane = focused()) {
 }
 
 export function blank(id: string, pane: Pane = focused()) {
-  pane.desk.setState({ session: id, worktree: null, isolate: !id && isolating() });
+  pane.desk.setState({ session: id, worktree: null, isolate: !id && isolating(), interview: false });
   pane.named = "";
   pane.replying = null;
   pane.pendingId = null;

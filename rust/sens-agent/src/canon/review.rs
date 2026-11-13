@@ -64,7 +64,7 @@ impl Default for Haiku {
 pub fn answered(reply: &str) -> Result<Reviewed, String> {
     let reply: Value = serde_json::from_str(reply).map_err(|error| format!("the reviewer's reply is not JSON: {error}"))?;
     if reply["is_error"] == true {
-        return Err(format!("the reviewer failed: {}", reply["errors"].as_array().and_then(|errors| errors.first()).and_then(Value::as_str).unwrap_or("no reason given")));
+        return Err(format!("the reviewer failed: {}", process::complaint(&reply)));
     }
     match &reply["structured_output"] {
         Value::Object(_) => Ok(Reviewed { answer: reply["structured_output"].clone(), cost: reply["total_cost_usd"].as_f64().unwrap_or(0.0) }),
@@ -89,6 +89,7 @@ mod tests {
         let reviewed = answered(r#"{"is_error":false,"total_cost_usd":0.004,"structured_output":{"findings":[]}}"#).unwrap();
         assert_eq!((reviewed.answer["findings"].clone(), reviewed.cost), (serde_json::json!([]), 0.004));
         assert!(answered(r#"{"is_error":true,"errors":["Reached maximum number of turns (3)"]}"#).unwrap_err().contains("maximum number of turns"));
+        assert!(answered(r#"{"is_error":true,"result":"Not logged in · Please run /login"}"#).unwrap_err().ends_with("Not logged in · Please run /login"));
         assert!(answered(r#"{"is_error":false,"result":"looks fine"}"#).is_err());
         assert!(answered("not json").is_err());
     }

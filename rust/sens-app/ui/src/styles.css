@@ -832,6 +832,11 @@
     margin: 0; max-width: 44ch; font-size: 14px; line-height: 21px; color: var(--ghost);
     animation: rise var(--slow) var(--curve) 140ms both;
   }
+  .hello-offer {
+    display: grid; justify-items: center; gap: 10px; max-width: 52ch;
+    animation: rise var(--slow) var(--curve) 220ms both;
+  }
+  .hello-offer p { margin: 0; font-size: 13px; line-height: 20px; color: var(--dim); }
 
   .turn { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
   .turn .who {
@@ -989,7 +994,8 @@
   .step.sens[data-tone="pass"] .step-icon { color: var(--accent-text); }
   .step.sens[data-tone="quiet"] .step-target, .step.sens[data-tone="note"] .step-target { color: var(--dim); }
   .sens-found { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 12px; color: var(--faint); }
-  .sens-signature { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: var(--text); }
+  .sens-signature, .sens-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .sens-signature { font-family: var(--mono); }
   .sens-uses { flex: none; margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ghost); }
   .sens-place { flex: none; padding: 0; font-family: var(--mono); font-size: 12px; color: var(--dim); text-align: left; }
   .sens-place:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -2033,6 +2039,6 @@
     .update-ping::after { animation: none; opacity: 0; }
     .round.dictate[aria-busy="true"] { animation: none; }
     .settings[open], .look-mark path { animation: none; }
-    :is(.reply .flow, .run-steps) > *, .fresh, .run-head, .thought[data-live="true"] :is(.thought-verb, .thought-title), .step[data-state="running"] .step-verb, .effort[data-max="true"] .effort-label, .model-sheet .mode-sub, .snap-ghost, .pane, .hello-mark, .hello-hint, .welcome { animation: none; }
+    :is(.reply .flow, .run-steps) > *, .fresh, .run-head, .thought[data-live="true"] :is(.thought-verb, .thought-title), .step[data-state="running"] .step-verb, .effort[data-max="true"] .effort-label, .model-sheet .mode-sub, .snap-ghost, .pane, .hello-mark, .hello-hint, .hello-offer, .welcome { animation: none; }
     :is(details.step, details.thought, details.run)::details-content { transition: none; }
   }

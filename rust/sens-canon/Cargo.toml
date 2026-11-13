@@ -11,3 +11,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 toml = "1"
 tree-sitter = "0.27.0"
+
+[dev-dependencies]
+sens-index = { path = "../sens-index", features = ["fixture"] }

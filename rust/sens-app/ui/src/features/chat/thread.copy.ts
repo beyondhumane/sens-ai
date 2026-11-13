@@ -17,6 +17,9 @@ export const t = copy({
     compacted: "Conversation compacted",
     before: (count: string) => `was ${count} tokens`,
     noFolder: "Choose a working folder to start.",
+    interviewOffer: "This Unity project has no game design yet. Sens can interview you and write it in Design/: the pillars, the core loop and the mechanics.",
+    interviewStart: "Start the design interview",
+    interviewOpening: "Let’s do the design interview for this game.",
     hint: (nth: number) =>
       [
         "Ask anything, paste an error or point me to a file.",
@@ -45,6 +48,9 @@ export const t = copy({
     compacted: "Conversación compactada",
     before: (count: string) => `tenía ${count} tokens`,
     noFolder: "Elige una carpeta de trabajo para empezar.",
+    interviewOffer: "Este proyecto de Unity aún no tiene diseño. Sens puede entrevistarte y escribirlo en Design/: los pilares, el bucle y las mecánicas.",
+    interviewStart: "Empezar la entrevista de diseño",
+    interviewOpening: "Hagamos la entrevista de diseño de este juego.",
     hint: (nth: number) =>
       [
         "Pregunta lo que necesites, pega un error o señálame un fichero.",
@@ -73,6 +79,9 @@ export const t = copy({
     compacted: "Conversation compactée",
     before: (count: string) => `${count} tokens auparavant`,
     noFolder: "Choisissez un dossier de travail pour commencer.",
+    interviewOffer: "Ce projet Unity n’a pas encore de conception. Sens peut vous interviewer et l’écrire dans Design/ : les piliers, la boucle et les mécaniques.",
+    interviewStart: "Commencer l’entretien de conception",
+    interviewOpening: "Faisons l’entretien de conception de ce jeu.",
     hint: (nth: number) =>
       [
         "Posez votre question, collez une erreur ou indiquez-moi un fichier.",
@@ -101,6 +110,9 @@ export const t = copy({
     compacted: "Unterhaltung komprimiert",
     before: (count: string) => `vorher ${count} Tokens`,
     noFolder: "Wähle einen Arbeitsordner, um loszulegen.",
+    interviewOffer: "Dieses Unity-Projekt hat noch kein Spieldesign. Sens kann dich befragen und es in Design/ festhalten: die Säulen, den Kern-Loop und die Mechaniken.",
+    interviewStart: "Design-Interview starten",
+    interviewOpening: "Lass uns das Design-Interview für dieses Spiel machen.",
     hint: (nth: number) =>
       [
         "Frag, was du brauchst, füge einen Fehler ein oder zeig mir eine Datei.",
@@ -129,6 +141,9 @@ export const t = copy({
     compacted: "会話を圧縮しました",
     before: (count: string) => `圧縮前 ${count} トークン`,
     noFolder: "作業フォルダーを選んで始めてください。",
+    interviewOffer: "この Unity プロジェクトにはまだゲームデザインがありません。Sens がインタビューして、柱・コアループ・メカニクスを Design/ に書き出せます。",
+    interviewStart: "デザインインタビューを始める",
+    interviewOpening: "このゲームのデザインインタビューをしましょう。",
     hint: (nth: number) =>
       [
         "質問、エラーの貼り付け、ファイルの指定など、何でもどうぞ。",
@@ -157,6 +172,9 @@ export const t = copy({
     compacted: "对话已压缩",
     before: (count: string) => `压缩前 ${count} token`,
     noFolder: "选择一个工作文件夹即可开始。",
+    interviewOffer: "这个 Unity 项目还没有游戏设计。Sens 可以采访你，并把支柱、核心循环和机制写进 Design/。",
+    interviewStart: "开始设计访谈",
+    interviewOpening: "我们来做这个游戏的设计访谈吧。",
     hint: (nth: number) =>
       [
         "有什么需要尽管问，也可以粘贴报错或指给我一个文件。",

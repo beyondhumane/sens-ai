@@ -126,6 +126,7 @@ const LOOKS: Record<string, (input: ToolInput) => Look> = {
   mcp__sens__canon_status: () => ({ icon: ICONS.shieldCheck, verb: t.canonStatus, ask: t.wantsUse("Sens"), target: "" }),
   "sens.dependency": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.dependencyTitle, target: String(input.key ?? "").replace(/^R3:/, ""), mono: true }),
   "sens.tests": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.testsTitle, target: relative(String(input.file ?? "")), mono: true, link: relative(String(input.file ?? "")) }),
+  "sens.design": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.designTitle, target: String(input.key ?? "").replace(/^D1:/, ""), mono: true, link: relative(String(input.file ?? "")) }),
   "sens.canon": (input) => ({ icon: ICONS.shieldAlert, verb: sens.sens, ask: sens.canonTitle, target: relative(String(input.file ?? "")), mono: true }),
 };
 

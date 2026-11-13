@@ -202,6 +202,26 @@ fn every_session_gets_the_canon_unless_it_is_off() {
 }
 
 #[test]
+fn a_unity_project_starts_its_sessions_with_the_unity_canon() {
+    let started = |name: &str, unity: bool| {
+        let root = project(name);
+        if unity {
+            std::fs::create_dir_all(root.join("ProjectSettings")).unwrap();
+            std::fs::write(root.join("ProjectSettings/ProjectVersion.txt"), "m_EditorVersion: 2022.3.10f1\n").unwrap();
+        }
+        let engine = engine();
+        let (heard, sink) = ear();
+        engine.send(&root, &session::open(&root).unwrap(), &text("hola"), settings(), sink).unwrap();
+        let Event::Started { model: launched } = wait_for(&heard, |event| matches!(event, Event::Started { .. })) else { unreachable!() };
+        wait_for(&heard, finished);
+        engine.shutdown();
+        launched
+    };
+    assert!(started("unity-canon", true).starts_with("+canon +unity "));
+    assert!(!started("plain-canon", false).contains("+unity"));
+}
+
+#[test]
 fn the_same_settings_keep_talking_to_the_same_process() {
     let root = project("same");
     let id = session::open(&root).unwrap();

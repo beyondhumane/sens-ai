@@ -510,7 +510,7 @@ export interface Slash {
   hint: string;
 }
 
-export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7";
+export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7" | "S8" | "D1" | "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U13" | "U14" | "U15";
 export type Severity = "Block" | "Consider" | "Ask" | "Note";
 
 export interface Target {
@@ -539,11 +539,18 @@ export interface Suggested {
   uses: number;
 }
 
+export interface Anticipated {
+  title: string;
+  file: string;
+  line: number;
+}
+
 export interface Canon {
   kind: "canon";
   stage: string;
   findings: Finding[];
   suggestions: Suggested[];
+  design?: Anticipated[];
 }
 
 export interface Held {
@@ -575,6 +582,7 @@ export interface Avoided {
 
 export interface ProjectRules {
   noComments: boolean;
+  unity?: boolean | null;
 }
 
 export interface Restored {
@@ -636,6 +644,7 @@ export interface Settings {
   effort: string;
   thinking: boolean;
   mode: string;
+  interview?: boolean;
 }
 
 export interface Provider {

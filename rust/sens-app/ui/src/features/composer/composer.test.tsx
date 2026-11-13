@@ -100,7 +100,7 @@ describe("the composer", () => {
   it("picks the first model offered, and knows its account", () => {
     render(<Composer />);
     expect(document.getElementById("crew")?.textContent).toBe("Sonnet");
-    expect(currentSettings()).toEqual({ provider: "claude", model: "claude-sonnet", effort: "medium", thinking: true, mode: "default" });
+    expect(currentSettings()).toEqual({ provider: "claude", model: "claude-sonnet", effort: "medium", thinking: true, mode: "default", interview: false });
     act(() => noteLimits({ kind: "limits", status: "allowed", window: "", utilization: null, resetsAt: null, threshold: null, overage: null, windows: { five_hour: { utilization: 0.42, resetsAt: null } } }));
     expect(accountLine()).toEqual({ text: "Suscripción Max · claude.ai · ada@example.com · 42 % usado en 5 h", warn: false });
   });

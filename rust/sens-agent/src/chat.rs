@@ -12,8 +12,9 @@ use serde_json::{Value, json};
 
 use sens_canon::verdict::{Finding, Rule};
 
-use crate::canon::circuit::{self, Circuit, Suggested, Voice};
+use crate::canon::circuit::{self, Anticipated, Circuit, Suggested, Voice};
 use crate::canon::keeper::Keeper;
+use crate::canon::state;
 use crate::canon::review::{Haiku, Reviewer};
 use crate::catalog::{self, Thinking};
 use crate::process::{self, Family, hidden, unlaunched};
@@ -147,6 +148,8 @@ pub enum Event {
         findings: Vec<Finding>,
         #[serde(default)]
         suggestions: Vec<Suggested>,
+        #[serde(default)]
+        design: Vec<Anticipated>,
     },
     Held {
         findings: Vec<Finding>,
@@ -254,6 +257,10 @@ pub struct Link {
 }
 
 impl Event {
+    pub fn canon(stage: &str, findings: Vec<Finding>) -> Event {
+        Event::Canon { stage: stage.to_string(), findings, suggestions: Vec::new(), design: Vec::new() }
+    }
+
     pub fn lasting(&self) -> bool {
         !matches!(
             self,
@@ -282,6 +289,7 @@ pub struct Settings {
     pub effort: String,
     pub thinking: bool,
     pub mode: String,
+    pub interview: bool,
     #[serde(skip)]
     pub extra: Vec<String>,
     #[serde(skip)]
@@ -310,6 +318,7 @@ impl Default for Settings {
             effort: String::new(),
             thinking: true,
             mode: "default".into(),
+            interview: false,
             extra: Vec::new(),
             env: BTreeMap::new(),
             cwd: None,
@@ -428,6 +437,7 @@ impl Voice for Live {
         let tool = match finding.rule {
             Rule::R3 => "sens.dependency",
             Rule::R8 => "sens.tests",
+            Rule::D1 => "sens.design",
             _ => "sens.canon",
         };
         self.say(Event::Asking {
@@ -611,7 +621,7 @@ impl Live {
             Event::Compacted { .. } => {
                 self.compacted.store(true, Ordering::SeqCst);
                 if let Some(circuit) = &self.circuit {
-                    circuit.forget_map();
+                    circuit.forget();
                 }
                 event
             }
@@ -922,7 +932,7 @@ impl Engine {
             circuit.greeted(project);
         }
         let card = project.map(|project| sens_canon::card::card(&project.index, &project.map));
-        let greeted = greeting(&settings, card.as_deref());
+        let greeted = greeting(&settings, card.as_deref(), state::rules(&cwd).is_unity());
 
         let mut child = hidden(&mut self.command())
             .args(&args)
@@ -1014,7 +1024,7 @@ fn listen(live: Arc<Live>, output: ChildStdout, heard: Arc<Mutex<String>>, lives
             continue;
         }
         if message["type"] == "assistant" && live.unheard() {
-            live.say(Event::Canon { stage: "detached".into(), findings: Vec::new(), suggestions: Vec::new() });
+            live.say(Event::canon("detached", Vec::new()));
         }
         for event in interpret(&message) {
             let event = live.settle(event);
@@ -1086,15 +1096,16 @@ pub fn arguments(settings: &Settings, id: &str, resume: bool) -> Vec<String> {
     args
 }
 
-pub fn greeting(settings: &Settings, card: Option<&str>) -> Value {
+pub fn greeting(settings: &Settings, card: Option<&str>, unity: bool) -> Value {
     let mut request = json!({ "subtype": "initialize", "hooks": null });
     let full = settings.canon == Canon::Full;
     if full {
         request["hooks"] = circuit::hooks();
     }
     let briefing = Some(settings.briefing.as_str()).filter(|briefing| !briefing.is_empty());
-    let canon = (settings.canon != Canon::Off).then_some(sens_canon::CANON);
-    let prompt: Vec<&str> = [briefing, canon, card.filter(|_| full)].into_iter().flatten().collect();
+    let canon = (settings.canon != Canon::Off).then(|| sens_canon::canon(unity));
+    let interview = settings.interview.then_some(sens_canon::design::INTERVIEW);
+    let prompt: Vec<&str> = [briefing, canon.as_deref(), card.filter(|_| full), interview].into_iter().flatten().collect();
     if !prompt.is_empty() {
         request["appendSystemPrompt"] = json!(prompt.join("\n\n"));
     }
@@ -1533,28 +1544,8 @@ fn finished(message: &Value) -> Event {
             .filter_map(|model| model["contextWindow"].as_u64())
             .max()
             .unwrap_or_default(),
-        error: if failed { complaint(message) } else { String::new() },
+        error: if failed { process::complaint(message) } else { String::new() },
     }
-}
-
-fn complaint(message: &Value) -> String {
-    let said = text_of(&message["result"]);
-    if !said.trim().is_empty() {
-        return said;
-    }
-    let listed: Vec<String> = blocks(&message["errors"]).map(text_of).collect();
-    if !listed.is_empty() {
-        return listed.join(" · ");
-    }
-    let subtype = text_of(&message["subtype"]);
-    said!(
-        en: "Claude Code ended with {subtype}",
-        es: "Claude Code terminó con {subtype}",
-        fr: "Claude Code s’est terminé avec {subtype}",
-        de: "Claude Code endete mit {subtype}",
-        ja: "Claude Code が {subtype} で終了しました",
-        zh: "Claude Code 以 {subtype} 结束",
-    )
 }
 
 fn slim(value: &Value) -> Value {
@@ -1822,7 +1813,7 @@ mod tests {
 
     #[test]
     fn the_briefing_leads_the_greeting_the_canon_follows_unless_it_is_off_and_only_full_registers_the_circuit() {
-        let greeted = |canon, card| greeting(&Settings { canon, ..opus("default") }, card)["request"].clone();
+        let greeted = |canon, card| greeting(&Settings { canon, ..opus("default") }, card, false)["request"].clone();
         assert_eq!(greeted(Canon::Off, None)["appendSystemPrompt"], Value::Null);
         assert_eq!(greeted(Canon::Off, None)["hooks"], Value::Null);
         assert_eq!(greeted(Canon::Instructions, Some("card"))["appendSystemPrompt"], json!(sens_canon::CANON));
@@ -1831,12 +1822,26 @@ mod tests {
         assert!(full["appendSystemPrompt"].as_str().unwrap().ends_with("## This project"));
         assert_eq!(full["hooks"]["Stop"][0]["hookCallbackIds"][0], circuit::CLOSE);
         assert_eq!(full["hooks"]["PreToolUse"][0]["matcher"], "Write|Edit|NotebookEdit");
-        let briefed = |canon| greeting(&Settings { canon, briefing: "## Sens's console".into(), ..opus("default") }, Some("## This project"))["request"]["appendSystemPrompt"].clone();
+        let briefed = |canon| greeting(&Settings { canon, briefing: "## Sens's console".into(), ..opus("default") }, Some("## This project"), false)["request"]["appendSystemPrompt"].clone();
         assert_eq!(briefed(Canon::Off), json!("## Sens's console"));
         assert_eq!(briefed(Canon::Instructions), json!(format!("## Sens's console\n\n{}", sens_canon::CANON)));
         assert_eq!(briefed(Canon::Full), json!(format!("## Sens's console\n\n{}\n\n## This project", sens_canon::CANON)));
+        let unity = |canon| greeting(&Settings { canon, ..opus("default") }, None, true)["request"]["appendSystemPrompt"].clone();
+        assert_eq!(unity(Canon::Instructions), json!(sens_canon::canon(true)));
+        assert_eq!(unity(Canon::Off), Value::Null);
         let barred = |canon| arguments(&Settings { canon, ..opus("default") }, "x", false).windows(2).any(|pair| pair == ["--disallowedTools", circuit::BARRED_TOOLS]);
         assert!(barred(Canon::Full) && !barred(Canon::Instructions) && !barred(Canon::Off));
+    }
+
+    #[test]
+    fn a_design_interview_closes_the_greeting_whatever_the_canon_and_a_plain_session_has_none() {
+        let interviewed = |canon| greeting(&Settings { canon, interview: true, briefing: "## Sens's console".into(), ..opus("default") }, Some("## This project"), false)["request"]["appendSystemPrompt"].as_str().unwrap().to_string();
+        assert!(interviewed(Canon::Full).ends_with(sens_canon::design::INTERVIEW));
+        assert_eq!(interviewed(Canon::Off), format!("## Sens's console\n\n{}", sens_canon::design::INTERVIEW));
+        let plain = greeting(&opus("default"), None, false)["request"]["appendSystemPrompt"].clone();
+        assert!(!plain.as_str().unwrap_or_default().contains("## Design interview"));
+        let sent: Settings = serde_json::from_value(json!({ "provider": "claude", "model": "claude-opus-5-5", "interview": true })).unwrap();
+        assert!(sent.interview && !serde_json::from_value::<Settings>(json!({ "provider": "claude" })).unwrap().interview);
     }
 
     #[test]

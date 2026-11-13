@@ -250,6 +250,35 @@ describe("the chat", () => {
     expect(screen.getByText("Elige una carpeta de trabajo para empezar.")).toBeTruthy();
   });
 
+  it("offers a design interview in a Unity project without Design/ and starts it as an interview session", async () => {
+    const listing = (names: string[]) => names.map((name) => ({ name, path: name, dir: !name.includes("."), ignored: false }));
+    ipc.commands.folder.mockImplementation(async (_root: string, folder: string) => (folder === "ProjectSettings" ? listing(["ProjectVersion.txt"]) : listing(["Assets", "ProjectSettings"])));
+    render(<Thread />);
+    const start = await screen.findByText("Empezar la entrevista de diseño");
+    expect(screen.getByText("Este proyecto de Unity aún no tiene diseño. Sens puede entrevistarte y escribirlo en Design/: los pilares, el bucle y las mecánicas.")).toBeTruthy();
+    await act(async () => fireEvent.click(start));
+    expect(ipc.commands.chatSend).toHaveBeenCalledWith("C:/demo", "s1", { text: "Hagamos la entrevista de diseño de este juego.", files: [], images: [] }, expect.objectContaining({ interview: true }));
+    expect(focused().desk.getState().interview).toBe(true);
+    act(() => blank("s2"));
+    expect(focused().desk.getState().interview).toBe(false);
+  });
+
+  it("does not offer the interview once the design exists, nor outside Unity", async () => {
+    const listing = (names: string[]) => names.map((name) => ({ name, path: name, dir: true, ignored: false }));
+    ipc.commands.folder.mockImplementation(async (_root: string, folder: string) => (folder === "ProjectSettings" ? listing(["ProjectVersion.txt"]) : listing(["Assets", "design", "ProjectSettings"])));
+    render(<Thread />);
+    await act(async () => {});
+    expect(screen.queryByText("Empezar la entrevista de diseño")).toBeNull();
+    cleanup();
+    ipc.commands.folder.mockImplementation(async (_root: string, folder: string) => {
+      if (folder === "ProjectSettings") throw new Error("no such folder");
+      return listing(["src", "package.json"]);
+    });
+    render(<Thread />);
+    await act(async () => {});
+    expect(screen.queryByText("Empezar la entrevista de diseño")).toBeNull();
+  });
+
   it("sends a message, opens the session, and follows the reply to its end", async () => {
     render(<Thread />);
     await act(async () => send({ message: { text: "Hola", files: ["a.ts"], images: [] }, shownFiles: ["a.ts"], pictures: [] }, SETTINGS));

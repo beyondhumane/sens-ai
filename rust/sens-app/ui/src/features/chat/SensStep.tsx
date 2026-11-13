@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { Finding, Suggested } from "../../ipc/types";
+import type { Anticipated, Finding, Suggested } from "../../ipc/types";
 import { Icon } from "../../shared/Icon";
 import { ICONS } from "../../shared/icons.js";
 import { CodeBlock } from "../../shared/markdown/Markdown";
@@ -13,8 +13,14 @@ type Tone = "found" | "stop" | "note" | "pass" | "quiet";
 
 const SHOWN_NAMES = 3;
 
+function anticipated(part: Sens): string {
+  const names = part.suggestions.slice(0, SHOWN_NAMES).map((found) => found.name).join(", ");
+  const titles = part.design.slice(0, SHOWN_NAMES).map((section) => section.title).join(", ");
+  return [names && t.found(names), titles && t.designed(titles)].filter(Boolean).join(" · ");
+}
+
 export function lookOf(part: Sens): { icon: string; said: string; tone: Tone } {
-  if (part.stage === "anticipated") return { icon: ICONS.search, said: t.found(part.suggestions.slice(0, SHOWN_NAMES).map((found) => found.name).join(", ")), tone: "found" };
+  if (part.stage === "anticipated") return { icon: ICONS.search, said: anticipated(part), tone: "found" };
   if (part.stage === "passed") return { icon: ICONS.shieldCheck, said: t.passed, tone: "pass" };
   if (part.stage === "pending") return { icon: ICONS.shield, said: t.pending, tone: "quiet" };
   if (part.stage === "detached") return { icon: ICONS.shieldOff, said: t.detached, tone: "stop" };
@@ -25,7 +31,7 @@ export function lookOf(part: Sens): { icon: string; said: string; tone: Tone } {
 
 export const SensStep = memo(function SensStep({ part }: { part: Sens }) {
   const look = lookOf(part);
-  const empty = part.findings.length === 0 && part.suggestions.length === 0;
+  const empty = part.findings.length === 0 && part.suggestions.length === 0 && part.design.length === 0;
   return (
     <details className={empty ? "step sens empty" : "step sens"} data-tone={look.tone}>
       <summary onClick={(event) => empty && event.preventDefault()}>
@@ -40,6 +46,9 @@ export const SensStep = memo(function SensStep({ part }: { part: Sens }) {
       <div className="step-body">
         {part.suggestions.map((found) => (
           <Offered key={`${found.file}:${found.line}:${found.name}`} found={found} />
+        ))}
+        {part.design.map((section) => (
+          <Designed key={`${section.file}:${section.line}`} section={section} />
         ))}
         {part.findings.map((finding) => (
           <FindingRow key={finding.key} finding={finding} />
@@ -63,6 +72,15 @@ function Offered({ found }: { found: Suggested }) {
       <code className="sens-signature">{found.signature.trim()}</code>
       <Place file={found.file} line={found.line} />
       <span className="sens-uses">{t.uses(found.uses)}</span>
+    </div>
+  );
+}
+
+function Designed({ section }: { section: Anticipated }) {
+  return (
+    <div className="sens-found">
+      <span className="sens-title">{section.title}</span>
+      {section.file && <Place file={section.file} line={section.line} />}
     </div>
   );
 }

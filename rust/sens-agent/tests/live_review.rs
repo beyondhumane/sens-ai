@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use sens_agent::canon::review::{Haiku, Reviewer};
+use sens_canon::design::{Design, Guide};
 use sens_canon::relevant::Catalog;
 use sens_canon::review::Review;
 use sens_canon::verdict::{Rule, Severity};
@@ -33,6 +34,44 @@ const PLAIN: &str = "diff --git a/src/total.ts b/src/total.ts
  }
 ";
 
+const REGENERATES: &str = "diff --git a/Assets/Scripts/Health.cs b/Assets/Scripts/Health.cs
+--- a/Assets/Scripts/Health.cs
++++ b/Assets/Scripts/Health.cs
+@@ -5,4 +5,9 @@ public class Health : MonoBehaviour
+     public float current;
++    public float regeneration = 4f;
++
++    void Update() {
++        current = Mathf.Min(max, current + regeneration * Time.deltaTime);
++    }
+ }
+";
+
+const HEALS_ON_HIT: &str = "diff --git a/Assets/Scripts/Health.cs b/Assets/Scripts/Health.cs
+--- a/Assets/Scripts/Health.cs
++++ b/Assets/Scripts/Health.cs
+@@ -5,4 +5,9 @@ public class Health : MonoBehaviour
+     public float current;
++    public float healOnHit = 5f;
++
++    public void Landed(Hit hit) {
++        current = Mathf.Min(max, current + healOnHit);
++    }
+ }
+";
+
+const PILLARS: &str = "# Pilares
+
+## Avanzar siempre
+
+El jugador recupera vida atacando, nunca esperando ni escondiéndose.
+
+### Descarta
+
+- Vida que se regenera sola con el tiempo.
+- Coberturas donde esperar a que pase el peligro.
+";
+
 fn project() -> PathBuf {
     let root = std::env::temp_dir().join("sens-live-review");
     let _ = std::fs::remove_dir_all(&root);
@@ -52,13 +91,33 @@ fn a_real_reviewer_names_an_interface_with_one_implementation_and_leaves_a_plain
     let catalog = Catalog::of(&index);
     let reviewer = Haiku::default();
 
-    let review = Review::of(&index, &catalog, "Add a way to run jobs from the index.", ONE_USE);
+    let review = Review::of(&index, &catalog, "Add a way to run jobs from the index.", ONE_USE, "");
     let found = review.findings(&reviewer.review(&review.prompt("English")).unwrap().answer);
     assert!(found.iter().any(|finding| finding.rule == Rule::S1 && finding.file == "src/runner.ts"), "{found:?}");
 
-    let review = Review::of(&index, &catalog, "total() crashes on an empty list; fix it.", PLAIN);
+    let review = Review::of(&index, &catalog, "total() crashes on an empty list; fix it.", PLAIN, "");
     let found = review.findings(&reviewer.review(&review.prompt("English")).unwrap().answer);
     assert!(!found.iter().any(|finding| finding.severity == Severity::Block), "{found:?}");
+}
+
+#[test]
+#[ignore]
+fn a_real_reviewer_quotes_the_pillar_a_turn_goes_against_and_leaves_one_that_serves_it_alone() {
+    let root = project();
+    std::fs::create_dir_all(root.join("Design")).unwrap();
+    std::fs::write(root.join("Design/pillars.md"), PILLARS).unwrap();
+    let index = sens_index::build::build(&root);
+    let catalog = Catalog::of(&index);
+    let pillars = Design::read(&root).map(Guide::of).map(|guide| guide.pillars()).unwrap_or_default();
+    let reviewer = Haiku::default();
+
+    let review = Review::of(&index, &catalog, "Haz que la vida se recupere sola con el tiempo.", REGENERATES, &pillars);
+    let found = review.findings(&reviewer.review(&review.prompt("Spanish as spoken in Spain")).unwrap().answer);
+    assert!(found.iter().any(|finding| finding.rule == Rule::S8 && finding.severity == Severity::Note && finding.file == "Assets/Scripts/Health.cs"), "{found:?}");
+
+    let review = Review::of(&index, &catalog, "Que cada golpe que da el jugador le devuelva algo de vida.", HEALS_ON_HIT, &pillars);
+    let found = review.findings(&reviewer.review(&review.prompt("Spanish as spoken in Spain")).unwrap().answer);
+    assert!(!found.iter().any(|finding| finding.rule == Rule::S8), "{found:?}");
 }
 
 #[test]
@@ -67,7 +126,7 @@ fn a_real_reviewer_writes_in_the_person_s_language_and_still_quotes_the_diff_as_
     let root = project();
     let index = sens_index::build::build(&root);
     let catalog = Catalog::of(&index);
-    let review = Review::of(&index, &catalog, "Añade una forma de ejecutar tareas desde el índice.", ONE_USE);
+    let review = Review::of(&index, &catalog, "Añade una forma de ejecutar tareas desde el índice.", ONE_USE, "");
     let found = review.findings(&Haiku::default().review(&review.prompt("Spanish as spoken in Spain")).unwrap().answer);
     let interface = found.iter().find(|finding| finding.rule == Rule::S1 && finding.file == "src/runner.ts").unwrap_or_else(|| panic!("{found:?}"));
     let spanish = [" la ", " el ", " una ", " un ", " que ", " de ", " es "];

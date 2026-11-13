@@ -3,6 +3,8 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use crate::entries;
 use crate::fingerprint::{self, Unit};
+use crate::project;
+use crate::unity;
 use crate::lang::treesitter::Emitted;
 use crate::testfile::is_test_file;
 use crate::index::Index;
@@ -75,7 +77,7 @@ pub fn collect(root: &Path) -> Vec<PathBuf> {
         .hidden(false)
         .git_ignore(true)
         .require_git(false)
-        .filter_entry(|entry| !SKIP_DIRS.contains(&entry.file_name().to_str().unwrap_or("")))
+        .filter_entry(project::skipping(root, &SKIP_DIRS))
         .build()
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_some_and(|kind| kind.is_file()))
@@ -108,6 +110,7 @@ pub fn build(root: &Path) -> Index {
     }
     files.sort_by(|a: &crate::index::FileInfo, b| a.path.cmp(&b.path));
     let mut index = Index::assemble(root.to_path_buf(), files, symbols, imports, references, units);
+    unity::mark(&mut index);
     index.entry_points = entries::find(root, &index);
     index
 }

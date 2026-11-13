@@ -4,6 +4,7 @@ use std::path::{MAIN_SEPARATOR, Path};
 use serde_json::Value;
 
 use crate::index::Index;
+use crate::project;
 
 const FOLDER_ENTRIES: [&str; 4] = ["index.ts", "index.tsx", "index.js", "index.jsx"];
 const SOURCE: [&str; 8] = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"];
@@ -58,7 +59,7 @@ fn package_targets(root: &Path) -> Vec<(String, String)> {
     ignore::WalkBuilder::new(root)
         .hidden(false)
         .require_git(false)
-        .filter_entry(|entry| !SKIP_DIRS.contains(&entry.file_name().to_str().unwrap_or("")))
+        .filter_entry(project::skipping(root, &SKIP_DIRS))
         .build()
         .filter_map(Result::ok)
         .filter(|entry| entry.file_name() == "package.json")

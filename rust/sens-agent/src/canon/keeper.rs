@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use sens_canon::design::{Design, Guide};
 use sens_canon::relevant::Catalog;
 use sens_index::build;
 use sens_index::index::Index;
@@ -13,6 +14,7 @@ pub struct Project {
     pub index: Index,
     pub catalog: Catalog,
     pub map: Map,
+    pub guide: Option<Guide>,
 }
 
 impl Project {
@@ -20,7 +22,8 @@ impl Project {
         let index = build::build(work);
         let catalog = Catalog::of(&index);
         let map = Map::of(&index);
-        Project { index, catalog, map }
+        let guide = Design::read(work).map(Guide::of);
+        Project { index, catalog, map, guide }
     }
 }
 

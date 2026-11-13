@@ -5,6 +5,7 @@ use tree_sitter::Node;
 use super::treesitter::{
     declare, field, named, never_qualified, text, Emitted, Extra, Options, Scope,
 };
+use crate::unity;
 
 fn type_kind(kind: &str) -> Option<&'static str> {
     match kind {
@@ -75,7 +76,22 @@ fn is_entry_method(m: &Node, source: &str, name: &str, controller: bool) -> bool
     if controller && has_modifier(m, source, "public") {
         return true;
     }
-    attrs(m, source).iter().any(|a| is_http_attr(a))
+    attrs(m, source).iter().any(|a| is_http_attr(a) || unity::is_entry_attribute(a))
+}
+
+fn base_name(written: &str) -> String {
+    let plain = written.split(['<', '(']).next().unwrap_or(written).trim();
+    plain.rsplit(['.', ':']).next().unwrap_or(plain).to_string()
+}
+
+fn bases(node: &Node, source: &str) -> Vec<String> {
+    children_of(node)
+        .iter()
+        .filter(|c| c.kind() == "base_list")
+        .flat_map(named_children_of)
+        .filter(|base| base.kind() != "argument_list")
+        .map(|base| base_name(text(&base, source)))
+        .collect()
 }
 
 fn emit_type(node: &Node, source: &str, kind: &'static str, out: &mut Emitted) {
@@ -83,7 +99,7 @@ fn emit_type(node: &Node, source: &str, kind: &'static str, out: &mut Emitted) {
     let cname = text(&name_node, source).to_string();
     let controller = kind == "class" && is_controller(node, source, &cname);
     let exported = has_modifier(node, source, "public");
-    declare(out, source, cname.clone(), kind, node, &name_node, Extra { exported, entry: controller, ..Extra::default() });
+    declare(out, source, cname.clone(), kind, node, &name_node, Extra { exported, entry: controller, bases: bases(node, source), ..Extra::default() });
 
     let members = match field(node, "body") {
         Some(body) => named_children_of(&body),

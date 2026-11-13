@@ -82,8 +82,8 @@ export function modeNow(pane: Pane = focused()) {
 
 export function currentSettings(pane: Pane = focused()): Settings {
   const card = chosenCard(pane);
-  const { choice, thinking } = pane.desk.getState();
-  return { provider: choice.provider, model: choice.model, effort: effortNow(card, pane), thinking: card?.thinking === "always" || thinking, mode: modeNow(pane) };
+  const { choice, thinking, interview } = pane.desk.getState();
+  return { provider: choice.provider, model: choice.model, effort: effortNow(card, pane), thinking: card?.thinking === "always" || thinking, mode: modeNow(pane), interview };
 }
 
 export const warm = (pane: Pane = focused()) => warmChat(currentSettings(pane), pane);
@@ -352,9 +352,17 @@ export async function send(text: string, pane: Pane = focused()) {
   await sendChat({ message, shownFiles: files, pictures: pasted.map((picture) => picture.url) }, currentSettings(pane), pane);
 }
 
+const sendText = (text: string, pane: Pane) => sendChat({ message: { text, files: [], images: [] }, shownFiles: [], pictures: [] }, currentSettings(pane), pane);
+
 export async function sendPlain(text: string, pane: Pane = focused()) {
   if (pane.chat.getState().busy || !pane.desk.getState().session) return;
-  await sendChat({ message: { text, files: [], images: [] }, shownFiles: [], pictures: [] }, currentSettings(pane), pane);
+  await sendText(text, pane);
+}
+
+export async function startInterview(text: string, pane: Pane = focused()) {
+  if (pane.chat.getState().busy || pane.desk.getState().session) return;
+  pane.desk.setState({ interview: true });
+  await sendText(text, pane);
 }
 
 export const compactNow = (pane: Pane = focused()) => sendPlain(COMPACT, pane);

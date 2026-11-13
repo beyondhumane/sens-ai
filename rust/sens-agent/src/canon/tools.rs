@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
 use sens_canon::card;
+use sens_canon::design::Guide;
+use sens_canon::hot::{Heat, Reach};
 use sens_index::format;
 use sens_index::query::Engine;
 use serde_json::{Value, json};
@@ -8,8 +10,9 @@ use serde_json::{Value, json};
 use super::keeper::Project;
 use super::view::{self, Reached};
 
-pub const NAMES: [&str; 9] = ["project_map", "file_outline", "find_symbol", "who_uses", "already_exists", "dead_code", "where_is", "impact", "tests_for"];
+pub const NAMES: [&str; 11] = ["project_map", "file_outline", "find_symbol", "who_uses", "already_exists", "dead_code", "where_is", "impact", "tests_for", "design", "design_search"];
 const SHOWN: usize = 25;
+const NO_DESIGN: &str = "This project has no `Design/` folder yet, so it has no game design for Sens to follow. It starts with `Design/README.md` (the pitch and `subgenres:`), `Design/pillars.md` (each pillar a `##` heading with a `### Descarta` section), `Design/loop.md` and one file per mechanic in `Design/mechanics/`, with `pillars:` and `status:` in its frontmatter.";
 
 fn described(name: &str, title: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({
@@ -31,7 +34,7 @@ pub fn listed() -> Vec<Value> {
             folder.clone(),
             &[],
         ),
-        described("file_outline", "File outline", "The symbols of one file with their lines and signatures, without reading the file.", json!({ "file": { "type": "string", "description": "Path relative to the project root." } }), &["file"]),
+        described("file_outline", "File outline", "The symbols of one file with their lines and signatures, without reading the file. In a Unity project it marks the methods that run every frame and how many calls away from it they are.", json!({ "file": { "type": "string", "description": "Path relative to the project root." } }), &["file"]),
         described("find_symbol", "Find symbol", "Where a function, type, class or constant is defined, by its exact name.", json!({ "name": { "type": "string" } }), &["name"]),
         described("who_uses", "Who uses", "Every place that uses a symbol, grouped by file.", json!({ "name": { "type": "string" } }), &["name"]),
         described(
@@ -63,7 +66,28 @@ pub fn listed() -> Vec<Value> {
             json!({ "file": { "type": "string", "description": "Path relative to the project root." } }),
             &["file"],
         ),
+        described(
+            "design",
+            "Game design",
+            "The game's design from Design/: each pillar with its id and whether it says what it rules out, the core loop, every mechanic with its status and the pillars it serves, and the problems Sens found. Read it before you add or change gameplay.",
+            json!({}),
+            &[],
+        ),
+        described(
+            "design_search",
+            "Search the design",
+            "The parts of the game's design (Design/) that answer a question: a mechanic, a rule, a number. The words can be in any language.",
+            json!({ "query": { "type": "string", "description": "What you want to know about the design, in a few words." } }),
+            &["query"],
+        ),
     ]
+}
+
+fn design_search(project: &Project, query: &str) -> String {
+    match &project.guide {
+        None => NO_DESIGN.to_string(),
+        Some(guide) => guide.relevant(query).map_or_else(|| "nothing in Design/ matches".to_string(), |told| told.text),
+    }
 }
 
 fn said(arguments: &Value, key: &str) -> Result<String, String> {
@@ -87,6 +111,29 @@ fn existing(project: &Project, query: &str) -> String {
 
 fn plural(count: usize, one: &str) -> String {
     if count == 1 { format!("1 {one}") } else { format!("{count} {one}s") }
+}
+
+fn every_frame(reach: Reach) -> Option<String> {
+    match reach {
+        Reach::Frame => Some("runs every frame".into()),
+        Reach::Calls { count, from } => Some(format!("every frame, {} from {from}", plural(count as usize, "call"))),
+        Reach::Far { from } => Some(format!("maybe every frame: {from} reaches it through more than 3 calls or a call Sens cannot tell apart")),
+        Reach::Cold => None,
+    }
+}
+
+fn outline(project: &Project, engine: &Engine, file: &str) -> String {
+    let symbols = engine.file_outline(file);
+    let told = format::format_symbols(&symbols);
+    if project.index.unity.is_empty() || symbols.is_empty() {
+        return told;
+    }
+    let heat = Heat::of(&project.index, None);
+    told.lines()
+        .zip(&symbols)
+        .map(|(line, symbol)| every_frame(heat.reach(&symbol.name)).map_or_else(|| line.to_string(), |said| format!("{line}  [{said}]")))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn where_is(project: &Project, query: &str) -> String {
@@ -185,7 +232,7 @@ pub fn call(project: &Project, name: &str, arguments: &Value) -> Option<Result<S
             Some(folder) => format::format_map(&engine.map(Some(folder))),
             None => card::card(&project.index, &project.map),
         }),
-        "file_outline" => said(arguments, "file").map(|file| format::format_symbols(&engine.file_outline(&file))),
+        "file_outline" => said(arguments, "file").map(|file| outline(project, &engine, &file)),
         "find_symbol" => said(arguments, "name").map(|name| format::format_symbols(&engine.find_symbol(&name))),
         "who_uses" => said(arguments, "name").map(|name| format::format_who_uses(&engine.who_uses(&name), false)),
         "already_exists" => said(arguments, "query").map(|query| existing(project, &query)),
@@ -193,6 +240,8 @@ pub fn call(project: &Project, name: &str, arguments: &Value) -> Option<Result<S
         "where_is" => said(arguments, "query").map(|query| where_is(project, &query)),
         "impact" => said(arguments, "target").and_then(|target| impact(project, &engine, &target)),
         "tests_for" => said(arguments, "file").and_then(|file| tests_for(project, &file)),
+        "design" => Ok(project.guide.as_ref().map_or_else(|| NO_DESIGN.to_string(), Guide::overview)),
+        "design_search" => said(arguments, "query").map(|query| design_search(project, &query)),
         _ => return None,
     })
 }
@@ -200,24 +249,45 @@ pub fn call(project: &Project, name: &str, arguments: &Value) -> Option<Result<S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sens_index::fixture::written;
+
+    const CODE: [(&str, &str); 7] = [
+        ("package.json", r#"{ "main": "src/index.ts" }"#),
+        ("src/index.ts", "import { weigh } from './format.ts';\nweigh(10);\n"),
+        ("src/format.ts", "export const weigh = (bytes: number) => `${Math.round(bytes / 1024)} KB`;\nexport function forgotten() { return 1; }\n"),
+        ("src/view/size.ts", "import { weigh } from '../format.ts';\nexport const size = (bytes: number) => weigh(bytes);\n"),
+        ("src/view/badge.ts", "import { size } from './size.ts';\nexport const badge = () => size(1);\n"),
+        ("src/view/panel.ts", "import { badge } from './badge.ts';\nexport const panel = () => badge();\n"),
+        ("test/badge.test.ts", "import { badge } from '../src/view/badge.ts';\nbadge();\n"),
+    ];
+
+    fn project_with(name: &str, more: &[(&str, &str)]) -> Project {
+        let files: Vec<(&str, &str)> = CODE.iter().chain(more).copied().collect();
+        Project::of(&written("sens-canon-tools", name, &files))
+    }
 
     fn project(name: &str) -> Project {
-        let root = std::env::temp_dir().join("sens-canon-tools").join(name);
-        let _ = std::fs::remove_dir_all(&root);
-        for (path, content) in [
-            ("package.json", r#"{ "main": "src/index.ts" }"#),
-            ("src/index.ts", "import { weigh } from './format.ts';\nweigh(10);\n"),
-            ("src/format.ts", "export const weigh = (bytes: number) => `${Math.round(bytes / 1024)} KB`;\nexport function forgotten() { return 1; }\n"),
-            ("src/view/size.ts", "import { weigh } from '../format.ts';\nexport const size = (bytes: number) => weigh(bytes);\n"),
-            ("src/view/badge.ts", "import { size } from './size.ts';\nexport const badge = () => size(1);\n"),
-            ("src/view/panel.ts", "import { badge } from './badge.ts';\nexport const panel = () => badge();\n"),
-            ("test/badge.test.ts", "import { badge } from '../src/view/badge.ts';\nbadge();\n"),
-        ] {
-            let file = root.join(path);
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(file, content).unwrap();
-        }
-        Project::of(&root)
+        project_with(name, &[])
+    }
+
+    #[test]
+    fn the_outline_of_a_unity_script_marks_what_runs_every_frame() {
+        let player = "using UnityEngine;
+
+public class Player : MonoBehaviour
+{
+    void Update() { Steer(); }
+    void Steer() { }
+    void Start() { }
+}
+";
+        let project = project_with("unity-outline", &[("Assets/Scripts/Player.cs", player)]);
+        let told = call(&project, "file_outline", &json!({ "file": "Assets/Scripts/Player.cs" })).unwrap().unwrap();
+        let line = |name: &str| told.lines().find(|line| line.contains(name)).unwrap_or_else(|| panic!("{name} missing in:\n{told}"));
+        assert!(line("void Update()").ends_with("[runs every frame]"), "{told}");
+        assert!(line("void Steer()").ends_with("[every frame, 1 call from Player.Update]"), "{told}");
+        assert!(!line("void Start()").contains('['), "{told}");
+        assert!(!call(&project, "file_outline", &json!({ "file": "src/format.ts" })).unwrap().unwrap().contains("every frame"));
     }
 
     #[test]
@@ -235,6 +305,40 @@ mod tests {
         assert!(answer("where_is", json!({ "query": "tamaño en bytes" })).unwrap().contains("src/format.ts:1"));
         assert!(answer("find_symbol", json!({})).unwrap_err().contains("name"));
         assert!(call(&project, "rm", &json!({})).is_none());
+    }
+
+    #[test]
+    fn the_design_is_told_whole_or_searched_and_a_project_without_one_is_told_how_to_start() {
+        let designed = project_with(
+            "design",
+            &[
+                ("Design/README.md", "---\nsubgenres: [platformer]\n---\n# Pájaro\n"),
+                ("Design/pillars.md", "## Movimiento preciso\n\nEl jugador siempre sabe por qué falló un salto.\n\n### Descarta\n\nAleatoriedad.\n\n## Riesgo\n\nArriesgar paga.\n"),
+                ("Design/loop.md", "# Bucle\n\n## Segundos\n\nSaltar, agarrarse, impulsarse.\n"),
+                ("Design/mechanics/dash.md", "---\npillars: [movimiento-preciso]\nstatus: prototype\n---\n# Dash\n\nUn impulso corto en el aire.\n\n## Números\n\nEl dash dura 0,15 s.\n"),
+                ("Design/mechanics/hook.md", "# Gancho\n\nSe engancha a los anillos.\n"),
+            ],
+        );
+        let answer = |name: &str, arguments: Value| call(&designed, name, &arguments).unwrap();
+        let whole = answer("design", json!({})).unwrap();
+        for line in [
+            "- Movimiento preciso [movimiento-preciso] — El jugador siempre sabe por qué falló un salto.\n",
+            "- Riesgo [riesgo] — Arriesgar paga. (rules nothing out)",
+            "Subgenres: platformer.",
+            "- Bucle › Segundos: Saltar, agarrarse, impulsarse.",
+            "- Dash — prototype — serves movimiento-preciso — Design/mechanics/dash.md",
+            "- Gancho — no status — serves no pillar — Design/mechanics/hook.md",
+            "Problems Sens found in Design/:\n- ",
+        ] {
+            assert!(whole.contains(line), "{line}\n---\n{whole}");
+        }
+        let found = answer("design_search", json!({ "query": "cuánto dura el dash" })).unwrap();
+        assert!(found.contains("### Dash › Números — Design/mechanics/dash.md") && found.contains("El dash dura 0,15 s."), "{found}");
+        assert_eq!(answer("design_search", json!({ "query": "hola" })).unwrap(), "nothing in Design/ matches");
+        assert!(answer("design_search", json!({})).unwrap_err().contains("query"));
+        let bare = project("bare");
+        assert_eq!(call(&bare, "design", &json!({})).unwrap().unwrap(), NO_DESIGN);
+        assert_eq!(call(&bare, "design_search", &json!({ "query": "dash" })).unwrap().unwrap(), NO_DESIGN);
     }
 
     #[test]

@@ -42,6 +42,7 @@ function Frame({
   target = "",
   mono = false,
   choices,
+  settledAs,
   after,
   children,
 }: {
@@ -52,13 +53,14 @@ function Frame({
   target?: string;
   mono?: boolean;
   choices: Choice[];
+  settledAs?: Partial<Record<string, string>>;
   after?: (decision: Decision) => void;
   children: ReactNode;
 }) {
   const pane = usePane();
   const [busy, setBusy] = useState(false);
   const [fault, setFault] = useState("");
-  const settled = SETTLED[part.state]?.(part.answers);
+  const settled = settledAs?.[part.state] ?? SETTLED[part.state]?.(part.answers);
 
   async function choose(decision: Choice[2]) {
     const chosen = typeof decision === "function" ? decision() : decision;
@@ -130,9 +132,21 @@ function Permission({ part, reply }: { part: AskPart; reply: number }) {
 function SensQuestion({ part, reply }: { part: AskPart; reply: number }) {
   const { tool, input } = part.event;
   const look = describe(tool, input);
-  const lead = tool === "sens.dependency" ? said.dependencyLead : tool === "sens.tests" ? said.testsLead : String(input.message ?? "");
+  const leads: Record<string, string> = { "sens.dependency": said.dependencyLead, "sens.tests": said.testsLead, "sens.design": said.designLead };
+  const lead = leads[tool] ?? String(input.message ?? "");
+  const mechanic = tool === "sens.design";
+  const choices: Choice[] = mechanic
+    ? [
+        [said.isMechanic, true, { allow: false }],
+        [said.notMechanic, false, { allow: true }],
+      ]
+    : [
+        [t.allow, true, { allow: true }],
+        [t.deny, false, { allow: false }],
+      ];
+  const settledAs = mechanic ? { allowed: said.notMechanic, refused: said.isMechanic } : undefined;
   return (
-    <Frame part={part} reply={reply} icon={ICONS.shieldAlert} title={look.ask} target={look.target} mono={look.mono} choices={[[t.allow, true, { allow: true }], [t.deny, false, { allow: false }]]}>
+    <Frame part={part} reply={reply} icon={ICONS.shieldAlert} title={look.ask} target={look.target} mono={look.mono} choices={choices} settledAs={settledAs}>
       <p className="ask-note">{lead}</p>
     </Frame>
   );

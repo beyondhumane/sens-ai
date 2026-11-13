@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use sens_canon::card;
+use sens_canon::design::Guide;
 use sens_canon::judge::{judge_command, judge_since, judge_turn};
 use sens_canon::orphans;
 use sens_canon::shape;
@@ -47,6 +48,13 @@ pub struct Suggested {
     pub line: u32,
     pub signature: String,
     pub uses: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Anticipated {
+    pub title: String,
+    pub file: String,
+    pub line: u32,
 }
 
 pub trait Voice: Send + Sync {
@@ -127,15 +135,16 @@ pub struct Circuit {
     checkpoints: Option<Checkpoints>,
     reviewer: Option<Arc<dyn Reviewer>>,
     seen: Mutex<Option<BTreeMap<String, String>>>,
+    briefed: Mutex<Option<String>>,
 }
 
 impl Circuit {
     pub fn new(work: &Path, session: &str, keeper: Arc<Keeper>, resumed: bool) -> Circuit {
-        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None, seen: Mutex::default() };
+        let circuit = Circuit { work: work.to_path_buf(), session: session.to_string(), keeper, checkpoints: Checkpoints::open(work), reviewer: None, seen: Mutex::default(), briefed: Mutex::default() };
         if !resumed {
             circuit.keeper.exclusive(&circuit.work, || {
                 let mut state = State::load(&circuit.work);
-                state.canon.insert(circuit.session.clone(), sens_canon::VERSION.to_string());
+                state.canon.insert(circuit.session.clone(), sens_canon::edition(state::rules(&circuit.work).is_unity()));
                 let _ = state.save(&circuit.work);
             });
         }
@@ -150,8 +159,18 @@ impl Circuit {
         *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(project.map.placement(&project.index));
     }
 
-    pub fn forget_map(&self) {
+    pub fn forget(&self) {
         *self.seen.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *self.briefed.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
+    fn briefed(&self, guide: &Guide) -> Option<String> {
+        let now = guide.briefing();
+        let mut told = self.briefed.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        (told.as_deref() != Some(now.as_str())).then(|| {
+            *told = Some(now.clone());
+            now
+        })
     }
 
     fn mapped(&self, project: &Project) -> Option<String> {
@@ -242,10 +261,12 @@ impl Circuit {
                     exceptions.keys.insert(finding.key.clone());
                 }
                 Severity::Ask => {
-                    if undo(&finding) {
+                    let mechanic = finding.rule == Rule::D1;
+                    if !mechanic && undo(&finding) {
                         judged.restored.push(finding.file.clone());
                     }
-                    judged.blocks.push(Finding { message: format!("The person said no. {}", finding.message), severity: Severity::Block, ..finding });
+                    let answered = if mechanic { "The person says it is a mechanic of the game." } else { "The person said no." };
+                    judged.blocks.push(Finding { message: format!("{answered} {}", finding.message), severity: Severity::Block, ..finding });
                 }
                 Severity::Consider if considered.contains(&finding.key) => {
                     judged.notes.push(Finding { message: format!("Kept after Sens showed it. {}", finding.message), severity: Severity::Note, ..finding });
@@ -265,7 +286,7 @@ impl Circuit {
     }
 
     fn reply(&self, voice: &dyn Voice, stage: &str, judged: &Judged, event: &str) -> Value {
-        voice.say(Event::Canon { stage: stage.to_string(), findings: judged.blocks.iter().chain(&judged.notes).cloned().collect(), suggestions: Vec::new() });
+        voice.say(Event::canon(stage, judged.blocks.iter().chain(&judged.notes).cloned().collect()));
         if !judged.blocks.is_empty() {
             let mut text = format!("Sens stopped this:\n{}", listed(&judged.blocks.iter().collect::<Vec<_>>()));
             if !judged.restored.is_empty() {
@@ -301,14 +322,19 @@ impl Circuit {
         }
         state.seen = now;
         let mut context = Vec::new();
-        if state.canon.get(&self.session).map(String::as_str) != Some(sens_canon::VERSION) {
-            context.push(sens_canon::CANON.to_string());
-            state.canon.insert(self.session.clone(), sens_canon::VERSION.to_string());
+        let unity = state::rules(&self.work).is_unity();
+        let edition = sens_canon::edition(unity);
+        if state.canon.get(&self.session) != Some(&edition) {
+            context.push(sens_canon::canon(unity));
+            state.canon.insert(self.session.clone(), edition);
         }
         if let Some(told) = project.as_deref().and_then(|project| self.mapped(project)) {
             context.push(told);
         }
         if let Some(project) = &project {
+            if let Some(briefing) = project.guide.as_ref().and_then(|guide| self.briefed(guide)) {
+                context.push(briefing);
+            }
             let found: Vec<Suggested> = project
                 .catalog
                 .relevant(&state.request)
@@ -321,7 +347,14 @@ impl Circuit {
             if !found.is_empty() {
                 let lines: Vec<String> = found.iter().map(|found| format!("- `{}` — {}:{} · used {} times", found.signature, found.file, found.line, found.uses)).collect();
                 context.push(format!("Already in this project and related to the request (reuse before writing new code):\n{}", lines.join("\n")));
-                voice.say(Event::Canon { stage: "anticipated".into(), findings: Vec::new(), suggestions: found });
+            }
+            let mut design = Vec::new();
+            if let Some(told) = project.guide.as_ref().and_then(|guide| guide.relevant(&state.request)) {
+                design = told.sections.iter().map(|section| Anticipated { title: section.title.clone(), file: section.file.clone(), line: section.line }).collect();
+                context.push(told.text);
+            }
+            if !found.is_empty() || !design.is_empty() {
+                voice.say(Event::Canon { stage: "anticipated".into(), findings: Vec::new(), suggestions: found, design });
             }
         }
         let _ = state.save(&self.work);
@@ -365,7 +398,7 @@ impl Circuit {
         match self.audit(voice, false, None) {
             Audited::Untouched | Audited::Clean | Audited::Pending => json!({}),
             Audited::Blocked(judged) | Audited::Held(judged) => {
-                voice.say(Event::Canon { stage: "commit".into(), findings: judged.blocks.clone(), suggestions: Vec::new() });
+                voice.say(Event::canon("commit", judged.blocks.clone()));
                 denied(format!("Sens has not approved these changes, so they cannot be committed yet:\n{}", listed(&judged.blocks.iter().collect::<Vec<_>>())))
             }
             Audited::Unjudged(reason) => denied(reason),
@@ -430,11 +463,11 @@ impl Circuit {
         match self.audit(voice, helper.is_some() || running, helper.as_deref()) {
             Audited::Untouched => json!({}),
             Audited::Clean => {
-                voice.say(Event::Canon { stage: "passed".into(), findings: Vec::new(), suggestions: Vec::new() });
+                voice.say(Event::canon("passed", Vec::new()));
                 json!({})
             }
             Audited::Pending => {
-                voice.say(Event::Canon { stage: "pending".into(), findings: Vec::new(), suggestions: Vec::new() });
+                voice.say(Event::canon("pending", Vec::new()));
                 json!({})
             }
             Audited::Blocked(judged) => self.reply(voice, "blocked", &judged, "Stop"),
@@ -554,11 +587,12 @@ impl Circuit {
             return Ok(Judged::default());
         };
         let diff = checkpoints.diff(approved, now)?;
-        let review = Review::of(&project.index, &project.catalog, request, &diff);
+        let pillars = project.guide.as_ref().map(Guide::pillars).unwrap_or_default();
+        let review = Review::of(&project.index, &project.catalog, request, &diff, &pillars);
         let reviewed = reviewer.review(&review.prompt(language::now().tongue()))?;
         self.logged("reviewed", vec![Entry { at: log::now(), decision: Some(Decision::Reviewed), cost: reviewed.cost, ..Entry::default() }]);
         let findings = review.findings(&reviewed.answer);
-        voice.say(Event::Canon { stage: "reviewed".into(), findings: findings.clone(), suggestions: Vec::new() });
+        voice.say(Event::canon("reviewed", findings.clone()));
         let verdict = state::exceptions(&self.work).filter(Verdict { findings });
         Ok(self.weigh(voice, "reviewed", verdict, |_| false))
     }
@@ -733,6 +767,10 @@ mod tests {
     }
 
     fn project(name: &str) -> (PathBuf, Arc<Keeper>) {
+        project_with(name, &[])
+    }
+
+    fn project_with(name: &str, more: &[(&str, &str)]) -> (PathBuf, Arc<Keeper>) {
         let root = std::env::temp_dir().join("sens-circuit").join(name);
         let _ = std::fs::remove_dir_all(&root);
         let files = [
@@ -741,7 +779,7 @@ mod tests {
             ("src/lib/totals.ts", TOTALS),
             ("src/lib/text.ts", PLAIN),
         ];
-        for (path, content) in files {
+        for &(path, content) in files.iter().chain(more) {
             let file = root.join(path);
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
             std::fs::write(file, content).unwrap();
@@ -788,8 +826,85 @@ mod tests {
 
         let old = Circuit::new(&root, "s2", keeper, true);
         let first = old.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
-        assert!(first["hookSpecificOutput"]["additionalContext"].as_str().unwrap().contains("# Sens Canon"));
+        let canon = first["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        assert!(canon.contains("# Sens Canon") && !canon.contains("## Unity"), "{canon}");
         assert_eq!(old.answer(&ear, PROMPT, &json!({ "prompt": "hola" })), json!({}));
+    }
+
+    #[test]
+    fn a_unity_project_gets_the_unity_canon_once_and_the_plain_one_when_it_is_turned_off() {
+        let (root, keeper) = project_with("unity-canon", &[("ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 2022.3.10f1\n")]);
+        let fresh = Circuit::new(&root, "s1", keeper.clone(), false);
+        let ear = Ear::default();
+        let told = |circuit: &Circuit| circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }))["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default().to_string();
+        assert!(!told(&fresh).contains("# Sens Canon"));
+        let old = Circuit::new(&root, "s2", keeper, true);
+        let first = told(&old);
+        assert!(first.contains(sens_canon::canon(true).trim_end()), "{first}");
+        assert!(!told(&old).contains("# Sens Canon"));
+        state::save_rules(&root, &sens_canon::verdict::ProjectRules { unity: Some(false), ..Default::default() }).unwrap();
+        let plain = told(&old);
+        assert!(plain.contains("# Sens Canon") && !plain.contains("## Unity"), "{plain}");
+    }
+
+    const PILLARS: (&str, &str) = ("Design/pillars.md", "## Movimiento preciso\n\nEl jugador siempre sabe por qué falló un salto.\n\n### Descarta\n\nAleatoriedad en el control.\n");
+    const DASH: (&str, &str) = ("Design/mechanics/dash.md", "---\npillars: [movimiento-preciso]\nstatus: prototype\n---\n# Dash\n\nUn impulso corto en el aire que se recarga al tocar el suelo.\n");
+
+    #[test]
+    fn the_design_travels_once_with_its_pillars_and_each_request_brings_the_sections_it_is_about() {
+        let (root, keeper) = project_with("design", &[PILLARS, DASH]);
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        let told = |prompt: &str| circuit.answer(&ear, PROMPT, &json!({ "prompt": prompt }))["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default().to_string();
+        let first = told("haz que el dash se recargue en el aire");
+        assert!(first.contains("## This game's design") && first.contains("**Movimiento preciso**") && first.contains("Aleatoriedad en el control."), "{first}");
+        assert!(first.contains("### Dash — Design/mechanics/dash.md:5\nUn impulso corto"), "{first}");
+        let anticipated = ear.said.lock().unwrap().iter().find_map(|event| match event {
+            Event::Canon { stage, design, .. } if stage == "anticipated" => Some(design.clone()),
+            _ => None,
+        });
+        assert_eq!(anticipated, Some(vec![Anticipated { title: "Dash".into(), file: "Design/mechanics/dash.md".into(), line: 5 }]));
+        let again = told("haz que el dash se recargue");
+        assert!(!again.contains("## This game's design") && again.contains("### Dash"), "{again}");
+        std::fs::write(root.join("Design/pillars.md"), format!("{}\n## Riesgo\n\nArriesgar paga.\n\n### Descarta\n\nJugar a lo seguro.\n", PILLARS.1)).unwrap();
+        let changed = told("hola");
+        assert!(changed.contains("**Riesgo**") && changed.contains("**Movimiento preciso**"), "{changed}");
+        assert!(!told("hola").contains("## This game's design"));
+        circuit.forget();
+        assert!(told("hola").contains("## This game's design"));
+    }
+
+    #[test]
+    fn a_new_component_asks_whether_it_is_a_mechanic_and_a_no_keeps_the_code_and_holds_the_turn() {
+        let dash = "using UnityEngine;\n\npublic class Dash : MonoBehaviour\n{\n    void Update() { }\n}\n";
+        let (root, keeper) = project_with("mechanic", &[PILLARS]);
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        circuit.answer(&Ear::default(), PROMPT, &json!({ "prompt": "añade un dash" }));
+        let file = root.join("Assets/Scripts/Dash.cs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, dash).unwrap();
+        let no = Ear::answering(&[false]);
+        let closed = circuit.answer(&no, CLOSE, &close());
+        assert_eq!(decision(&closed), "block");
+        let reason = closed["reason"].as_str().unwrap();
+        assert!(reason.contains("The person says it is a mechanic of the game.") && reason.contains("describe it in `Design/mechanics/`"), "{reason}");
+        assert_eq!(no.asked.lock().unwrap()[0].key, "D1:Dash");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), dash);
+        let yes = Ear::answering(&[true]);
+        assert_eq!(circuit.answer(&yes, CLOSE, &close()), json!({}));
+        assert!(state::exceptions(&root).keys.contains("D1:Dash"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), dash);
+    }
+
+    #[test]
+    fn a_project_without_a_design_is_told_nothing_about_one() {
+        let (root, keeper) = project("no-design");
+        let circuit = Circuit::new(&root, "s1", keeper, false);
+        let ear = Ear::default();
+        let told = circuit.answer(&ear, PROMPT, &json!({ "prompt": "haz que el dash se recargue" }));
+        let context = told["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default();
+        assert!(!context.contains("game's design") && !context.contains("Design/"), "{context}");
+        assert!(ear.said.lock().unwrap().iter().all(|event| !matches!(event, Event::Canon { design, .. } if !design.is_empty())));
     }
 
     #[test]
@@ -804,7 +919,7 @@ mod tests {
         let changed = told(&circuit);
         assert!(changed.contains("+ src/lib/round.ts (src)") && !changed.contains("## This project"), "{changed}");
         assert_eq!(told(&circuit), "");
-        circuit.forget_map();
+        circuit.forget();
         assert!(told(&circuit).contains("## This project, as Sens indexed it"));
     }
 
@@ -1027,8 +1142,8 @@ test('plain again', () => {{
         }
     }
 
-    fn reviewed(name: &str, answer: Result<Value, String>) -> (PathBuf, Circuit, Ear) {
-        let (root, keeper) = project(name);
+    fn reviewed(name: &str, more: &[(&str, &str)], answer: Result<Value, String>) -> (PathBuf, Circuit, Ear) {
+        let (root, keeper) = project_with(name, more);
         let circuit = Circuit::new(&root, "s1", keeper, false).reviewed_by(Arc::new(Scripted(answer)));
         let ear = Ear::default();
         circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
@@ -1038,7 +1153,7 @@ test('plain again', () => {{
 
     #[test]
     fn a_reviewer_that_cannot_answer_holds_the_turn_for_the_person() {
-        let (root, circuit, ear) = reviewed("review-down", Err("no network".into()));
+        let (root, circuit, ear) = reviewed("review-down", &[], Err("no network".into()));
         assert_eq!(circuit.answer(&ear, CLOSE, &close()), json!({}));
         assert_eq!(ear.stages(), ["held"]);
         let state = State::load(&root);
@@ -1048,7 +1163,7 @@ test('plain again', () => {{
     #[test]
     fn a_medium_finding_is_told_and_the_turn_is_approved() {
         let medium = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "medium" }] });
-        let (root, circuit, ear) = reviewed("review-medium", Ok(medium));
+        let (root, circuit, ear) = reviewed("review-medium", &[], Ok(medium));
         let told = circuit.answer(&ear, CLOSE, &close());
         assert_eq!(decision(&told), "allow", "{told}");
         assert_eq!(ear.stages(), ["reviewed", "passed"]);
@@ -1057,9 +1172,38 @@ test('plain again', () => {{
     }
 
     #[test]
+    fn a_turn_against_a_pillar_of_the_game_is_told_without_stopping_it() {
+        let pillars = "# Pilares
+
+## Cuentas claras
+
+El informe suma todo lo del día.
+
+### Descarta
+
+- Ningún informe con límites fijos.
+";
+        let against = json!({ "findings": [{ "rule": "S8", "file": "src/report.ts", "quote": "totals([], 2)", "pillar": "Ningún informe con límites fijos.", "why": "Cuentas claras descarta los límites fijos.", "fix": "Pasa el límite.", "confidence": "high" }] });
+        let (_, circuit, ear) = reviewed("review-pillar", &[("Design/pillars.md", pillars)], Ok(against));
+        assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "allow");
+        let told: Vec<(Rule, Severity)> = ear
+            .said
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Event::Canon { stage, findings, .. } if stage == "reviewed" => Some(findings.iter().map(|finding| (finding.rule, finding.severity)).collect::<Vec<_>>()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert_eq!(told, [(Rule::S8, Severity::Note)]);
+    }
+
+    #[test]
     fn a_high_finding_the_person_accepted_before_no_longer_stops() {
         let high = json!({ "findings": [{ "rule": "S4", "file": "src/report.ts", "quote": "totals([], 2)", "why": "The 2 is not asked for.", "fix": "Pass the limit in.", "confidence": "high" }] });
-        let (root, circuit, ear) = reviewed("review-high", Ok(high));
+        let (root, circuit, ear) = reviewed("review-high", &[], Ok(high));
         assert_eq!(decision(&circuit.answer(&ear, CLOSE, &close())), "block");
         let key = "S4:src/report.ts:totals([], 2)".to_string();
         state::save_exceptions(&root, &sens_canon::verdict::Exceptions { keys: [key].into() }).unwrap();

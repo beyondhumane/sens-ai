@@ -303,11 +303,13 @@ const DIFF = [
   "rename to new.txt",
 ].join("\n");
 
+const UNITY = asking.has("unity");
 const FOLDERS: Record<string, string[]> = {
-  "": ["src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
+  "": [...(UNITY ? ["Assets/", "ProjectSettings/"] : []), "src/", "docs/", ".gitignore", "Dockerfile", "package.json", "README.md", "main.py", "Cargo.toml", "datos.csv", "logo.png", "notas.xyz", "setup.exe"],
   src: ["components/", "app.tsx", "index.ts", "types.d.ts", "lib.rs", "styles.css", "query.sql", "build.ps1"],
   "src/components": ["Button.tsx", "Button.test.tsx"],
   docs: ["guia.md", "api.yaml", "config.toml"],
+  ...(UNITY ? { Assets: ["Player.cs"], ProjectSettings: ["ProjectVersion.txt"] } : {}),
 };
 
 const SAMPLES: Record<string, string> = {
@@ -480,7 +482,7 @@ const wrote = (id: string, path: string, content: string) => [
 const CANON_REPLAY = [
   { kind: "task", text: "Muestra el tamaño de cada artefacto en su tarjeta", files: [], images: [], at: now - HOUR },
   agent({ kind: "started", model: "claude-sonnet-5" }),
-  agent({ kind: "canon", stage: "anticipated", findings: [], suggestions: offered }),
+  agent({ kind: "canon", stage: "anticipated", findings: [], suggestions: offered, design: [{ title: "Artefactos › Tarjeta", file: "Design/artifacts.md", line: 8 }] }),
   agent({ kind: "tool", id: "c1", name: "Read", input: { file_path: `${ROOT}/src/shelf.tsx` } }),
   agent({ kind: "toolDone", id: "c1", output: "", error: false, detail: { file: { numLines: 120 } } }),
   agent({ kind: "tool", id: "c2", name: "Write", input: { file_path: `${ROOT}/src/shelf.tsx`, content: "const sizeOf = (bytes) => ..." } }),
@@ -504,6 +506,7 @@ const CANON_REPLAY = [
 ];
 let held: unknown[] | null = [oneUse];
 let noComments = true;
+let unityRules = true;
 let exceptions = [{ key: "R3:dayjs", rule: "R3", file: "package.json", since: now - 3 * DAY }];
 
 const SPACES = [
@@ -759,8 +762,12 @@ const fixtures: Record<string, (args: Record<string, unknown>) => unknown> = {
   canon_retry: () => undefined,
   canon_exceptions: () => exceptions,
   canon_retract: ({ key }) => void (exceptions = exceptions.filter((one) => one.key !== key)),
-  canon_rules: () => ({ noComments }),
-  canon_set_rules: ({ rules }) => void (noComments = Boolean((rules as { noComments: boolean }).noComments)),
+  canon_rules: () => ({ noComments, unity: unityRules }),
+  canon_set_rules: ({ rules }) => {
+    const chosen = rules as { noComments: boolean; unity?: boolean | null };
+    noComments = Boolean(chosen.noComments);
+    unityRules = chosen.unity ?? unityRules;
+  },
   canon_avoided: () => ({ copies: 4, comments: 2, dependencies: 1, protected: 0, tests: 0, orphans: 1, cycles: 1, judgment: 2, held: 1, accepted: 1, reviews: 9, reviewerCost: 0.041 }),
   new_session_id: () => "demo-new",
   open_session: ({ id }) => id ?? "demo-new",

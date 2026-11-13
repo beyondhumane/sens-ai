@@ -1,8 +1,10 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { look } from "../../shared/look";
+import { startInterview } from "../composer/store";
 import { useIds, usePane } from "../panes/context";
 import { grain } from "./grain";
+import { interviewDue } from "./interview";
 import { Reply } from "./Reply";
 import { HINTS, t } from "./thread.copy";
 import type { Notice as NoticeTurn } from "./turns";
@@ -122,6 +124,34 @@ function Hello({ hint }: { hint: string }) {
         <span className="hello-word">sens AI</span>
       </div>
       <p className="hello-hint">{folder ? t.hint(nth) : t.noFolder}</p>
+      {folder && <InterviewOffer />}
+    </div>
+  );
+}
+
+function InterviewOffer() {
+  const pane = usePane();
+  const root = useStore(pane.desk, (s) => s.root);
+  const [due, setDue] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setDue(false);
+    void interviewDue(root).then((yes) => {
+      if (current) setDue(yes);
+    });
+    return () => {
+      current = false;
+    };
+  }, [root]);
+
+  if (!due) return null;
+  return (
+    <div className="hello-offer">
+      <p>{t.interviewOffer}</p>
+      <button type="button" className="primary" onClick={() => void startInterview(t.interviewOpening, pane)}>
+        {t.interviewStart}
+      </button>
     </div>
   );
 }

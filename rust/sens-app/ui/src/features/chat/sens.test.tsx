@@ -37,7 +37,7 @@ const copy: Finding = {
   key: "R1:src/report.ts:summarize~src/lib/totals.ts:totals",
 };
 
-const sens = (stage: string, findings: Finding[] = [], suggestions: Sens["suggestions"] = []): Sens => ({ kind: "sens", key: Math.random(), stage, findings, suggestions });
+const sens = (stage: string, findings: Finding[] = [], suggestions: Sens["suggestions"] = [], design: Sens["design"] = []): Sens => ({ kind: "sens", key: Math.random(), stage, findings, suggestions, design });
 
 const edit = (content: string): Step => ({
   kind: "step",
@@ -74,6 +74,22 @@ describe("what Sens does in a reply", () => {
     reply = heard(reply, { kind: "held", findings: [copy] }, true);
     expect(reply.parts.map((part) => part.kind)).toEqual(["sens", "step", "sens", "held"]);
     expect(grouped(reply.parts).map((piece) => piece.kind)).toEqual(["run", "held"]);
+    expect((reply.parts[0] as Sens).design).toEqual([]);
+  });
+
+  it("names the parts of the game's design it put in front of the agent, beside the code it already has", () => {
+    const step = (part: Sens) => render(<SensStep part={part} />).container.querySelector("details.step.sens") as HTMLElement;
+    const dash = { title: "Dash", file: "Design/mechanics/dash.md", line: 5 };
+    const both = step(sens("anticipated", [], [{ name: "weigh", file: "src/format.js", line: 3, signature: "export const weigh = (bytes)", uses: 7 }], [dash]));
+    expect(both.querySelector(".step-target")?.textContent).toBe("ya tiene weigh · diseño: Dash");
+    fireEvent.click(both.querySelector("summary")!);
+    expect(both.querySelector(".sens-title")?.textContent).toBe("Dash");
+    expect([...both.querySelectorAll(".sens-place")].map((place) => place.textContent)).toEqual(["src/format.js:3", "Design/mechanics/dash.md:5"]);
+    const designOnly = step(sens("anticipated", [], [], [dash]));
+    expect([designOnly.className, designOnly.querySelector(".step-target")?.textContent]).toEqual(["step sens", "diseño: Dash"]);
+    const manual = step(sens("anticipated", [], [], [{ title: "Action 2D and platformers › Jump", file: "", line: 41 }]));
+    expect(manual.querySelector(".sens-title")?.textContent).toBe("Action 2D and platformers › Jump");
+    expect(manual.querySelector(".sens-place")).toBeNull();
   });
 
   it("shows a write Sens stopped as stopped, not failed, and leaves out a review with nothing to say", () => {
@@ -165,5 +181,23 @@ describe("a question from Sens", () => {
     expect(screen.getByText("Claude la añadió al manifiesto del proyecto.")).toBeTruthy();
     await act(async () => void fireEvent.click(screen.getByText("Rechazar")));
     expect(ipc.commands.chatAnswer).toHaveBeenCalledWith("s1", "sens-canon-0", { allow: false });
+  });
+
+  it("asks whether a new component is a mechanic, with answers that say what each one does", async () => {
+    const asking = { kind: "asking" as const, request: "sens-canon-1", tool: "sens.design", input: { message: "`Dash` is new", file: "Assets/Scripts/Dash.cs", key: "D1:Dash" }, suggestions: [] };
+    const part = { kind: "ask" as const, key: 1, active: true, state: "waiting" as const, answers: null, event: asking };
+    const drawn = render(<Ask part={part} reply={1} />);
+    expect(screen.getByText("Sens pregunta si esto es una mecánica")).toBeTruthy();
+    expect(screen.getByText("Dash")).toBeTruthy();
+    expect(screen.getByText("Claude añadió un componente o ScriptableObject que Design/ todavía no describe.")).toBeTruthy();
+    expect([...drawn.container.querySelectorAll(".ask-actions button")].map((button) => [button.textContent, button.className])).toEqual([
+      ["Es una mecánica: descríbela", "primary"],
+      ["No es una mecánica", "quiet"],
+    ]);
+    await act(async () => void fireEvent.click(screen.getByText("Es una mecánica: descríbela")));
+    expect(ipc.commands.chatAnswer).toHaveBeenCalledWith("s1", "sens-canon-1", { allow: false });
+    cleanup();
+    render(<Ask part={{ ...part, active: false, state: "allowed" as const }} reply={1} />);
+    expect(screen.getByText("No es una mecánica")).toBeTruthy();
   });
 });

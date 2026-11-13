@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use sens_agent::canon::review::{Haiku, Reviewer};
+use sens_canon::design::{Design, Guide};
 use sens_canon::relevant::Catalog;
 use sens_canon::review::Review;
 
@@ -27,7 +28,8 @@ fn main() {
     let catalog = Catalog::of(&index);
     let diff = git(&run, &["diff", "--no-color", "--no-renames", "-U3", "HEAD", "--", ".", ":(exclude).sens", ":(exclude)**/_accept/**", ":(exclude)accept"]);
     let request = std::fs::read_to_string(prompt).expect("prompt");
-    let review = Review::of(&index, &catalog, &request, &diff);
+    let pillars = Design::read(&run).map(Guide::of).map(|guide| guide.pillars()).unwrap_or_default();
+    let review = Review::of(&index, &catalog, &request, &diff, &pillars);
     for (file, found) in &review.candidates {
         println!("candidatos {file}: {}", found.iter().map(|candidate| format!("{} ({}:{})", candidate.name, candidate.file, candidate.line)).collect::<Vec<_>>().join(", "));
     }

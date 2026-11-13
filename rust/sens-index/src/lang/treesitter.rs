@@ -27,6 +27,7 @@ pub struct EmitSymbol {
     pub exported: bool,
     pub simple_name: Option<String>,
     pub entry: bool,
+    pub bases: Vec<String>,
 }
 
 #[derive(Default)]
@@ -124,7 +125,7 @@ pub fn text<'a>(node: &Node, source: &'a str) -> &'a str {
     node.utf8_text(source.as_bytes()).unwrap_or("")
 }
 
-fn dequote(s: &str) -> Option<&str> {
+pub fn dequote(s: &str) -> Option<&str> {
     if s.len() < 5 {
         return None;
     }
@@ -158,7 +159,7 @@ fn enclosing_range(ranges: &[SymbolRange], pos: usize) -> usize {
     best.map(|r| r.index).unwrap_or(usize::MAX)
 }
 
-fn collect_leaves<'t>(node: Node<'t>, out: &mut Vec<Node<'t>>) {
+pub fn collect_leaves<'t>(node: Node<'t>, out: &mut Vec<Node<'t>>) {
     let mut cursor = node.walk();
     if !cursor.goto_first_child() {
         if node.is_named() {
@@ -277,6 +278,7 @@ pub fn build(
                 end_byte: s.end,
                 signature: s.signature,
                 exported: s.exported,
+                bases: s.bases,
             });
         }
         contribution.imports.extend(emitted.imports);
@@ -381,6 +383,7 @@ pub struct Extra {
     pub signature: Option<String>,
     pub simple_name: Option<String>,
     pub entry: bool,
+    pub bases: Vec<String>,
 }
 
 pub fn declare(
@@ -404,6 +407,7 @@ pub fn declare(
         exported: extra.exported,
         simple_name: extra.simple_name,
         entry: extra.entry,
+        bases: extra.bases,
     });
 }
 
