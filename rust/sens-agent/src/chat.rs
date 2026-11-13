@@ -1543,28 +1543,8 @@ fn finished(message: &Value) -> Event {
             .filter_map(|model| model["contextWindow"].as_u64())
             .max()
             .unwrap_or_default(),
-        error: if failed { complaint(message) } else { String::new() },
+        error: if failed { process::complaint(message) } else { String::new() },
     }
-}
-
-fn complaint(message: &Value) -> String {
-    let said = text_of(&message["result"]);
-    if !said.trim().is_empty() {
-        return said;
-    }
-    let listed: Vec<String> = blocks(&message["errors"]).map(text_of).collect();
-    if !listed.is_empty() {
-        return listed.join(" · ");
-    }
-    let subtype = text_of(&message["subtype"]);
-    said!(
-        en: "Claude Code ended with {subtype}",
-        es: "Claude Code terminó con {subtype}",
-        fr: "Claude Code s’est terminé avec {subtype}",
-        de: "Claude Code endete mit {subtype}",
-        ja: "Claude Code が {subtype} で終了しました",
-        zh: "Claude Code 以 {subtype} 结束",
-    )
 }
 
 fn slim(value: &Value) -> Value {

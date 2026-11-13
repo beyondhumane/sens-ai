@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::RwLock;
 
+use serde_json::Value;
+
 use crate::said;
 
 pub const CLAUDE: &str = "claude";
@@ -256,6 +258,35 @@ fn started(mut command: Command, input: &str) -> Result<(String, std::process::C
     Ok((program, child))
 }
 
+pub fn complaint(reply: &Value) -> String {
+    let said = reply["result"].as_str().unwrap_or_default();
+    if !said.trim().is_empty() {
+        return said.to_string();
+    }
+    let listed: Vec<&str> = reply["errors"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    if !listed.is_empty() {
+        return listed.join(" · ");
+    }
+    let subtype = reply["subtype"].as_str().unwrap_or_default();
+    said!(
+        en: "Claude Code ended with {subtype}",
+        es: "Claude Code terminó con {subtype}",
+        fr: "Claude Code s’est terminé avec {subtype}",
+        de: "Claude Code endete mit {subtype}",
+        ja: "Claude Code が {subtype} で終了しました",
+        zh: "Claude Code 以 {subtype} 结束",
+    )
+}
+
+fn failed(finished: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&finished.stderr);
+    if !stderr.trim().is_empty() {
+        return stderr.trim().to_string();
+    }
+    let stdout = String::from_utf8_lossy(&finished.stdout);
+    serde_json::from_str::<Value>(&stdout).map_or_else(|_| stdout.trim().to_string(), |reply| complaint(&reply))
+}
+
 fn output(program: &str, finished: std::io::Result<std::process::Output>) -> Result<String, String> {
     let finished = finished.map_err(|error| {
         said!(
@@ -269,8 +300,7 @@ fn output(program: &str, finished: std::io::Result<std::process::Output>) -> Res
     })?;
 
     if !finished.status.success() {
-        let complaint = String::from_utf8_lossy(&finished.stderr);
-        let complaint = complaint.trim();
+        let complaint = failed(&finished);
         return Err(said!(
             en: "{program} failed: {complaint}",
             es: "{program} falló: {complaint}",
@@ -376,6 +406,19 @@ mod tests {
     fn a_program_that_does_not_exist_says_so_instead_of_panicking() {
         let failure = speaking(Language::Es, || run(Command::new("sens-no-such-program-exists"), "").unwrap_err());
         assert!(failure.contains("no pude lanzar"));
+    }
+
+    #[test]
+    fn a_failed_run_says_why_from_its_errors_or_from_claude_s_reply() {
+        let failing = |script: &str| {
+            let mut command = Command::new("node");
+            command.args(["-e", script]);
+            run(command, "").unwrap_err()
+        };
+        assert!(failing("console.error('no network'); process.exit(1)").ends_with("no network"));
+        let expired = "console.log(JSON.stringify({ is_error: true, result: 'Failed to authenticate: OAuth session expired' })); process.exit(1)";
+        assert!(failing(expired).ends_with("Failed to authenticate: OAuth session expired"), "{}", failing(expired));
+        assert!(failing("console.log('something broke'); process.exit(1)").ends_with("something broke"));
     }
 
     #[test]
