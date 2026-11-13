@@ -13,6 +13,7 @@ pub mod relevant;
 pub mod review;
 pub mod shape;
 pub mod slug;
+pub mod unity;
 pub mod verdict;
 
 pub const CANON: &str = include_str!("canon.md");

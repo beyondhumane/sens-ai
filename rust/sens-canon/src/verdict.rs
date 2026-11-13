@@ -23,6 +23,14 @@ pub enum Rule {
     S7,
     S8,
     D1,
+    U1,
+    U2,
+    U3,
+    U4,
+    U5,
+    U6,
+    U7,
+    U8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -102,10 +110,13 @@ impl Change {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ProjectRules {
     pub no_comments: bool,
+    pub unity: Option<bool>,
+    #[serde(skip)]
+    pub editor: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

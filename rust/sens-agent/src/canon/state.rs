@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use sens_canon::shape::Shape;
 use sens_canon::verdict::{Exceptions, Finding, ProjectRules};
+use sens_index::project;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +74,9 @@ pub fn save_considered(work: &Path, keys: &BTreeSet<String>) -> Result<(), Strin
 }
 
 pub fn rules(work: &Path) -> ProjectRules {
-    load(work, "rules.json")
+    let stored: ProjectRules = load(work, "rules.json");
+    let editor = project::unity_version(work);
+    ProjectRules { unity: stored.unity.or(Some(editor.is_some())), editor, ..stored }
 }
 
 pub fn save_rules(work: &Path, rules: &ProjectRules) -> Result<(), String> {
@@ -100,9 +103,24 @@ mod tests {
         assert_eq!(State::load(&root), state);
         save_exceptions(&root, &Exceptions { keys: ["R3:dayjs".to_string()].into() }).unwrap();
         assert!(exceptions(&root).keys.contains("R3:dayjs"));
-        save_rules(&root, &ProjectRules { no_comments: true }).unwrap();
+        save_rules(&root, &ProjectRules { no_comments: true, ..ProjectRules::default() }).unwrap();
         assert!(rules(&root).no_comments);
         assert!(std::fs::read_to_string(root.join(".sens/canon/rules.json")).unwrap().contains("noComments"));
+    }
+
+    #[test]
+    fn a_unity_project_turns_its_rules_on_until_the_person_turns_them_off() {
+        let root = folder("unity-rules");
+        assert_eq!((rules(&root).unity, rules(&root).editor), (Some(false), None));
+        std::fs::create_dir_all(root.join("ProjectSettings")).unwrap();
+        std::fs::write(root.join("ProjectSettings/ProjectVersion.txt"), "m_EditorVersion: 2022.3.10f1
+").unwrap();
+        assert_eq!((rules(&root).unity, rules(&root).editor.as_deref()), (Some(true), Some("2022.3.10f1")));
+        save_rules(&root, &ProjectRules { no_comments: true, ..ProjectRules::default() }).unwrap();
+        assert_eq!(rules(&root).unity, Some(true));
+        save_rules(&root, &ProjectRules { unity: Some(false), editor: Some("1.0".into()), ..ProjectRules::default() }).unwrap();
+        assert_eq!((rules(&root).unity, rules(&root).editor.as_deref()), (Some(false), Some("2022.3.10f1")));
+        assert!(!std::fs::read_to_string(root.join(".sens/canon/rules.json")).unwrap().contains("1.0"));
     }
 
     #[test]

@@ -34,24 +34,29 @@ fn is_csharp(file: &str) -> bool {
     file.ends_with(".cs")
 }
 
-fn roots(index: &Index) -> HashMap<String, &'static str> {
-    let types: Vec<_> = index.symbols.iter().filter(|symbol| symbol.kind == "class" && is_csharp(&symbol.file)).collect();
-    let mut found: HashMap<String, &'static str> = HashMap::new();
+pub fn derive(found: &mut HashMap<String, &'static str>, types: &[(&str, &[String])]) {
     loop {
         let known = found.len();
-        for symbol in &types {
-            if found.contains_key(&symbol.name) {
+        for &(name, bases) in types {
+            if found.contains_key(name) {
                 continue;
             }
-            let root = symbol.bases.iter().find_map(|base| BASES.iter().copied().find(|engine| engine == base).or_else(|| found.get(base).copied()));
+            let root = bases.iter().find_map(|base| BASES.iter().copied().find(|engine| engine == base).or_else(|| found.get(base).copied()));
             if let Some(root) = root {
-                found.insert(symbol.name.clone(), root);
+                found.insert(name.to_string(), root);
             }
         }
         if found.len() == known {
-            return found;
+            return;
         }
     }
+}
+
+fn roots(index: &Index) -> HashMap<String, &'static str> {
+    let types: Vec<(&str, &[String])> = index.symbols.iter().filter(|symbol| symbol.kind == "class" && is_csharp(&symbol.file)).map(|symbol| (symbol.name.as_str(), symbol.bases.as_slice())).collect();
+    let mut found = HashMap::new();
+    derive(&mut found, &types);
+    found
 }
 
 fn is_message_of(name: &str, roots: &HashMap<String, &'static str>) -> bool {

@@ -6,7 +6,7 @@ use sens_index::index::Index;
 use crate::orphans::{self, Dead};
 use crate::shape::{self, Shape};
 use crate::verdict::{Change, Exceptions, Finding, ProjectRules, Rule, TurnStats, Verdict};
-use crate::{comments, copies, dependencies, design, integrity, protected};
+use crate::{comments, copies, dependencies, design, integrity, protected, unity};
 
 pub fn judge_change(index: &Index, change: &Change, rules: &ProjectRules, exceptions: &Exceptions) -> Verdict {
     judge_since(index, change, change.before.as_deref(), rules, exceptions)
@@ -21,6 +21,9 @@ pub fn judge_since(index: &Index, change: &Change, approved: Option<&str>, rules
         .with(protected::findings(&since_approved));
     if rules.no_comments {
         verdict = verdict.with(comments::findings(change));
+    }
+    if rules.unity == Some(true) {
+        verdict = verdict.with(unity::findings(index, change, rules));
     }
     exceptions.filter(verdict)
 }
@@ -115,10 +118,22 @@ mod tests {
     }
 
     #[test]
+    fn unity_rules_speak_only_where_unity_is_on() {
+        let change = Change { path: "Assets/Scripts/Mover.cs".into(), before: None, after: Some("public class Mover : MonoBehaviour
+{
+    void Update() { }
+}
+".into()) };
+        let judged = |unity: Option<bool>| judge_change(&Index::default(), &change, &ProjectRules { unity, ..ProjectRules::default() }, &Exceptions::default()).findings.iter().map(|finding| finding.rule).collect::<Vec<_>>();
+        assert_eq!(judged(Some(true)), [Rule::U7]);
+        assert!(judged(None).is_empty() && judged(Some(false)).is_empty());
+    }
+
+    #[test]
     fn a_write_is_judged_by_every_change_rule_and_exceptions_are_honoured() {
         let index = project("change", &[("src/lib/totals.ts", TOTALS)]);
         let copy = Change { path: "src/report.ts".into(), before: None, after: Some(format!("// sums\n{}", TOTALS.replace("totals", "summarize"))) };
-        let strict = ProjectRules { no_comments: true };
+        let strict = ProjectRules { no_comments: true, ..ProjectRules::default() };
         let verdict = judge_change(&index, &copy, &strict, &Exceptions::default());
         let rules: Vec<Rule> = verdict.findings.iter().map(|finding| finding.rule).collect();
         assert_eq!(rules, [Rule::R1, Rule::R6]);

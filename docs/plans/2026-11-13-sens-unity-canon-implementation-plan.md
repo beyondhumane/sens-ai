@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hitos 0, 1 y 2 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que pasan al 3 con la primera regla que los usa.
+- **Estado:** Hitos 0 a 3 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. U1 a U8 no se han medido todavía sobre un proyecto de Unity real.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -110,7 +110,7 @@ vez. Y el `file_outline` de un script de Unity con sus marcas.
 
 **Objetivo:** U1 a U8 funcionando, nacidas en `Note`.
 
-- `Rule` gana `U1`..`U15`. `ProjectRules` gana `unity` y la versión del editor.
+- `Rule` gana `U1`..`U8`; `U9`..`U15` llegan con el hito 4. `ProjectRules` gana `unity` y la versión del editor.
 - `rust/sens-canon/src/unity.rs` con la forma de `comments.rs`: una función
   por regla sobre el AST del contenido nuevo, todas compartiendo el conjunto
   caliente del hito 2, y un `findings` que las compone.
@@ -129,6 +129,22 @@ vez. Y el `file_outline` de un script de Unity con sus marcas.
   `StringToHash` ya declarado.
 - `rust/sens-agent/src/canon/state.rs` persiste los campos nuevos en
   `.sens/canon/rules.json`, con la detección del hito 0 al abrir el proyecto.
+  `unity` sin guardar se detecta; guardado, manda la persona. La versión del
+  editor no se guarda: se lee de `ProjectVersion.txt` cada vez.
+- Decisiones al construirlo, para no denegar código legítimo cuando dejen de
+  ser `Note`:
+  - U1 a U3 no cuentan el patrón de caché perezosa: `campo ??= …` o una
+    asignación dentro de un `if` que mira ese mismo campo.
+  - U4 no cuenta el texto de una excepción: solo se construye cuando algo
+    falla.
+  - U6 no cuenta `PlayerPrefs` ni `EditorPrefs`, cuyas claves son strings por
+    diseño, y nombra el hash que el fichero ya declara.
+  - U8 no cuenta los mensajes de Unity, porque `async void Start` es el patrón
+    que Unity documenta; los métodos públicos, que pueden estar enlazados a un
+    `UnityEvent` en el Inspector, donde Sens no mira; ni los que se suscriben
+    como manejador.
+  - Solo cuenta lo que la escritura añade: lo que el fichero ya tenía no se
+    vuelve a decir. Un hallazgo por regla y línea.
 
 **Se prueba:** la misma llamada escrita dentro de `Update`, en un método que
 `Update` llama y en uno que solo alcanza `Start`, con tres resultados

@@ -510,7 +510,7 @@ export interface Slash {
   hint: string;
 }
 
-export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7" | "S8" | "D1";
+export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "S1" | "S2" | "S3" | "S4" | "S5" | "S6" | "S7" | "S8" | "D1" | "U1" | "U2" | "U3" | "U4" | "U5" | "U6" | "U7" | "U8";
 export type Severity = "Block" | "Consider" | "Ask" | "Note";
 
 export interface Target {
@@ -582,6 +582,7 @@ export interface Avoided {
 
 export interface ProjectRules {
   noComments: boolean;
+  unity?: boolean | null;
 }
 
 export interface Restored {

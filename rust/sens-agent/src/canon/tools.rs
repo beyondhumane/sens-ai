@@ -128,7 +128,7 @@ fn outline(project: &Project, engine: &Engine, file: &str) -> String {
     if project.index.unity.is_empty() || symbols.is_empty() {
         return told;
     }
-    let heat = Heat::of(&project.index);
+    let heat = Heat::of(&project.index, None);
     told.lines()
         .zip(&symbols)
         .map(|(line, symbol)| every_frame(heat.reach(&symbol.name)).map_or_else(|| line.to_string(), |said| format!("{line}  [{said}]")))

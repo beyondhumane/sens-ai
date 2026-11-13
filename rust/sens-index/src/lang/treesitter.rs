@@ -125,7 +125,7 @@ pub fn text<'a>(node: &Node, source: &'a str) -> &'a str {
     node.utf8_text(source.as_bytes()).unwrap_or("")
 }
 
-fn dequote(s: &str) -> Option<&str> {
+pub fn dequote(s: &str) -> Option<&str> {
     if s.len() < 5 {
         return None;
     }
@@ -159,7 +159,7 @@ fn enclosing_range(ranges: &[SymbolRange], pos: usize) -> usize {
     best.map(|r| r.index).unwrap_or(usize::MAX)
 }
 
-fn collect_leaves<'t>(node: Node<'t>, out: &mut Vec<Node<'t>>) {
+pub fn collect_leaves<'t>(node: Node<'t>, out: &mut Vec<Node<'t>>) {
     let mut cursor = node.walk();
     if !cursor.goto_first_child() {
         if node.is_named() {
