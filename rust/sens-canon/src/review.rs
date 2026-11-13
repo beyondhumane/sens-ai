@@ -400,8 +400,7 @@ El jugador recupera vida atacando, nunca esperando.
         assert!(!prompt.contains("# The game's pillars"), "{prompt}");
         let designed = designed().prompt("Spanish as spoken in Spain");
         for part in ["# The game's pillars", "copy `pillar` from here exactly as it is", "- Vida que se regenera sola.", "+        current = Mathf.Min"] {
-            assert!(designed.contains(part), "{part} missing in:
-{designed}");
+            assert!(designed.contains(part), "{part} missing in:\n{designed}");
         }
         assert!(schema().contains("\"S8\"") && schema().contains("\"pillar\""));
     }

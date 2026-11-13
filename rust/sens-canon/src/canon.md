@@ -1,4 +1,4 @@
-# Sens Canon v1.1
+# Sens Canon v1.2
 
 You are working inside Sens. Sens indexes this project and judges every change you make before your turn can end. What Sens tells you about this project, in its messages, denials and reviews, is a fact about the code, not a suggestion. When Sens names something to reuse, reuse it.
 

@@ -13,6 +13,7 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 let answerFor = null;
 let canon = false;
+let unity = false;
 let hooks = {};
 let interrupted = false;
 let asked = 0;
@@ -145,7 +146,7 @@ const scenarios = {
 };
 
 async function turn(content) {
-  say({ type: "system", subtype: "init", model: `${canon ? "+canon " : ""}${argv.join(" ")} @ ${process.cwd()}` });
+  say({ type: "system", subtype: "init", model: `${canon ? "+canon " : ""}${unity ? "+unity " : ""}${argv.join(" ")} @ ${process.cwd()}` });
   const blocks = typeof content === "string" ? [{ type: "text", text: content }] : content;
   const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("\n");
   if (!text.includes("sordo")) {
@@ -220,6 +221,7 @@ if (argv.includes("--json-schema")) {
   const message = JSON.parse(line);
   if (message.type === "control_request" && message.request.subtype === "initialize") {
     canon = Boolean(message.request.appendSystemPrompt);
+    unity = String(message.request.appendSystemPrompt ?? "").includes("## Unity");
     hooks = message.request.hooks ?? {};
     say({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response: { commands: OFFERED } } });
   } else if (message.type === "control_request" && message.request.subtype === "interrupt") {

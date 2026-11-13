@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hitos 0 a 4 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. Las quince reglas U siguen en `Note`: no se han medido todavía sobre un proyecto de Unity real.
+- **Estado:** Hitos 0 a 5 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que entraron en el 3 con la primera regla que los usa. Las quince reglas U siguen en `Note`: no se han medido todavía sobre un proyecto de Unity real.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -198,6 +198,10 @@ no produce U9, y en uno con el paquete sí. Un `Debug.Log($"{x}")` dentro de
 - Tests propios, con la misma forma que los de `canon.md`: presupuesto de
   líneas, y que la escalera de Unity aparece en orden.
 - `VERSION` sube a `v1.2`.
+- Lo que el circuito apunta como entregado a cada sesión es la edición:
+  `v1.2`, o `v1.2+unity` en un proyecto de Unity. Si `unity` cambia a mitad de
+  sesión, el Canon se vuelve a mandar con el texto que toca. El saludo de la
+  app y el contexto del circuito deciden con la misma comprobación.
 
 **Se prueba:** los tests del presupuesto y del orden. Y que un proyecto que no
 es de Unity recibe exactamente el texto que recibía antes.

@@ -128,6 +128,12 @@ pub struct ProjectRules {
     pub addressables: bool,
 }
 
+impl ProjectRules {
+    pub fn is_unity(&self) -> bool {
+        self.unity == Some(true)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Exceptions {
     pub keys: BTreeSet<String>,

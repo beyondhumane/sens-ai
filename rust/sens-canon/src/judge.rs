@@ -22,7 +22,7 @@ pub fn judge_since(index: &Index, change: &Change, approved: Option<&str>, rules
     if rules.no_comments {
         verdict = verdict.with(comments::findings(change));
     }
-    if rules.unity == Some(true) {
+    if rules.is_unity() {
         verdict = verdict.with(unity::findings(index, change, rules));
     }
     exceptions.filter(verdict)
@@ -119,11 +119,7 @@ mod tests {
 
     #[test]
     fn unity_rules_speak_only_where_unity_is_on() {
-        let change = Change { path: "Assets/Scripts/Mover.cs".into(), before: None, after: Some("public class Mover : MonoBehaviour
-{
-    void Update() { }
-}
-".into()) };
+        let change = Change { path: "Assets/Scripts/Mover.cs".into(), before: None, after: Some("public class Mover : MonoBehaviour\n{\n    void Update() { }\n}\n".into()) };
         let judged = |unity: Option<bool>| judge_change(&Index::default(), &change, &ProjectRules { unity, ..ProjectRules::default() }, &Exceptions::default()).findings.iter().map(|finding| finding.rule).collect::<Vec<_>>();
         assert_eq!(judged(Some(true)), [Rule::U7]);
         assert!(judged(None).is_empty() && judged(Some(false)).is_empty());

@@ -144,7 +144,7 @@ impl Circuit {
         if !resumed {
             circuit.keeper.exclusive(&circuit.work, || {
                 let mut state = State::load(&circuit.work);
-                state.canon.insert(circuit.session.clone(), sens_canon::VERSION.to_string());
+                state.canon.insert(circuit.session.clone(), sens_canon::edition(state::rules(&circuit.work).is_unity()));
                 let _ = state.save(&circuit.work);
             });
         }
@@ -322,9 +322,11 @@ impl Circuit {
         }
         state.seen = now;
         let mut context = Vec::new();
-        if state.canon.get(&self.session).map(String::as_str) != Some(sens_canon::VERSION) {
-            context.push(sens_canon::CANON.to_string());
-            state.canon.insert(self.session.clone(), sens_canon::VERSION.to_string());
+        let unity = state::rules(&self.work).is_unity();
+        let edition = sens_canon::edition(unity);
+        if state.canon.get(&self.session) != Some(&edition) {
+            context.push(sens_canon::canon(unity));
+            state.canon.insert(self.session.clone(), edition);
         }
         if let Some(told) = project.as_deref().and_then(|project| self.mapped(project)) {
             context.push(told);
@@ -824,8 +826,25 @@ mod tests {
 
         let old = Circuit::new(&root, "s2", keeper, true);
         let first = old.answer(&ear, PROMPT, &json!({ "prompt": "hola" }));
-        assert!(first["hookSpecificOutput"]["additionalContext"].as_str().unwrap().contains("# Sens Canon"));
+        let canon = first["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        assert!(canon.contains("# Sens Canon") && !canon.contains("## Unity"), "{canon}");
         assert_eq!(old.answer(&ear, PROMPT, &json!({ "prompt": "hola" })), json!({}));
+    }
+
+    #[test]
+    fn a_unity_project_gets_the_unity_canon_once_and_the_plain_one_when_it_is_turned_off() {
+        let (root, keeper) = project_with("unity-canon", &[("ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 2022.3.10f1\n")]);
+        let fresh = Circuit::new(&root, "s1", keeper.clone(), false);
+        let ear = Ear::default();
+        let told = |circuit: &Circuit| circuit.answer(&ear, PROMPT, &json!({ "prompt": "hola" }))["hookSpecificOutput"]["additionalContext"].as_str().unwrap_or_default().to_string();
+        assert!(!told(&fresh).contains("# Sens Canon"));
+        let old = Circuit::new(&root, "s2", keeper, true);
+        let first = told(&old);
+        assert!(first.contains(sens_canon::canon(true).trim_end()), "{first}");
+        assert!(!told(&old).contains("# Sens Canon"));
+        state::save_rules(&root, &sens_canon::verdict::ProjectRules { unity: Some(false), ..Default::default() }).unwrap();
+        let plain = told(&old);
+        assert!(plain.contains("# Sens Canon") && !plain.contains("## Unity"), "{plain}");
     }
 
     const PILLARS: (&str, &str) = ("Design/pillars.md", "## Movimiento preciso\n\nEl jugador siempre sabe por qué falló un salto.\n\n### Descarta\n\nAleatoriedad en el control.\n");

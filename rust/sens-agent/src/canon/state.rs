@@ -113,8 +113,7 @@ mod tests {
         let root = folder("unity-rules");
         assert_eq!((rules(&root).unity, rules(&root).editor), (Some(false), None));
         std::fs::create_dir_all(root.join("ProjectSettings")).unwrap();
-        std::fs::write(root.join("ProjectSettings/ProjectVersion.txt"), "m_EditorVersion: 2022.3.10f1
-").unwrap();
+        std::fs::write(root.join("ProjectSettings/ProjectVersion.txt"), "m_EditorVersion: 2022.3.10f1\n").unwrap();
         assert_eq!((rules(&root).unity, rules(&root).editor.as_deref(), rules(&root).addressables), (Some(true), Some("2022.3.10f1"), false));
         std::fs::create_dir_all(root.join("Packages")).unwrap();
         std::fs::write(root.join("Packages/manifest.json"), r#"{ "dependencies": { "com.unity.addressables": "1.21.19" } }"#).unwrap();

@@ -133,8 +133,7 @@ fn outline(project: &Project, engine: &Engine, file: &str) -> String {
         .zip(&symbols)
         .map(|(line, symbol)| every_frame(heat.reach(&symbol.name)).map_or_else(|| line.to_string(), |said| format!("{line}  [{said}]")))
         .collect::<Vec<_>>()
-        .join("
-")
+        .join("\n")
 }
 
 fn where_is(project: &Project, query: &str) -> String {
@@ -284,8 +283,7 @@ public class Player : MonoBehaviour
 ";
         let project = project_with("unity-outline", &[("Assets/Scripts/Player.cs", player)]);
         let told = call(&project, "file_outline", &json!({ "file": "Assets/Scripts/Player.cs" })).unwrap().unwrap();
-        let line = |name: &str| told.lines().find(|line| line.contains(name)).unwrap_or_else(|| panic!("{name} missing in:
-{told}"));
+        let line = |name: &str| told.lines().find(|line| line.contains(name)).unwrap_or_else(|| panic!("{name} missing in:\n{told}"));
         assert!(line("void Update()").ends_with("[runs every frame]"), "{told}");
         assert!(line("void Steer()").ends_with("[every frame, 1 call from Player.Update]"), "{told}");
         assert!(!line("void Start()").contains('['), "{told}");
