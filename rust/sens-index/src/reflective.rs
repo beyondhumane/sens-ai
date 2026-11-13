@@ -42,7 +42,7 @@ pub fn hits(root: &Path, names: &HashSet<String>) -> HashMap<String, String> {
     let files: Vec<_> = ignore::WalkBuilder::new(root)
         .hidden(false)
         .git_ignore(true)
-        .filter_entry(|e| !SKIP_DIRS.contains(&e.file_name().to_str().unwrap_or("")))
+        .filter_entry(crate::project::skipping(root, &SKIP_DIRS))
         .build()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
