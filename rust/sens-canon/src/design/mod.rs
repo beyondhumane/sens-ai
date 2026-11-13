@@ -1,4 +1,5 @@
 mod frontmatter;
+mod genres;
 mod guide;
 mod markdown;
 mod undescribed;

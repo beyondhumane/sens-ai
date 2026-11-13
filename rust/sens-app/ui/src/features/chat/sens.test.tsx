@@ -87,6 +87,9 @@ describe("what Sens does in a reply", () => {
     expect([...both.querySelectorAll(".sens-place")].map((place) => place.textContent)).toEqual(["src/format.js:3", "Design/mechanics/dash.md:5"]);
     const designOnly = step(sens("anticipated", [], [], [dash]));
     expect([designOnly.className, designOnly.querySelector(".step-target")?.textContent]).toEqual(["step sens", "diseño: Dash"]);
+    const manual = step(sens("anticipated", [], [], [{ title: "Action 2D and platformers › Jump", file: "", line: 41 }]));
+    expect(manual.querySelector(".sens-title")?.textContent).toBe("Action 2D and platformers › Jump");
+    expect(manual.querySelector(".sens-place")).toBeNull();
   });
 
   it("shows a write Sens stopped as stopped, not failed, and leaves out a review with nothing to say", () => {

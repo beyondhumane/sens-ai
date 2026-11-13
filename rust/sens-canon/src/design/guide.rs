@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{Design, Section, first_paragraph};
+use super::{Design, Section, first_paragraph, genres};
 use crate::rank::{self, Corpus, words};
 
 pub const CANON: &str = include_str!("canon.md");
@@ -13,7 +13,7 @@ const FLATTEN: f32 = 0.75;
 
 pub struct Guide {
     design: Design,
-    searched: Vec<usize>,
+    searched: Vec<Section>,
     corpus: Corpus,
 }
 
@@ -39,8 +39,8 @@ fn is_pillars(section: &Section) -> bool {
 
 impl Guide {
     pub fn of(design: Design) -> Guide {
-        let searched: Vec<usize> = (0..design.sections.len()).filter(|&at| !is_pillars(&design.sections[at])).collect();
-        let corpus = Corpus::of(searched.iter().map(|&at| terms(&design.sections[at])).collect());
+        let searched: Vec<Section> = design.sections.iter().filter(|section| !is_pillars(section)).cloned().chain(genres::topics(&design.subgenres)).collect();
+        let corpus = Corpus::of(searched.iter().map(terms).collect());
         Guide { design, searched, corpus }
     }
 
@@ -103,11 +103,17 @@ impl Guide {
             if left < 2 {
                 break;
             }
-            let section = &self.design.sections[self.searched[at]];
+            let section = &self.searched[at];
             let lines: Vec<&str> = section.text.lines().collect();
             let fits = lines.len().min(left - 1);
-            let cut = if fits < lines.len() { " (cut to fit; read the file for the rest)" } else { "" };
-            told.text.push_str(&format!("\n\n### {} — {}:{}{cut}\n{}", section.title, section.file, section.line, lines[..fits].join("\n")));
+            let manual = section.file.is_empty();
+            let from = if manual { "Sens's genre manual".to_string() } else { format!("{}:{}", section.file, section.line) };
+            let cut = match (fits < lines.len(), manual) {
+                (false, _) => "",
+                (true, true) => " (cut to fit; ask `design_search` for the rest)",
+                (true, false) => " (cut to fit; read the file for the rest)",
+            };
+            told.text.push_str(&format!("\n\n### {} — {from}{cut}\n{}", section.title, lines[..fits].join("\n")));
             left -= 1 + fits;
             told.sections.push(section);
         }
@@ -155,6 +161,16 @@ mod tests {
         assert!(guide.relevant("añade una tienda para gastar monedas").is_some_and(|told| told.sections[0].title == "Tienda"));
         assert!(guide.relevant("el jugador siempre sabe por qué falló").is_none_or(|told| told.sections.iter().all(|section| !section.file.ends_with("pillars.md"))));
         assert!(guide.relevant("hola, ¿qué tal?").is_none());
+    }
+
+    #[test]
+    fn a_platformer_request_brings_the_manual_topic_and_a_game_without_subgenres_does_not() {
+        let platformer = guide("manual", &[("Design/README.md", "---\nsubgenres: [platformer]\n---\n# Pájaro\n")]);
+        let told = platformer.relevant("añade doble salto").unwrap();
+        assert_eq!(told.sections[0].title, "Action 2D and platformers › Jump");
+        assert!(told.sections[0].file.is_empty());
+        assert!(told.text.contains("### Action 2D and platformers › Jump — Sens's genre manual\n"), "{}", told.text);
+        assert!(guide("no-manual", &[("Design/README.md", "# Pájaro\n")]).relevant("añade doble salto").is_none());
     }
 
     #[test]

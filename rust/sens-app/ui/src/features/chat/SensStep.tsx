@@ -80,7 +80,7 @@ function Designed({ section }: { section: Anticipated }) {
   return (
     <div className="sens-found">
       <span className="sens-title">{section.title}</span>
-      <Place file={section.file} line={section.line} />
+      {section.file && <Place file={section.file} line={section.line} />}
     </div>
   );
 }
