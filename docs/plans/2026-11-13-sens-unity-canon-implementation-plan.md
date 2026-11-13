@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Propuesto
+- **Estado:** Hito 0 hecho. El hito 1 se hace dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md); del 2 al 7, después de ese plan.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -26,16 +26,23 @@ las reglas.
 
 **Objetivo:** indexar `Assets/` y los paquetes embebidos, y nada más.
 
-- `rust/sens-index/src/build.rs`: `collect` deja de usar una `SKIP_DIRS`
-  constante y añade, cuando la raíz es un proyecto de Unity, `Library`,
-  `Temp`, `Obj`, `obj`, `Logs`, `UserSettings`, `Build`, `Builds`,
-  `MemoryCaptures` y `Recordings`. `Library/PackageCache` es el que importa:
-  son miles de `.cs` de los paquetes de Unity.
-- `unity(root) -> Option<String>` lee `m_EditorVersion` de
-  `ProjectSettings/ProjectVersion.txt`. La presencia del fichero es la
+- `rust/sens-index/src/project.rs`: `unity_version(root)` lee `m_EditorVersion`
+  de `ProjectSettings/ProjectVersion.txt`. La presencia del fichero es la
   detección; su contenido es la versión.
-- `addressables(root) -> bool` busca el paquete en `Packages/manifest.json`.
-  Lo necesita U9 en el hito 4; se escribe aquí porque es el mismo sitio.
+- En el mismo módulo, `skipping(root, base)` devuelve el predicado de
+  `filter_entry`: la lista base de quien llama, más lo que el editor genera
+  cuando la raíz es de Unity — `Library`, `Temp`, `obj`, `Logs`,
+  `UserSettings`, `Build`, `Builds`, `MemoryCaptures`, `Recordings`.
+  `Library/PackageCache` es el que importa: son miles de `.cs` de los paquetes
+  de Unity.
+- Lo usan los tres que recorren la raíz, no solo `collect`: `build.rs`,
+  `entries.rs` y `reflective.rs`. `entries.rs` es el que se rompía peor, porque
+  cada paquete de Unity en `Library/PackageCache` trae su propio
+  `package.json` y habría inventado puntos de entrada falsos.
+- La raíz nunca se salta por llamarse como una carpeta de la lista, que es lo
+  que pasaba hasta ahora con un proyecto en `P:\Builds\MiJuego`.
+- `addressables(root)` no se escribe aquí: no la usa nadie hasta el hito 4, y
+  el Canon de este repositorio no deja código sin cablear.
 
 **Se prueba:** un proyecto de prueba con `Assets/Scripts/Player.cs`,
 `Library/PackageCache/com.unity.x/Foo.cs` y `Temp/Generated.cs`. El índice
@@ -125,7 +132,8 @@ esperado, ni uno más. Las dos afirmaciones son el test, no un comentario.
 
 **Objetivo:** U9 a U15.
 
-- U9 solo habla si `addressables(root)` es cierto.
+- `addressables(root)` en `project.rs`, leyendo `Packages/manifest.json`. U9
+  solo habla si es cierto.
 - U12 distingue `tag ==` de `CompareTag`.
 - U14 calla si U4 ya saltó en esa línea: un hallazgo por problema.
 - U15 señala `OnGUI` como declaración, no como llamada.
@@ -189,7 +197,7 @@ real para esto; sin él, el hito no se puede cerrar y las reglas se quedan en
 
 ## Lo que no entra
 
-El grafo de assets por GUID y el lazo con el editor son las entregas 2 y 3.
+El grafo de assets por GUID y el lazo con el editor quedan para más adelante.
 Las tareas de Unity en `sens-bench` van justo después de este plan: sin ellas
 la afirmación de que el brazo con Sens gana no está medida. Y el README, la
 web y el paper se reescriben cuando el hito 7 cierre, no antes.
