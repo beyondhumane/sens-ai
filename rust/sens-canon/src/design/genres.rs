@@ -5,9 +5,10 @@ struct Playbook {
     text: &'static str,
 }
 
-const PLAYBOOKS: [Playbook; 2] = [
+const PLAYBOOKS: [Playbook; 3] = [
     Playbook { subgenres: &["platformer", "metroidvania", "action-2d"], text: include_str!("genres/action-2d.md") },
     Playbook { subgenres: &["roguelike", "roguelite", "deckbuilder"], text: include_str!("genres/roguelike.md") },
+    Playbook { subgenres: &["fps", "tps", "action-3d"], text: include_str!("genres/action-3d.md") },
 ];
 const ONLY_FOR: &str = "Subgenres:";
 
@@ -83,6 +84,10 @@ mod tests {
         assert!(roguelike.contains(&"Roguelikes and deckbuilders › Procedural levels".to_string()) && !roguelike.iter().any(|title| title.starts_with("Action 2D") || title.ends_with("› Cards and synergies")), "{roguelike:?}");
         let deckbuilder = titles(&["deckbuilder"]);
         assert!(deckbuilder.contains(&"Roguelikes and deckbuilders › Cards and synergies".to_string()) && !deckbuilder.iter().any(|title| title.ends_with("› Procedural levels")), "{deckbuilder:?}");
+        let fps = titles(&["fps"]);
+        assert!(fps.contains(&"Action 3D and shooters › Online shooting".to_string()) && !fps.iter().any(|title| title.ends_with("› Melee combat in third person")), "{fps:?}");
+        let brawler = titles(&["action-3d"]);
+        assert!(brawler.contains(&"Action 3D and shooters › Melee combat in third person".to_string()) && !brawler.iter().any(|title| title.ends_with("› Aim assist")), "{brawler:?}");
         assert!(topics(&["platformer".to_string()]).iter().all(|topic| topic.file.is_empty()));
     }
 }

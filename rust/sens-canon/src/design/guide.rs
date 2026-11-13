@@ -224,6 +224,20 @@ mod tests {
     }
 
     #[test]
+    fn a_request_in_spanish_reaches_the_action_3d_topic_it_is_about() {
+        let missed = missed_in_spanish(
+            "fps, tps, action-3d",
+            &[
+                ("el jugador se queda quieto recuperando vida en vez de avanzar", "Combat that pushes forward"),
+                ("los ataques cuerpo a cuerpo no van hacia el enemigo", "Melee combat in third person"),
+                ("la asistencia al apuntado con mando es demasiado fuerte", "Aim assist"),
+                ("los disparos no registran por el lag del servidor", "Online shooting"),
+            ],
+        );
+        assert!(missed.is_empty(), "{}", missed.join("\n"));
+    }
+
+    #[test]
     fn never_more_than_three_sections_nor_more_than_eighty_lines() {
         let long = |name: &str| format!("# Dash {name}\n\n{}", "El dash cruza el hueco.\n".repeat(50));
         let files: Vec<(String, String)> = ["a", "b", "c", "d", "e"].iter().map(|name| (format!("Design/mechanics/{name}.md"), long(name))).collect();

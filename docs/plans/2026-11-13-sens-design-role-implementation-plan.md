@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 8 hechos; del 9, el manual de roguelike y deckbuilders. Las revisiones de los manuales las hizo el agente a petición de la persona, no alguien que haya publicado un juego del género. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código.
+- **Estado:** Hitos 1 a 8 hechos; del 9, los manuales de roguelike y deckbuilders y de acción 3D y shooters. Las revisiones de los manuales las hizo el agente a petición de la persona, no alguien que haya publicado un juego del género. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código.
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,
