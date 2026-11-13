@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-unity-canon-design.md](../specs/2026-11-13-sens-unity-canon-design.md)
-- **Estado:** Hitos 0 y 1 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 al 7, después de ese plan.
+- **Estado:** Hitos 0, 1 y 2 hechos; el 1, dentro del [plan del rol de diseño](2026-11-13-sens-design-role-implementation-plan.md). Del 2 salieron el caso del fichero que se escribe y la graduación, que pasan al 3 con la primera regla que los usa.
 
 Cada hito se prueba solo y deja el proyecto en un estado defendible. El orden
 sigue las dependencias: primero que un proyecto de Unity entre bien en el
@@ -87,21 +87,22 @@ corre cada frame.
 - `rust/sens-canon/src/hot.rs`: construir la adyacencia hacia delante
   invirtiendo `raw_references` — para cada símbolo, cada sitio trae en `from`
   el símbolo que llama — y hacer un BFS desde las raíces por frame declaradas
-  en el diseño.
-- El caso dentro del fichero que se está escribiendo: el índice es anterior a
-  la escritura, así que un método nuevo llamado desde `Update` en el mismo
-  fichero no está en el grafo. Se resuelve con el AST del contenido nuevo, que
-  `build::parse` ya devuelve.
+  en el diseño. Una llamada cuyo nombre comparten varios métodos del proyecto
+  no está resuelta: lo que solo se alcanza a través de ella queda lejos.
 - Las corutinas: un método que devuelve `IEnumerator` y hace `yield return
-  null` o `WaitForEndOfFrame` dentro de un bucle es raíz por frame.
-- La graduación, en un solo sitio para que ninguna regla la reimplemente:
-  profundidad 0 deja la severidad que la regla declara, 1 a 3 baja `Block` a
-  `Consider` y `Consider` a `Note`, más allá o sin resolver es `Note`.
+  null`, `WaitForEndOfFrame` o `WaitForFixedUpdate` dentro de un bucle es raíz
+  por frame.
+- El resultado tiene cuatro valores: corre cada frame, a 1–3 llamadas de una
+  raíz, más lejos o por una llamada sin resolver, o frío.
+- El primer consumidor es `file_outline`: en un proyecto de Unity marca cada
+  método que corre cada frame y a cuántas llamadas está, para que el agente lo
+  sepa antes de escribir.
 
-**Se prueba:** la misma llamada escrita dentro de `Update`, en un método que
-`Update` llama, y en uno que nada por frame alcanza, con tres severidades
-distintas. Y un ciclo de llamadas entre dos métodos calientes que no cuelga el
-BFS.
+**Se prueba:** un método por frame, otros a una, dos, tres y cuatro llamadas,
+uno alcanzado por una llamada ambigua y otros que solo alcanza `Start`. Un
+ciclo de llamadas entre dos métodos calientes que no cuelga el BFS. Una
+corutina que cede cada frame dentro de un bucle frente a una que cede una sola
+vez. Y el `file_outline` de un script de Unity con sus marcas.
 
 ---
 
@@ -115,13 +116,23 @@ BFS.
   caliente del hito 2, y un `findings` que las compone.
 - Se enchufa en `judge_change` detrás de `rules.unity`, al lado de
   `comments::findings`.
+- Lo que el hito 2 dejó para su primer consumidor. El caso dentro del fichero
+  que se está escribiendo: el índice es anterior a la escritura, así que un
+  método nuevo llamado desde `Update` en el mismo fichero no está en el grafo;
+  se resuelve con el AST del contenido nuevo, que `build::parse` ya devuelve.
+  Y la graduación, en un solo sitio para que ninguna regla la reimplemente:
+  corre cada frame deja la severidad que la regla declara, de 1 a 3 llamadas
+  baja `Block` a `Consider` y `Consider` a `Note`, más lejos o sin resolver es
+  `Note`, y frío no da hallazgo.
 - Cada mensaje nombra el arreglo. Donde el índice puede, rellena `Target` con
   lo que el proyecto ya tiene: el pool existente, el `static readonly int` del
   `StringToHash` ya declarado.
 - `rust/sens-agent/src/canon/state.rs` persiste los campos nuevos en
   `.sens/canon/rules.json`, con la detección del hito 0 al abrir el proyecto.
 
-**Se prueba:** un MonoBehaviour idiomático y limpio — componentes cacheados en
+**Se prueba:** la misma llamada escrita dentro de `Update`, en un método que
+`Update` llama y en uno que solo alcanza `Start`, con tres resultados
+distintos. Un MonoBehaviour idiomático y limpio — componentes cacheados en
 `Awake`, hashes estáticos, buffers reusados — que no produce ni un hallazgo. Y
 un componente deliberadamente malo que produce exactamente el conjunto
 esperado, ni uno más. Las dos afirmaciones son el test, no un comentario.

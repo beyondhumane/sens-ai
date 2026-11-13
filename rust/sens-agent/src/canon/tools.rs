@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use sens_canon::card;
 use sens_canon::design::Guide;
+use sens_canon::hot::{Heat, Reach};
 use sens_index::format;
 use sens_index::query::Engine;
 use serde_json::{Value, json};
@@ -33,7 +34,7 @@ pub fn listed() -> Vec<Value> {
             folder.clone(),
             &[],
         ),
-        described("file_outline", "File outline", "The symbols of one file with their lines and signatures, without reading the file.", json!({ "file": { "type": "string", "description": "Path relative to the project root." } }), &["file"]),
+        described("file_outline", "File outline", "The symbols of one file with their lines and signatures, without reading the file. In a Unity project it marks the methods that run every frame and how many calls away from it they are.", json!({ "file": { "type": "string", "description": "Path relative to the project root." } }), &["file"]),
         described("find_symbol", "Find symbol", "Where a function, type, class or constant is defined, by its exact name.", json!({ "name": { "type": "string" } }), &["name"]),
         described("who_uses", "Who uses", "Every place that uses a symbol, grouped by file.", json!({ "name": { "type": "string" } }), &["name"]),
         described(
@@ -110,6 +111,30 @@ fn existing(project: &Project, query: &str) -> String {
 
 fn plural(count: usize, one: &str) -> String {
     if count == 1 { format!("1 {one}") } else { format!("{count} {one}s") }
+}
+
+fn every_frame(reach: Reach) -> Option<String> {
+    match reach {
+        Reach::Frame => Some("runs every frame".into()),
+        Reach::Calls { count, from } => Some(format!("every frame, {} from {from}", plural(count as usize, "call"))),
+        Reach::Far { from } => Some(format!("maybe every frame: {from} reaches it through more than 3 calls or a call Sens cannot tell apart")),
+        Reach::Cold => None,
+    }
+}
+
+fn outline(project: &Project, engine: &Engine, file: &str) -> String {
+    let symbols = engine.file_outline(file);
+    let told = format::format_symbols(&symbols);
+    if project.index.unity.is_empty() || symbols.is_empty() {
+        return told;
+    }
+    let heat = Heat::of(&project.index);
+    told.lines()
+        .zip(&symbols)
+        .map(|(line, symbol)| every_frame(heat.reach(&symbol.name)).map_or_else(|| line.to_string(), |said| format!("{line}  [{said}]")))
+        .collect::<Vec<_>>()
+        .join("
+")
 }
 
 fn where_is(project: &Project, query: &str) -> String {
@@ -208,7 +233,7 @@ pub fn call(project: &Project, name: &str, arguments: &Value) -> Option<Result<S
             Some(folder) => format::format_map(&engine.map(Some(folder))),
             None => card::card(&project.index, &project.map),
         }),
-        "file_outline" => said(arguments, "file").map(|file| format::format_symbols(&engine.file_outline(&file))),
+        "file_outline" => said(arguments, "file").map(|file| outline(project, &engine, &file)),
         "find_symbol" => said(arguments, "name").map(|name| format::format_symbols(&engine.find_symbol(&name))),
         "who_uses" => said(arguments, "name").map(|name| format::format_who_uses(&engine.who_uses(&name), false)),
         "already_exists" => said(arguments, "query").map(|query| existing(project, &query)),
@@ -244,6 +269,27 @@ mod tests {
 
     fn project(name: &str) -> Project {
         project_with(name, &[])
+    }
+
+    #[test]
+    fn the_outline_of_a_unity_script_marks_what_runs_every_frame() {
+        let player = "using UnityEngine;
+
+public class Player : MonoBehaviour
+{
+    void Update() { Steer(); }
+    void Steer() { }
+    void Start() { }
+}
+";
+        let project = project_with("unity-outline", &[("Assets/Scripts/Player.cs", player)]);
+        let told = call(&project, "file_outline", &json!({ "file": "Assets/Scripts/Player.cs" })).unwrap().unwrap();
+        let line = |name: &str| told.lines().find(|line| line.contains(name)).unwrap_or_else(|| panic!("{name} missing in:
+{told}"));
+        assert!(line("void Update()").ends_with("[runs every frame]"), "{told}");
+        assert!(line("void Steer()").ends_with("[every frame, 1 call from Player.Update]"), "{told}");
+        assert!(!line("void Start()").contains('['), "{told}");
+        assert!(!call(&project, "file_outline", &json!({ "file": "src/format.ts" })).unwrap().unwrap().contains("every frame"));
     }
 
     #[test]

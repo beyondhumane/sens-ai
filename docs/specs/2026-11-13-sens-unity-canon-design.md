@@ -79,10 +79,15 @@ La pieza de la que cuelga la mitad de las reglas. `GetComponent` no es malo;
 `Update`: es todo lo que `Update` alcanza.
 
 **Raíces por frame:** `Update`, `LateUpdate`, `FixedUpdate`, `OnGUI`,
-`OnAnimatorIK`, `OnAnimatorMove`, `OnWillRenderObject`, `OnPreRender`,
-`OnPostRender`, `OnRenderImage`, `OnRenderObject`, los `OnDrawGizmos*`, y el
-cuerpo de una corutina que hace `yield return null` o `WaitForEndOfFrame`
-dentro de un bucle.
+`OnAnimatorIK`, `OnAnimatorMove`, `OnWillRenderObject`, `OnPreCull`,
+`OnPreRender`, `OnPostRender`, `OnRenderImage`, `OnRenderObject`, los
+`OnDrawGizmos*`; los que corren cada frame o cada paso de física mientras dura
+una condición: `OnTriggerStay`, `OnCollisionStay` y sus versiones 2D,
+`OnMouseOver`, `OnMouseDrag`, y `OnStateUpdate`, `OnStateMove` y `OnStateIK`
+de un `StateMachineBehaviour`; y el cuerpo de una corutina que hace `yield
+return null`, `WaitForEndOfFrame` o `WaitForFixedUpdate` dentro de un bucle.
+Solo cuentan como raíz los métodos de una clase que deriva de un tipo de
+Unity.
 
 **Caliente** es el cierre transitivo desde esas raíces sobre el grafo de
 llamadas que el índice ya construye.

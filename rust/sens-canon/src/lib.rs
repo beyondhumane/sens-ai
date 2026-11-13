@@ -3,6 +3,7 @@ pub mod comments;
 pub mod copies;
 pub mod dependencies;
 pub mod design;
+pub mod hot;
 pub mod integrity;
 pub mod judge;
 pub mod orphans;
