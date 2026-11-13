@@ -185,25 +185,41 @@ mod tests {
         assert!(guide("no-manual", &[("Design/README.md", "# Pájaro\n")]).relevant("añade doble salto").is_none());
     }
 
+    fn missed_in_spanish(subgenres: &str, cases: &[(&str, &str)]) -> Vec<String> {
+        let guide = guide(&format!("spanish-{subgenres}"), &[("Design/README.md", &format!("---\nsubgenres: [{subgenres}]\n---\n# Juego\n"))]);
+        let first = |prompt: &str| guide.relevant(prompt).map(|told| told.sections[0].title.rsplit(" › ").next().unwrap_or_default().to_string());
+        cases.iter().filter_map(|&(prompt, want)| Some(first(prompt)).filter(|got| got.as_deref() != Some(want)).map(|got| format!("{prompt} → {got:?}, wanted {want}"))).collect()
+    }
+
     #[test]
-    fn a_request_in_spanish_reaches_the_manual_topic_it_is_about() {
-        let guide = guide("spanish", &[("Design/README.md", "---\nsubgenres: [platformer, metroidvania]\n---\n# Pájaro\n")]);
-        let first = |prompt: &str| guide.relevant(prompt).map(|told| told.sections[0].title.trim_start_matches("Action 2D and platformers › ").to_string());
-        let found: Vec<(&str, Option<String>)> = [
-            "el personaje tarda mucho en frenar",
-            "el salto se siente flotante",
-            "la cámara tiembla con cada saltito",
-            "se queda enganchado en las esquinas del techo",
-            "el dash es demasiado corto",
-            "los golpes no se sienten",
-            "el mapa tiene demasiados callejones sin salida",
-            "diseña el primer nivel",
-        ]
-        .into_iter()
-        .map(|prompt| (prompt, first(prompt)))
-        .collect();
-        let wanted = ["Run", "Jump", "Camera", "Collision and forgiveness", "Dash", "Combat feedback", "Metroidvania world", "Level design"];
-        let missed: Vec<String> = found.iter().zip(wanted).filter(|((_, got), want)| got.as_deref() != Some(*want)).map(|((prompt, got), want)| format!("{prompt} → {got:?}, wanted {want}")).collect();
+    fn a_request_in_spanish_reaches_the_action_2d_topic_it_is_about() {
+        let missed = missed_in_spanish(
+            "platformer, metroidvania",
+            &[
+                ("el personaje tarda mucho en frenar", "Run"),
+                ("el salto se siente flotante", "Jump"),
+                ("la cámara tiembla con cada saltito", "Camera"),
+                ("se queda enganchado en las esquinas del techo", "Collision and forgiveness"),
+                ("el dash es demasiado corto", "Dash"),
+                ("los golpes no se sienten", "Combat feedback"),
+                ("el mapa tiene demasiados callejones sin salida", "Metroidvania world"),
+                ("diseña el primer nivel", "Level design"),
+            ],
+        );
+        assert!(missed.is_empty(), "{}", missed.join("\n"));
+    }
+
+    #[test]
+    fn a_request_in_spanish_reaches_the_roguelike_topic_it_is_about() {
+        let missed = missed_in_spanish(
+            "roguelite, deckbuilder",
+            &[
+                ("morir no debería frustrar al jugador", "Death and the next run"),
+                ("genera los niveles de forma procedural", "Procedural levels"),
+                ("equilibra el juego con datos de las partidas", "Balance through data"),
+                ("esta carta está rota, busca sinergias", "Cards and synergies"),
+            ],
+        );
         assert!(missed.is_empty(), "{}", missed.join("\n"));
     }
 

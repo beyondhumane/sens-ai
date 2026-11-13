@@ -5,7 +5,10 @@ struct Playbook {
     text: &'static str,
 }
 
-const PLAYBOOKS: [Playbook; 1] = [Playbook { subgenres: &["platformer", "metroidvania", "action-2d"], text: include_str!("genres/action-2d.md") }];
+const PLAYBOOKS: [Playbook; 2] = [
+    Playbook { subgenres: &["platformer", "metroidvania", "action-2d"], text: include_str!("genres/action-2d.md") },
+    Playbook { subgenres: &["roguelike", "roguelite", "deckbuilder"], text: include_str!("genres/roguelike.md") },
+];
 const ONLY_FOR: &str = "Subgenres:";
 
 fn only_for(text: &str) -> Option<Vec<&str>> {
@@ -76,7 +79,10 @@ mod tests {
         assert!(platformer.contains(&"Action 2D and platformers › Jump".to_string()), "{platformer:?}");
         assert!(!platformer.iter().any(|title| title.ends_with("› Metroidvania world") || title.ends_with("› Combat feedback")), "{platformer:?}");
         assert!(titles(&["metroidvania"]).contains(&"Action 2D and platformers › Metroidvania world".to_string()));
-        assert!(titles(&["roguelike"]).is_empty());
+        let roguelike = titles(&["roguelike"]);
+        assert!(roguelike.contains(&"Roguelikes and deckbuilders › Procedural levels".to_string()) && !roguelike.iter().any(|title| title.starts_with("Action 2D") || title.ends_with("› Cards and synergies")), "{roguelike:?}");
+        let deckbuilder = titles(&["deckbuilder"]);
+        assert!(deckbuilder.contains(&"Roguelikes and deckbuilders › Cards and synergies".to_string()) && !deckbuilder.iter().any(|title| title.ends_with("› Procedural levels")), "{deckbuilder:?}");
         assert!(topics(&["platformer".to_string()]).iter().all(|topic| topic.file.is_empty()));
     }
 }
