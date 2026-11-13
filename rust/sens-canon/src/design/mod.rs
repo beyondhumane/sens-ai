@@ -12,14 +12,29 @@ use markdown::Block;
 const FOLDER: &str = "Design";
 const SUBGENRES: [&str; 13] = ["platformer", "metroidvania", "action-2d", "roguelike", "roguelite", "deckbuilder", "fps", "tps", "action-3d", "rpg", "action-rpg", "tactics", "strategy"];
 const RULES_OUT: [&str; 6] = ["descarta", "rules out", "exclut", "schließt aus", "除外", "排除"];
-const STATUSES: [(&str, Status); 4] = [("idea", Status::Idea), ("prototype", Status::Prototype), ("in-game", Status::InGame), ("cut", Status::Cut)];
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Idea,
     Prototype,
     InGame,
     Cut,
+}
+
+impl Status {
+    const ALL: [Status; 4] = [Status::Idea, Status::Prototype, Status::InGame, Status::Cut];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Status::Idea => "idea",
+            Status::Prototype => "prototype",
+            Status::InGame => "in-game",
+            Status::Cut => "cut",
+        }
+    }
+
+    fn named(name: &str) -> Option<Status> {
+        Status::ALL.into_iter().find(|status| status.name() == name)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -182,7 +197,7 @@ impl Design {
     fn mechanic(&mut self, file: &str, fields: &std::collections::BTreeMap<String, Vec<String>>, blocks: &[Block]) {
         let title = blocks.iter().find(|block| block.level == 1).map_or_else(|| stem(file).to_string(), |block| block.title.clone());
         let named = fields.get("status").and_then(|values| values.first()).map(|status| status.to_lowercase());
-        let status = named.as_deref().and_then(|named| STATUSES.iter().find(|(name, _)| *name == named).map(|&(_, status)| status));
+        let status = named.as_deref().and_then(Status::named);
         match (&named, status) {
             (None, _) => self.warnings.push(format!("{file} has no `status:`. Say whether the mechanic is an idea, a prototype, in-game or cut.")),
             (Some(named), None) => self.warnings.push(format!("{file}: the status `{named}` is not one of idea, prototype, in-game or cut.")),

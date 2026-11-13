@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use super::{Design, Section};
+use super::{Design, Section, first_paragraph};
 use crate::rank::{self, Corpus, words};
 
 pub const CANON: &str = include_str!("canon.md");
 const PILLARS: &str = "Design/pillars.md";
+const LOOP: &str = "Design/loop.md";
 const SECTIONS: usize = 3;
 const LINES: usize = 80;
 const TITLE_WEIGHT: usize = 3;
@@ -55,6 +56,36 @@ impl Guide {
         if !self.design.warnings.is_empty() {
             let warnings: Vec<String> = self.design.warnings.iter().map(|warning| format!("- {warning}")).collect();
             said.push(format!("Sens found these problems in `Design/`. Tell the person about them once:\n{}", warnings.join("\n")));
+        }
+        said.join("\n\n")
+    }
+
+    pub fn overview(&self) -> String {
+        let design = &self.design;
+        let mut said = Vec::new();
+        let pillars: Vec<String> = design
+            .pillars
+            .iter()
+            .map(|pillar| format!("- {} [{}] — {}{}", pillar.title, pillar.id, pillar.statement, if pillar.rules_out { "" } else { " (rules nothing out)" }))
+            .collect();
+        said.push(if pillars.is_empty() { format!("Pillars: none yet ({PILLARS}).") } else { format!("Pillars ({PILLARS}):\n{}", pillars.join("\n")) });
+        if !design.subgenres.is_empty() {
+            said.push(format!("Subgenres: {}.", design.subgenres.join(", ")));
+        }
+        let looped: Vec<String> = design.sections.iter().filter(|section| section.file.eq_ignore_ascii_case(LOOP)).map(|section| format!("- {}: {}", section.title, first_paragraph(&section.text))).collect();
+        said.push(if looped.is_empty() { format!("Core loop: not written yet ({LOOP}).") } else { format!("Core loop ({LOOP}):\n{}", looped.join("\n")) });
+        let mechanics: Vec<String> = design
+            .mechanics
+            .iter()
+            .map(|mechanic| {
+                let status = mechanic.status.map_or("no status", |status| status.name());
+                let served = if mechanic.pillars.is_empty() { "no pillar".to_string() } else { mechanic.pillars.join(", ") };
+                format!("- {} — {status} — serves {served} — {}", mechanic.title, mechanic.file)
+            })
+            .collect();
+        said.push(if mechanics.is_empty() { "Mechanics: none yet (Design/mechanics/).".to_string() } else { format!("Mechanics:\n{}", mechanics.join("\n")) });
+        if !design.warnings.is_empty() {
+            said.push(format!("Problems Sens found in Design/:\n{}", design.warnings.iter().map(|warning| format!("- {warning}")).collect::<Vec<_>>().join("\n")));
         }
         said.join("\n\n")
     }
