@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-11-13
 - **Diseño de referencia:** [../specs/2026-11-13-sens-design-role-design.md](../specs/2026-11-13-sens-design-role-design.md)
-- **Estado:** Hitos 1 a 7 hechos y el 8 escrito. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código. El 8 no se cierra hasta que el equipo revise el manual de acción 2D.
+- **Estado:** Hitos 1 a 8 hechos; la revisión del manual del 8 la hizo el agente a petición de la persona, no alguien que haya publicado un juego del género. Del 7 falta la prueba a mano: una entrevista de punta a punta con Claude Code, en un proyecto vacío y en uno con código.
 
 Cada hito se prueba por separado y deja el proyecto en un estado defendible.
 El orden sigue las dependencias: primero lo que el índice tiene que saber,

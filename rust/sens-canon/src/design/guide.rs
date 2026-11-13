@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::{Design, Section, first_paragraph, genres};
 use crate::rank::{self, Corpus, words};
@@ -9,11 +9,13 @@ const LOOP: &str = "Design/loop.md";
 const SECTIONS: usize = 3;
 const LINES: usize = 80;
 const TITLE_WEIGHT: usize = 3;
+const TITLE_BONUS: f32 = 1.0;
 const FLATTEN: f32 = 0.75;
 
 pub struct Guide {
     design: Design,
     searched: Vec<Section>,
+    named: Vec<HashSet<String>>,
     corpus: Corpus,
 }
 
@@ -33,6 +35,10 @@ fn terms(section: &Section) -> HashMap<String, usize> {
     terms
 }
 
+fn own_title(section: &Section) -> HashSet<String> {
+    words(section.title.rsplit(" › ").next().unwrap_or(&section.title)).into_iter().collect()
+}
+
 fn is_pillars(section: &Section) -> bool {
     section.file.eq_ignore_ascii_case(PILLARS)
 }
@@ -40,8 +46,14 @@ fn is_pillars(section: &Section) -> bool {
 impl Guide {
     pub fn of(design: Design) -> Guide {
         let searched: Vec<Section> = design.sections.iter().filter(|section| !is_pillars(section)).cloned().chain(genres::topics(&design.subgenres)).collect();
+        let named = searched.iter().map(own_title).collect();
         let corpus = Corpus::of(searched.iter().map(terms).collect());
-        Guide { design, searched, corpus }
+        Guide { design, searched, named, corpus }
+    }
+
+    fn score(&self, at: usize, groups: &[HashSet<String>]) -> f32 {
+        let titled = groups.iter().filter(|group| group.iter().any(|term| self.named[at].contains(term))).count();
+        self.corpus.score(at, groups, FLATTEN) + TITLE_BONUS * titled as f32
     }
 
     pub fn briefing(&self) -> String {
@@ -95,7 +107,7 @@ impl Guide {
         if groups.is_empty() {
             return None;
         }
-        let mut scored: Vec<(usize, f32)> = (0..self.searched.len()).map(|at| (at, self.corpus.score(at, &groups, FLATTEN))).collect();
+        let mut scored: Vec<(usize, f32)> = (0..self.searched.len()).map(|at| (at, self.score(at, &groups))).collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
         let mut left = LINES;
         let mut told = Told { text: "From this game's design (`Design/`), related to the request:".to_string(), sections: Vec::new() };
@@ -171,6 +183,28 @@ mod tests {
         assert!(told.sections[0].file.is_empty());
         assert!(told.text.contains("### Action 2D and platformers › Jump — Sens's genre manual\n"), "{}", told.text);
         assert!(guide("no-manual", &[("Design/README.md", "# Pájaro\n")]).relevant("añade doble salto").is_none());
+    }
+
+    #[test]
+    fn a_request_in_spanish_reaches_the_manual_topic_it_is_about() {
+        let guide = guide("spanish", &[("Design/README.md", "---\nsubgenres: [platformer, metroidvania]\n---\n# Pájaro\n")]);
+        let first = |prompt: &str| guide.relevant(prompt).map(|told| told.sections[0].title.trim_start_matches("Action 2D and platformers › ").to_string());
+        let found: Vec<(&str, Option<String>)> = [
+            "el personaje tarda mucho en frenar",
+            "el salto se siente flotante",
+            "la cámara tiembla con cada saltito",
+            "se queda enganchado en las esquinas del techo",
+            "el dash es demasiado corto",
+            "los golpes no se sienten",
+            "el mapa tiene demasiados callejones sin salida",
+            "diseña el primer nivel",
+        ]
+        .into_iter()
+        .map(|prompt| (prompt, first(prompt)))
+        .collect();
+        let wanted = ["Run", "Jump", "Camera", "Collision and forgiveness", "Dash", "Combat feedback", "Metroidvania world", "Level design"];
+        let missed: Vec<String> = found.iter().zip(wanted).filter(|((_, got), want)| got.as_deref() != Some(*want)).map(|((prompt, got), want)| format!("{prompt} → {got:?}, wanted {want}")).collect();
+        assert!(missed.is_empty(), "{}", missed.join("\n"));
     }
 
     #[test]

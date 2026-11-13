@@ -12,14 +12,14 @@ Numbers from Celeste are pixels on its 320×180 canvas, where a tile is 8 pixels
 ### Systems
 
 - Horizontal speed approaches the target speed (input × maximum) by a fixed amount per second. Celeste does this with one `Calc.Approach` call for accelerating and stopping alike.
-- A separate, gentler reduction applies only above the maximum, so dashes and boosts keep their momentum instead of being cut.
+- A separate, gentler reduction applies only above the maximum while the stick still points the same way, so dashes and boosts keep their momentum instead of being cut.
 - In Unity, move a kinematic body or a controller built on `Physics2D` casts with your own velocity. A dynamic `Rigidbody2D` that stops through material friction stops differently on every surface.
 
 ### Numbers
 
 - Celeste: maximum run speed 90 px/s, about 11 tiles per second. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L30)
-- Celeste: accelerates and stops at 1000 px/s², so it reaches full speed or a standstill in under a tenth of a second. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2891)
-- Celeste: above the maximum it slows at 400 px/s² instead, so extra speed fades rather than snaps. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L32)
+- Celeste: accelerates and stops at 1000 px/s², so it reaches full speed or a standstill in under a tenth of a second. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2894)
+- Celeste: above the maximum, while the stick still points the same way, it slows at only 400 px/s², so extra speed fades rather than snaps; letting go stops it at the full 1000. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2891)
 - Celeste: in the air both rates are multiplied by 0.65. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L33)
 - Celeste's tile is 8 pixels: two pixels are "a quarter of a tile", in its designer's words. — [Celeste & Forgiveness](https://maddymakesgames.com/articles/celeste_and_forgiveness/)
 
@@ -57,7 +57,7 @@ Numbers from Celeste are pixels on its 320×180 canvas, where a tile is 8 pixels
 - Celeste: a jump launches at 105 px/s upward and adds 40 px/s sideways in the held direction. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L1670)
 - Celeste: the upward speed is held for up to 0.2 s while the button is down. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2961)
 - Celeste: gravity 900 px/s², halved while the button is held and the vertical speed is under 40 px/s. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2952)
-- Celeste: maximum fall 160 px/s; holding down raises it towards 240 px/s at 300 px/s². — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2910)
+- Celeste: maximum fall 160 px/s; holding down once already falling that fast raises it towards 240 px/s at 300 px/s². — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L2910)
 - Celeste's buffer length is not in its published code; its designer only says "a short time before landing". — [Celeste & Forgiveness](https://maddymakesgames.com/articles/celeste_and_forgiveness/)
 
 ### Pitfalls
@@ -85,7 +85,7 @@ Numbers from Celeste are pixels on its 320×180 canvas, where a tile is 8 pixels
 - Forward focus: extra view in the direction of travel. With dual forward focus the camera keeps its side until the player moves past a threshold the other way.
 - Lerp smoothing: each frame the camera closes a fraction of the distance to its target.
 - Manual focus through controls that already exist: looking up or crouching shifts the view.
-- In Unity, move the camera in `LateUpdate`, after the player has moved that frame, or the image jitters.
+- In Unity, move the camera in `LateUpdate`, after the player has moved that frame, and interpolate the player's `Rigidbody2D` if it moves in the physics step; otherwise the image jitters.
 
 ### Numbers
 
@@ -149,8 +149,8 @@ Numbers from Celeste are pixels on its 320×180 canvas, where a tile is 8 pixels
 
 ### Numbers
 
-- Celeste: 240 px/s for 0.15 s, about 4.5 tiles, then 160 px/s in the same direction. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L3619)
-- Celeste: a 0.2 s cooldown between dashes. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L79)
+- Celeste: 240 px/s for 0.15 s, about 4.5 tiles. A sideways or upward dash then drops to 160 px/s, with its upward part cut to three quarters; a downward dash keeps its speed. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L3625)
+- Celeste: a new dash cannot start until 0.2 s after the previous one began. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L3381)
 - Celeste: the game freezes for 0.05 s when a dash begins. — [Player.cs](https://github.com/NoelFB/Celeste/blob/master/Source/Player/Player.cs#L3449)
 
 ### Pitfalls
@@ -174,7 +174,7 @@ Subgenres: metroidvania, action-2d
 ### Systems
 
 - Hitstop: attacker and target freeze for the same time, longer for stronger hits, shorter for projectiles, and never past a cap.
-- During the freeze the target shakes with a shrinking amplitude and the attacker keeps moving very slightly, so the pause does not read as a lag.
+- During the freeze the target shakes with a shrinking amplitude and the attacker keeps moving very slightly: small touches that, in Sakurai's words, make the impact feel a little stronger each.
 - With many enemies, keep the freeze very short or freeze only the two entities involved; a long global freeze on every hit slows the whole game.
 - Knockback is a velocity impulse away from the hit with a short loss of control. Invulnerability after being hit is shown, usually by blinking.
 - In Unity, freeze one entity by pausing its animator and its controller. `Time.timeScale = 0` stops everything, physics included.
@@ -207,7 +207,7 @@ Subgenres: metroidvania
 
 ### Systems
 
-- Order the abilities first, then shape the world and the path through it; loosen the hard gates afterwards.
+- Settle the order of the abilities together with the rough shape of the world, then trace the path through it to each ability; loosen the hard gates afterwards.
 - Connect areas wherever it makes sense. A door that leads somewhere spatially impossible breaks the map in the player's head.
 - Sequence breaks stay in unless the player can get stuck without noticing.
 - In Unity, areas as scenes loaded additively, and gates as data (which ability opens what) in `ScriptableObject` assets, so progression can be checked without playing it.
@@ -237,7 +237,7 @@ Subgenres: metroidvania
 - Kishōtenketsu: introduce the idea, develop it a little more, change it up, then conclude.
 - One clear concept per level, kept through the whole level.
 - Playtest with people outside the team.
-- In Unity, build levels from prefabs that carry the mechanic, so changing one tuning value changes every instance.
+- In Unity, build levels from prefabs that carry the mechanic, so changing one tuning value changes every instance that does not override it.
 
 ### Numbers
 
